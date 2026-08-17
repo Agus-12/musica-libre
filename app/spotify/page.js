@@ -359,23 +359,31 @@ export default function SpotifyPage() {
     }
   }
 
-  // Download full MP3 in background and save offline (no UI block)
+  // Download full MP3 in background and save offline
   async function downloadFullMP3InBackground(trackName, artistName, sourceUrl) {
     const searchQuery = (artistName + " " + trackName).trim();
     try {
       const params = new URLSearchParams();
       params.set("q", searchQuery);
-      params.set("action", "download");
-      if (sourceUrl) params.set("spotify_url", sourceUrl);
+      if (sourceUrl && sourceUrl.includes("apple.com")) params.set("itunes_url", sourceUrl);
+      else if (sourceUrl) params.set("spotify_url", sourceUrl);
       const res = await fetch("/api/download-mp3?" + params.toString());
       const data = await res.json();
+      if (data.method === "aaplmusicdownloader") {
+        // iTunes: guardar la info para abrir aaplmusicdownloader cuando quieran
+        try {
+          const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+          saved[searchQuery] = { method: "aaplmusicdownloader", apple_url: data.apple_url, title: trackName, saved_at: Date.now() };
+          localStorage.setItem("ml_mp3", JSON.stringify(saved));
+        } catch {}
+        return;
+      }
       if (data.audio_url) {
-        // Guardar el MP3 completo en caché offline
+        // YouTube: guardar audio directo en caché offline
         if ("caches" in window) {
           const cache = await caches.open("ml-saved-v1");
           await cache.add(data.audio_url);
         }
-        // Guardar referencia en localStorage
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
           saved[searchQuery] = { audio_url: data.audio_url, title: data.title, saved_at: Date.now() };

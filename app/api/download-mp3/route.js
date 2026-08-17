@@ -4,8 +4,9 @@ import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
-// Download full MP3 from YouTube by searching song name + artist
-// Uses yt-search (search) + yt-dlp (download) — no API keys needed
+// Download full MP3:
+// - If iTunes/Apple Music link → use aaplmusicdownloader.com (original 256K M4A)
+// - Fallback → search YouTube + yt-dlp (audio only)
 
 async function fetchJSON(url) {
   const resp = await fetch(url, {
@@ -19,17 +20,33 @@ async function fetchJSON(url) {
 export async function GET(req) {
   const p = req.nextUrl.searchParams;
   const query = p.get("q") || "";
+  const itunesUrl = p.get("itunes_url") || "";
   const spotifyUrl = p.get("spotify_url") || "";
-  const action = p.get("action") || "search"; // search or download
 
-  if (!query && !spotifyUrl) {
+  if (!query && !itunesUrl && !spotifyUrl) {
     return NextResponse.json({ error: "Falta búsqueda (q)" }, { status: 400 });
   }
 
   try {
+    // ── Method 1: iTunes/Apple Music URL → aaplmusicdownloader.com ──
+    // Build the Apple Music link from the source_url
+    const appleUrl = itunesUrl || "";
+    if (appleUrl.includes("apple.com") || appleUrl.includes("itunes.apple.com")) {
+      // Return info that the frontend can use to open aaplmusicdownloader
+      // (Can't automate due to CAPTCHA)
+      return NextResponse.json({
+        success: true,
+        method: "aaplmusicdownloader",
+        download_url: "https://aaplmusicdownloader.com/",
+        apple_url: appleUrl,
+        quality: "320kbps MP3 / 256K M4A (original Apple)",
+        note: "Abrí aaplmusicdownloader.com y pegá este link para descargar con la mejor calidad",
+      });
+    }
+
+    // ── Method 2: YouTube search + yt-dlp (fallback) ──
     let searchQuery = query;
 
-    // If we have a Spotify URL, get the track title from oEmbed
     if (spotifyUrl && spotifyUrl.includes("spotify.com")) {
       try {
         const oembed = await fetchJSON("https://open.spotify.com/oembed?url=" + encodeURIComponent(spotifyUrl));
@@ -37,15 +54,15 @@ export async function GET(req) {
       } catch {}
     }
 
-    // Search YouTube using yt-search
+    // Search YouTube
     const ytSearch = await import("yt-search");
     const results = await ytSearch.default(searchQuery + " audio");
 
     if (!results.videos || results.videos.length === 0) {
-      return NextResponse.json({ error: "No se encontró la canción en YouTube" }, { status: 404 });
+      return NextResponse.json({ error: "No se encontró la canción" }, { status: 404 });
     }
 
-    // Pick best result (prefer "audio", "official", "lyric")
+    // Pick best result
     let video = results.videos[0];
     for (const v of results.videos.slice(0, 8)) {
       const t = (v.title || "").toLowerCase();
@@ -55,25 +72,12 @@ export async function GET(req) {
       }
     }
 
-    // If just searching, return info
-    if (action === "search") {
-      return NextResponse.json({
-        success: true,
-        video_id: video.videoId,
-        title: video.title,
-        duration: video.duration?.seconds || 0,
-        query: searchQuery,
-        url: video.url,
-      });
-    }
-
-    // Download: use yt-dlp to get the direct audio URL
+    // Get audio URL with yt-dlp
     const { stdout } = await execFileAsync("yt-dlp", [
       "--get-url",
       "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
       "--no-playlist",
       "--no-warnings",
-      "--js-runtimes", "deno,node",
       video.url,
     ], { timeout: 30000 });
 
@@ -83,9 +87,9 @@ export async function GET(req) {
       return NextResponse.json({ error: "No se pudo obtener el audio" }, { status: 500 });
     }
 
-    // Return the direct audio URL
     return NextResponse.json({
       success: true,
+      method: "youtube",
       audio_url: audioUrl,
       video_id: video.videoId,
       title: video.title,

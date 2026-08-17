@@ -52,15 +52,20 @@ export async function GET(req) {
       });
     }
 
-    // ── Determine source: try deezer first, fall back to itunes ──
+    // ── Determine source: iTunes primary (para aaplmusicdownloader), Deezer fallback ──
     let effectiveSource = source;
     if (source === "auto") {
-      // Try Deezer, fall back to iTunes if blocked
+      // Try iTunes first (Apple Music links work with aaplmusicdownloader.com)
       try {
-        await fetchJSON(DEEZER_BASE + "/chart?limit=1");
-        effectiveSource = "deezer";
-      } catch {
+        await fetchJSON(ITUNES_BASE + "/search?term=test&limit=1");
         effectiveSource = "itunes";
+      } catch {
+        try {
+          await fetchJSON(DEEZER_BASE + "/chart?limit=1");
+          effectiveSource = "deezer";
+        } catch {
+          effectiveSource = "itunes";
+        }
       }
     }
 
