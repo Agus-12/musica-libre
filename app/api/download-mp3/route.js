@@ -212,7 +212,22 @@ async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist, ex
     return { v, score: s };
   });
   scored.sort((a, b) => a.score - b.score);
-  return scored[0]?.v || results.videos[0] || null;
+  const META_DESCARTE = 8000;
+  // SOLO devolvemos un candidato si su score esta por debajo del
+  // umbral de descarte. Si todos tienen score >= META_DESCARTE,
+  // significa que el filtro de titulo/artista descarto TODAS las opciones
+  // -> devolvemos null. Asi la app no descarga "Si lo ven" en vez de
+  // "Si Antes Me Hubieras Preguntado".
+  if (scored.length === 0) return null;
+  const mejor = scored[0];
+  if (mejor.score >= META_DESCARTE) {
+    log("todos descartados por filtro:",
+        scored.length,
+        "videos; mejor score=",
+        mejor.score);
+    return null;
+  }
+  return mejor.v;
 }
 
 
