@@ -203,23 +203,35 @@ export default function SpotifyPage() {
     setPlaylistModal({ item_type: itemType, item_id: String(itemId), name, artist: artistName, cover_url: coverUrl, source });
   }
 
-  function handleShare(e, itemType, itemId, name, artistName, source, sourceUrl, coverUrl) {
+  async function handleShare(e, itemType, itemId, name, artistName, source, sourceUrl, coverUrl) {
     e.stopPropagation();
-    // El link compartido va a nuestra página /share (tipo SpotiDown)
-    // donde la persona ve la portada y puede descargarla
-    const base = window.location.origin;
-    const params = new URLSearchParams();
-    params.set("name", name || "");
-    if (artistName) params.set("artist", artistName);
-    if (coverUrl) params.set("cover", coverUrl);
-    if (sourceUrl) params.set("url", sourceUrl);
-    else if (source) params.set("source", source);
-    const url = base + "/share?" + params.toString();
-    if (navigator.share) {
-      navigator.share({ title: name + " - " + artistName, text: "Escucha " + name + " de " + artistName, url }).catch(() => {});
-      return;
+    // 1) Guardar en favoritos (perfil)
+    if (!isFavorite(itemType, String(itemId))) {
+      toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source);
     }
-    navigator.clipboard.writeText(url).then(() => { setCopiedId(String(itemId)); setTimeout(() => setCopiedId(null), 2000); }).catch(() => {});
+    // 2) Descargar la portada
+    if (coverUrl) {
+      try {
+        const res = await fetch("/api/download?url=" + encodeURIComponent(coverUrl));
+        if (res.ok) {
+          const blob = await res.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = (name || "cover").replace(/[^a-zA-Z0-9 ]/g, "") + ".jpg";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(a.href);
+          setCopiedId(String(itemId));
+          setTimeout(() => setCopiedId(null), 2500);
+          return;
+        }
+      } catch {}
+      // Fallback: abrir imagen en nueva pestaña
+      window.open(coverUrl, "_blank");
+    }
+    setCopiedId(String(itemId));
+    setTimeout(() => setCopiedId(null), 2500);
   }
 
   // ── Styles ──
@@ -485,11 +497,11 @@ function ShareBtn({ onClick, copied, size = "md" }) {
   const sizes = { sm: 24, md: 28, lg: 34 };
   const s = sizes[size] || 28;
   return (
-    <button onClick={onClick} style={{ background: copied ? "rgba(34,197,94,0.9)" : "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: s, height: s, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.2s" }}>
+    <button onClick={onClick} style={{ background: copied ? "rgba(34,197,94,0.9)" : "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: s, height: s, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.2s" }} title={copied ? "¡Guardado y descargado!" : "Descargar portada y guardar en perfil"}>
       {copied ? (
         <svg width={s * 0.45} height={s * 0.45} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
       ) : (
-        <svg width={s * 0.45} height={s * 0.45} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <svg width={s * 0.45} height={s * 0.45} viewBox="0 0 24 24" fill="#fff"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 18h16"/></svg>
       )}
     </button>
   );
@@ -571,7 +583,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
           <div style={{ position: "absolute", top: 5, right: 5, display: "flex", gap: 3 }}>
             <ActionBtn active={isFavorite("album", a.id)} onClick={e => onFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="fav" size="sm" />
             <ActionBtn active={false} onClick={e => onPlaylist(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="add" size="sm" />
-            <ShareBtn onClick={e => { e.stopPropagation(); const base = window.location.origin; const p = new URLSearchParams(); p.set("name", a.name || ""); if(a.artist) p.set("artist", a.artist); if(a.cover_big || a.cover_xl || a.cover_medium) p.set("cover", a.cover_big || a.cover_xl || a.cover_medium); if(a.source_url) p.set("url", a.source_url); else if(a.source || source) p.set("source", a.source || source); const url = base + "/share?" + p.toString(); if(navigator.share){navigator.share({title:a.name+" - "+a.artist,url}).catch(()=>{});}else{navigator.clipboard.writeText(url);} }} size="sm" />
+            <ShareBtn onClick={e => { e.stopPropagation(); if(!isFavorite("album", String(a.id))){ toggleFavorite("album", String(a.id), a.name, a.artist, a.cover_big || a.cover_xl || a.cover_medium, a.source || source); } if(a.cover_big || a.cover_xl || a.cover_medium){ fetch("/api/download?url=" + encodeURIComponent(a.cover_big || a.cover_xl || a.cover_medium)).then(r => r.ok ? r.blob() : null).then(blob => { if(blob){ const l = document.createElement("a"); l.href = URL.createObjectURL(blob); l.download = (a.name||"cover").replace(/[^a-zA-Z0-9 ]/g,"") + ".jpg"; document.body.appendChild(l); l.click(); document.body.removeChild(l); URL.revokeObjectURL(l.href); } }); } }} size="sm" />
           </div>
           <div style={{ padding: "7px 9px" }}>
             <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
