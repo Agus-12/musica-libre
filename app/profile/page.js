@@ -361,7 +361,23 @@ export default function ProfilePage() {
     // Si venía sonando YouTube, lo paramos
     try { if (playerRef.current && playerReadyRef.current) playerRef.current.stopVideo(); } catch {}
 
-mos con YouTube si hay conexión
+    let a = audioRef.current;
+    if (!a) {
+      a = new Audio();
+      a.preload = "auto";
+      audioRef.current = a;
+      a.addEventListener("timeupdate", () => {
+        if (seekingRef.current) return;
+        const d = a.duration || 0;
+        setCurrentTime(a.currentTime || 0);
+        setDuration(d);
+        setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
+      });
+      a.addEventListener("ended", () => handleTrackEnd());
+      a.addEventListener("play", () => setIsPlaying(true));
+      a.addEventListener("pause", () => setIsPlaying(false));
+      a.addEventListener("error", () => {
+        // El archivo cacheado falló: probamos con YouTube si hay conexión
         if (item.video_id && navigator.onLine) { usingAudioRef.current = false; startTrack(item); }
         else toast.error("No se pudo reproducir", 3000);
       });
@@ -1105,11 +1121,6 @@ mos con YouTube si hay conexión
             </div>
           </div>
         </>
-      )}
-    </div>
-  );
-}
-    </>
       )}
     </div>
   );
