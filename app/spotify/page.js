@@ -287,6 +287,10 @@ export default function SpotifyPage() {
       for (let i = 0; i < album.tracks.length; i++) {
         const t = album.tracks[i];
         const tKey = String(t.id || `${itemId}-${i}`);
+        // Agregar cada canción a favoritos (perfil)
+        if (!isFavorite("track", tKey)) {
+          toggleFavorite("track", tKey, t.name, t.artist || artistName, coverUrl, source, { preview_url: t.preview_url || "", album_id: String(itemId) });
+        }
         // Guardar preview de audio en caché
         if (t.preview_url) {
           try {

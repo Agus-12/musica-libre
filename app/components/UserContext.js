@@ -87,7 +87,14 @@ export function UserProvider({ children }) {
 
     // Optimistic update (works offline)
     if (isFav) {
-      setFavorites(prev => prev.filter(f => !(f.item_type === itemType && f.item_id === String(itemId))));
+      setFavorites(prev => {
+        const filtered = prev.filter(f => !(f.item_type === itemType && f.item_id === String(itemId)));
+        // Si es álbum, también eliminar todas sus canciones de favoritos
+        if (itemType === "album") {
+          return filtered.filter(f => !(f.item_type === "track" && (f.extra_data?.album_id === String(itemId) || f.item_id?.startsWith(String(itemId) + "-"))));
+        }
+        return filtered;
+      });
       // También eliminar del offline cache (y todas las canciones si es álbum)
       try {
         const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
@@ -131,6 +138,17 @@ export function UserProvider({ children }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ item_type: itemType, item_id: String(itemId) }),
         });
+        // Si es álbum, también eliminar sus canciones del server
+        if (itemType === "album") {
+          const trackFavs = favorites.filter(f => f.item_type === "track" && (f.extra_data?.album_id === String(itemId) || f.item_id?.startsWith(String(itemId) + "-")));
+          for (const tf of trackFavs) {
+            await fetch("/api/favorites", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ item_type: "track", item_id: tf.item_id }),
+            }).catch(() => {});
+          }
+        }
       } else {
         await fetch("/api/favorites", {
           method: "POST",
