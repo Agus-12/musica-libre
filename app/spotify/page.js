@@ -48,34 +48,57 @@ export default function SpotifyPage() {
       audio.pause();
       audio.currentTime = 0;
       setPlayingTrack(null);
-      // Clear media session
-      if (navigator.mediaSession) {
-        navigator.mediaSession.metadata = null;
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.playbackState = "none";
       }
-    } else {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.src = url;
-      audio.play().catch(() => {});
-      setPlayingTrack(trackId);
-      // Set media session metadata (shows on phone dashboard/lock screen)
-      if (navigator.mediaSession) {
+      return;
+    }
+    // Stop current and play new
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = url;
+    setPlayingTrack(trackId);
+
+    // Set media session BEFORE playing
+    if ("mediaSession" in navigator) {
+      const coverUrl = trackCover || album?.cover_xl || album?.cover_big || album?.cover_medium || "";
+      // Use direct URL for artwork - most browsers can handle it for media session
+      // Proxy as fallback for CORS-restricted images
+      const artworkSrc = coverUrl || "";
+      try {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title: trackName || "Canción",
-          artist: trackArtist || "",
+          title: trackName || "Cancion",
+          artist: trackArtist || album?.artist || "",
           album: album?.name || "",
-          artwork: trackCover ? [
-            { src: trackCover, sizes: "256x256", type: "image/jpeg" },
-            { src: trackCover, sizes: "512x512", type: "image/jpeg" },
+          artwork: artworkSrc ? [
+            { src: artworkSrc, sizes: "96x96", type: "image/jpeg" },
+            { src: artworkSrc, sizes: "256x256", type: "image/jpeg" },
+            { src: artworkSrc, sizes: "512x512", type: "image/jpeg" },
           ] : [],
         });
+      } catch(e) {}
+      navigator.mediaSession.playbackState = "playing";
+      navigator.mediaSession.setActionHandler("play", () => {
+        audio.play().catch(() => {});
         navigator.mediaSession.playbackState = "playing";
-        // Handle play/pause from phone controls
-        navigator.mediaSession.setActionHandler("play", () => { audio.play(); navigator.mediaSession.playbackState = "playing"; });
-        navigator.mediaSession.setActionHandler("pause", () => { audio.pause(); navigator.mediaSession.playbackState = "paused"; });
-        navigator.mediaSession.setActionHandler("stop", () => { audio.pause(); audio.currentTime = 0; setPlayingTrack(null); navigator.mediaSession.playbackState = "none"; });
-      }
+        setPlayingTrack(trackId);
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        audio.pause();
+        navigator.mediaSession.playbackState = "paused";
+      });
+      navigator.mediaSession.setActionHandler("stop", () => {
+        audio.pause(); audio.currentTime = 0;
+        setPlayingTrack(null);
+        navigator.mediaSession.playbackState = "none";
+      });
+      // Handle next/previous as no-ops to prevent errors
+      try { navigator.mediaSession.setActionHandler("nexttrack", null); } catch {}
+      try { navigator.mediaSession.setActionHandler("previoustrack", null); } catch {}
     }
+
+    // Play audio - metadata shows once audio actually plays
+    audio.play().catch(() => {});
   }
 
   async function loadCharts() {

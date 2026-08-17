@@ -54,8 +54,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Images from external sources: cache first
-  if (request.destination === 'image' && url.origin !== self.location.origin) {
+  // Images from external sources: cache first (but don't block)
+  if (request.destination === 'image' || url.pathname.startsWith('/api/proxy')) {
     event.respondWith(cacheFirstWithNetwork(event, IMAGE_CACHE));
     return;
   }
