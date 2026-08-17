@@ -1,8 +1,8 @@
 // AURA - Service Worker
 // Handles offline caching for PWA
 
-const CACHE_NAME = 'musica-libre-v6';
-const STATIC_CACHE = 'ml-static-v6';
+const CACHE_NAME = 'ml-static-v7';
+const STATIC_CACHE = 'ml-static-v7';
 const DATA_CACHE = 'ml-data-v3';
 const IMAGE_CACHE = 'ml-images-v5';
 const SAVED_CACHE = 'ml-saved-v1';
@@ -17,16 +17,19 @@ const STATIC_ASSETS = [
   '/icon-512.png',
 ];
 
-// Install: cache static assets
+// Install: cache static assets pero NO saltamos waiting —
+// esperamos a que el usuario toque "Actualizar" en el banner de la app
+// para que pueda decidir cuándo aplicar la nueva versión.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(STATIC_CACHE).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activate: clean old caches
+// Activate: clean old caches y tomar control de los clientes cuando
+// recibamos SKIP_WAITING (es decir, cuando el usuario ya tocó Actualizar).
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
