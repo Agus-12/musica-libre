@@ -1,0 +1,4 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; }
+a { color: #7c5cfc; text-decoration: none; font-weight: 600; }
+a:hover { text-decoration: underline; }
