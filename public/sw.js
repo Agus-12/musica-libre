@@ -1,8 +1,8 @@
 // Música Libre - Service Worker
 // Handles offline caching for PWA
 
-const CACHE_NAME = 'musica-libre-v2';
-const STATIC_CACHE = 'ml-static-v2';
+const CACHE_NAME = 'musica-libre-v3';
+const STATIC_CACHE = 'ml-static-v3';
 const DATA_CACHE = 'ml-data-v2';
 const IMAGE_CACHE = 'ml-images-v2';
 
