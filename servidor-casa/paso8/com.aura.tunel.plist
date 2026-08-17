@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- AURA · túnel automático trycloudflare (paso 8.2, Opción A)
+     La URL CAMBIA en cada reinicio. Después de reiniciar:
+     grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/aura-tunel.log | tail -1
+     y actualizá MUSICA_SERVER en Vercel + Redeploy.
+     Guardalo en: ~/Library/LaunchAgents/com.aura.tunel.plist
+     Activá con:  launchctl load ~/Library/LaunchAgents/com.aura.tunel.plist -->
+<dict>
+  <key>Label</key><string>com.aura.tunel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/cloudflared</string>
+    <string>tunnel</string>
+    <string>--url</string>
+    <string>http://localhost:8787</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/aura-tunel.log</string>
+  <key>StandardOutPath</key><string>/tmp/aura-tunel.log</string>
+</dict>
+</plist>

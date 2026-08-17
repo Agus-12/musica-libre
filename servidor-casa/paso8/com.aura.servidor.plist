@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- AURA · servidor automático (paso 8.1)
+     Cambiá TU_USUARIO y TU_CLAVE. Si usás cookies, descomentá la línea MUSICA_COOKIES.
+     Guardalo en: ~/Library/LaunchAgents/com.aura.servidor.plist
+     Activá con:  launchctl load ~/Library/LaunchAgents/com.aura.servidor.plist -->
+<dict>
+  <key>Label</key><string>com.aura.servidor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/TU_USUARIO/aura-servidor/servidor.js</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MUSICA_TOKEN</key><string>TU_CLAVE</string>
+    <key>MUSICA_MAX_GB</key><string>10</string>
+    <!-- Solo si necesitaste cookies (paso 3.7). Ruta COMPLETA, sin ~
+    <key>MUSICA_COOKIES</key><string>/Users/TU_USUARIO/aura-servidor/cookies.txt</string>
+    -->
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardErrorPath</key><string>/tmp/aura-servidor.log</string>
+  <key>StandardOutPath</key><string>/tmp/aura-servidor.log</string>
+</dict>
+</plist>
