@@ -343,21 +343,42 @@ export default function SpotifyPage() {
 
   async function handleDownloadMP3(e, trackName, artistName, sourceUrl) {
     e.stopPropagation();
-    // Si tenemos un link de Spotify, usarlo directo
-    if (sourceUrl && sourceUrl.includes("spotify.com")) {
-      window.open("https://spotidown.app/?url=" + encodeURIComponent(sourceUrl), "_blank");
-      return;
-    }
-    // Si tenemos un link de Deezer, convertirlo a Spotify search
-    // Buscar la canción en Spotify y abrir SpotiDown
     const searchQuery = (artistName + " " + trackName).trim();
+    showOfflineMsg("🔍 Buscando MP3 de " + trackName + "...");
     try {
-      // Buscar en Spotify vía oEmbed para ver si existe
-      const searchUrl = "https://open.spotify.com/search/" + encodeURIComponent(searchQuery);
-      window.open("https://spotidown.app/", "_blank");
-      showOfflineMsg("🎵 Pegá el nombre de la canción en SpotiDown: " + searchQuery);
-    } catch {
-      window.open("https://spotidown.app/", "_blank");
+      const params = new URLSearchParams();
+      params.set("q", searchQuery);
+      if (sourceUrl) params.set("spotify_url", sourceUrl);
+      const res = await fetch("/api/download-mp3?" + params.toString());
+      const data = await res.json();
+      if (data.error) {
+        showOfflineMsg("❌ " + data.error);
+        return;
+      }
+      // Descargar el MP3 y guardarlo en caché offline
+      if (data.audio_url) {
+        if ("caches" in window) {
+          const cache = await caches.open("ml-saved-v1");
+          await cache.add(data.audio_url);
+        }
+        // También descargar como archivo
+        try {
+          const audioRes = await fetch(data.audio_url);
+          if (audioRes.ok) {
+            const blob = await audioRes.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = (trackName || "song").replace(/[^a-zA-Z0-9 ]/g, "") + ".mp3";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+          }
+        } catch {}
+        showOfflineMsg("✅ MP3 descargado y guardado offline — " + (data.quality || ""));
+      }
+    } catch (err) {
+      showOfflineMsg("❌ Error al buscar MP3");
     }
   }
 
@@ -614,7 +635,7 @@ export default function SpotifyPage() {
               {(album.cover_xl || album.cover_big) && !album.images?.length && (
                 <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 <DlBtn onClick={() => downloadImage(album.cover_xl || album.cover_big, "cover.jpg")} color="#22c55e" label="Descargar portada" />
-                <button onClick={() => { const url = album.source_url && album.source_url.includes("spotify.com") ? "https://spotidown.app/?url=" + encodeURIComponent(album.source_url) : "https://spotidown.app/"; window.open(url, "_blank"); if(!album.source_url?.includes("spotify.com")) showOfflineMsg("🎵 Pegá el nombre del álbum en SpotiDown"); }} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "#1ed760", color: "#fff", fontSize: "0.78em", cursor: "pointer", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <button onClick={async () => { showOfflineMsg("🔍 Buscando MP3 del álbum..."); try { const params = new URLSearchParams(); params.set("q", album.artist + " " + album.name); if(album.source_url) params.set("spotify_url", album.source_url); const res = await fetch("/api/download-mp3?" + params.toString()); const data = await res.json(); if(data.error){ showOfflineMsg("❌ " + data.error); return; } if(data.audio_url){ if("caches" in window){ const cache = await caches.open("ml-saved-v1"); await cache.add(data.audio_url); } showOfflineMsg("✅ MP3 encontrado — " + (data.quality||"")); } }catch{ showOfflineMsg("❌ Error al buscar MP3"); } }} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "#1ed760", color: "#fff", fontSize: "0.78em", cursor: "pointer", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                   Descargar MP3
                 </button>
