@@ -19,6 +19,7 @@ export default function SpotifyPage() {
   const [charts, setCharts] = useState(null);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [playingTrack, setPlayingTrack] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
   const audioRef = useRef(null);
 
   // Load charts on mount
@@ -152,6 +153,21 @@ export default function SpotifyPage() {
   function handleAddToPlaylist(e, itemType, itemId, name, artistName, coverUrl, source) {
     e.stopPropagation();
     setPlaylistModal({ item_type: itemType, item_id: String(itemId), name, artist: artistName, cover_url: coverUrl, source });
+  }
+
+  function handleShare(e, itemType, itemId, name, artistName, source) {
+    e.stopPropagation();
+    const base = window.location.origin;
+    const url = itemType === "album"
+      ? base + "/spotify?album=" + itemId + "&source=" + source
+      : itemType === "artist"
+      ? base + "/spotify?artist=" + itemId
+      : base + "/spotify?album=" + (album?.id || "") + "&source=" + (album?.source || source);
+    if (navigator.share) {
+      navigator.share({ title: name + " - " + artistName + " | Musica Libre", text: "Escucha " + name + " de " + artistName, url }).catch(() => {});
+      return;
+    }
+    navigator.clipboard.writeText(url).then(() => { setCopiedId(String(itemId)); setTimeout(() => setCopiedId(null), 2000); }).catch(() => {});
   }
 
   // ── Styles ──
@@ -296,6 +312,7 @@ export default function SpotifyPage() {
               <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4 }}>
                 <ActionBtn active={isFavorite("album", album.id)} onClick={e => handleFavorite(e, "album", album.id, album.name, album.artist, album.cover_xl || album.cover_big, album.source)} type="fav" size="lg" />
                 <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "album", album.id, album.name, album.artist, album.cover_xl || album.cover_big, album.source)} type="add" size="lg" />
+                <ShareBtn onClick={e => handleShare(e, "album", album.id, album.name, album.artist, album.source)} copied={copiedId === String(album.id)} size="lg" />
               </div>
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
@@ -335,6 +352,7 @@ export default function SpotifyPage() {
                       {track.duration && <span style={{ color: "#555", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
                       <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, "", album.source)} type="fav" size="sm" />
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, "", album.source)} type="add" size="sm" />
+                      <ShareBtn onClick={e => handleShare(e, "track", trackKey, track.name, track.artist || album.artist, album.source)} copied={copiedId === trackKey} size="sm" />
                       {track.preview_url && (
                         <button onClick={() => playPreview(track.preview_url, trackKey)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : "#7c5cfc"}>
@@ -406,6 +424,21 @@ function ActionBtn({ active, onClick, type, size = "md", pos }) {
       <svg width={s * 0.5} height={s * 0.5} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
         <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
       </svg>
+    </button>
+  );
+}
+
+
+function ShareBtn({ onClick, copied, size = "md" }) {
+  const sizes = { sm: 24, md: 28, lg: 34 };
+  const s = sizes[size] || 28;
+  return (
+    <button onClick={onClick} style={{ background: copied ? "rgba(34,197,94,0.9)" : "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: s, height: s, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.2s" }}>
+      {copied ? (
+        <svg width={s * 0.45} height={s * 0.45} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      ) : (
+        <svg width={s * 0.45} height={s * 0.45} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      )}
     </button>
   );
 }
@@ -486,6 +519,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
           <div style={{ position: "absolute", top: 5, right: 5, display: "flex", gap: 3 }}>
             <ActionBtn active={isFavorite("album", a.id)} onClick={e => onFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="fav" size="sm" />
             <ActionBtn active={false} onClick={e => onPlaylist(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="add" size="sm" />
+            <ShareBtn onClick={e => { e.stopPropagation(); const url = window.location.origin + "/spotify?album=" + a.id + "&source=" + (a.source || source); if(navigator.share){navigator.share({title:a.name+" - "+a.artist,url}).catch(()=>{});}else{navigator.clipboard.writeText(url);} }} size="sm" />
           </div>
           <div style={{ padding: "7px 9px" }}>
             <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
