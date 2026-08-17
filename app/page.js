@@ -44,14 +44,26 @@ export default function MirrorPage() {
       </p>
 
       {/* Música Libre Link */}
-      <a href="/spotify" style={{ display: "block", background: "linear-gradient(135deg,#1a1a2e,#0a2a1a)", border: "2px solid #1ed760", borderRadius: 12, padding: "16px 20px", marginBottom: 25, textDecoration: "none", color: "#e0e0e0" }}>
+      <a href="/spotify" style={{ display: "block", background: "linear-gradient(135deg,#1a1a2e,#0a2a1a)", border: "2px solid #1ed760", borderRadius: 12, padding: "16px 20px", marginBottom: 12, textDecoration: "none", color: "#e0e0e0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: "2em" }}>🎵</span>
           <div>
             <div style={{ color: "#1ed760", fontWeight: 700, fontSize: "1.1em" }}>Música Libre</div>
-            <div style={{ color: "#888", fontSize: "0.85em" }}>Buscar álbumes, descargar portadas en alta calidad — sin cuenta Premium, gratis y sin login</div>
+            <div style={{ color: "#888", fontSize: "0.85em" }}>Buscar álbumes, descargar portadas, guardar favoritos y crear playlists — sin cuenta Premium</div>
           </div>
           <span style={{ marginLeft: "auto", color: "#1ed760", fontSize: "1.5em" }}>→</span>
+        </div>
+      </a>
+
+      {/* Profile Link */}
+      <a href="/profile" style={{ display: "block", background: "linear-gradient(135deg,#1a1a2e,#1a1a3e)", border: "2px solid #7c5cfc", borderRadius: 12, padding: "16px 20px", marginBottom: 25, textDecoration: "none", color: "#e0e0e0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: "2em" }}>👤</span>
+          <div>
+            <div style={{ color: "#7c5cfc", fontWeight: 700, fontSize: "1.1em" }}>Mi Perfil</div>
+            <div style={{ color: "#888", fontSize: "0.85em" }}>Favoritos, playlists y configuración de tu cuenta</div>
+          </div>
+          <span style={{ marginLeft: "auto", color: "#7c5cfc", fontSize: "1.5em" }}>→</span>
         </div>
       </a>
 

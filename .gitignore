@@ -9,6 +9,11 @@ build/
 .DS_Store
 Thumbs.db
 
+# Variables de entorno (contienen claves secretas)
+.env
+.env.local
+.env.production.local
+
 # Variables de entorno (si las tienes)
 .env
 .env.local
