@@ -75,9 +75,12 @@ async function obtenerAudioUrl(videoUrl) {
    Devuelve una URL absoluta al archivo, que el navegador puede
    cachear y reproducir offline (el servidor casero responde
    Range/206, que es lo que el iPhone necesita).            */
+// Último motivo por el que falló el servidor casero, para diagnóstico.
+let ultimoMotivoCasa = null;
+
 async function pedirAlServidorCasero({ videoId, query }) {
   const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
-  if (!base) return null;
+  if (!base) { ultimoMotivoCasa = "MUSICA_SERVER vacía"; return null; }
 
   const token = process.env.MUSICA_TOKEN || "";
   const p = new URLSearchParams();
@@ -94,13 +97,23 @@ async function pedirAlServidorCasero({ videoId, query }) {
       signal: AbortSignal.timeout(120000),
       headers: { Accept: "application/json" },
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      ultimoMotivoCasa = resp.status === 401
+        ? "401: el token no coincide con el de la Mac"
+        : `el servidor respondió ${resp.status}`;
+      return null;
+    }
     const data = await resp.json();
-    if (!data.ok || !data.audio_path) return null;
+    if (!data.ok || !data.audio_path) {
+      ultimoMotivoCasa = "no pudo bajar: " + String(data.detalle || data.error || "?").slice(0, 80);
+      return null;
+    }
+    ultimoMotivoCasa = null;
     return { url: base + data.audio_path, bytes: data.bytes || 0 };
-  } catch {
+  } catch (e) {
     // La Mac está apagada, sin internet o tardó demasiado.
     // No es fatal: seguimos con el iframe de YouTube.
+    ultimoMotivoCasa = "no se pudo conectar: " + String(e.message || e).slice(0, 80);
     return null;
   }
 }
@@ -213,6 +226,13 @@ export async function GET(req) {
       title: video.title,
       duration: video.duration?.seconds || 0,
       query: searchQuery,
+      /* Diagnóstico: si fuente es null, esto dice por qué. No expone
+         el token ni la URL, sólo si el deploy los tiene configurados. */
+      config: {
+        servidor: process.env.MUSICA_SERVER ? "configurado" : "FALTA",
+        token: process.env.MUSICA_TOKEN ? "configurado" : "FALTA",
+        motivo: fuente === "casa" ? null : ultimoMotivoCasa,
+      },
       note: audioUrl
         ? "Audio directo: se puede guardar para escuchar sin internet"
         : "Reproducir vía YouTube IFrame (necesita internet)",
