@@ -135,7 +135,7 @@ async function buscarEnYouTube(searchQuery) {
   }
   if (!results.videos || results.videos.length === 0) return null;
 
-  // yt-search devuelve `duration` como texto "3:45" o número (segundos).
+  // yt-search devuelve `duration` como texto "3:45" o número (segundos)
   const toSec = (d) => {
     if (d == null) return 9999;
     if (typeof d === "number") return d;
@@ -145,19 +145,39 @@ async function buscarEnYouTube(searchQuery) {
     return 9999;
   };
 
-  // Ordenamos los primeros 8 resultados: preferimos el audio más corto
-  // con keywords de "audio". Penalizamos >8 min (lives/mashups con silencios).
-  const candidatos = (results.videos || []).slice(0, 8);
-  const scored = candidatos.map((v) => {
-    const t = (v.title || "").toLowerCase();
-    const esAudio = t.includes("official audio") || t.includes("audio") || t.includes("lyric") || t.includes("letra");
+  // Clasificamos cada candidato segun su titulo.
+  const tituloParece = (v, re) => new RegExp(re, "i").test((v.title || "").replace(/�/g, ""));
+  const esOficial = (v) => tituloParece(v, "oficial|official");
+  const esTemaCompleto = (v) => tituloParece(v, "audio|oficial|lyric|letra"); // "Audio/Estudio" cuenta como audio
+  const esLive = (v) =>
+    tituloParece(v, "live|remix|mashup|cover|reaction|chapter|preview|trailer|shorts") ||
+    tituloParece(v, "1 hour|1h|hour|8 horas|extended|intro|trailer|preview");
+
+  const META = 8000;
+  const scored = (results.videos || []).slice(0, 12).map((v) => {
     const dur = toSec(v.duration);
-    const fueraDeRango = dur < 90 || dur > 480;
-    return { v, score: (esAudio ? 0 : 1000) + (fueraDeRango ? 100 : 0) + dur };
+    const fueraDeRango = dur < 120 || dur > 600; // 2 min a 10 min — descartamos live/mashup muy largos
+    const live = esLive(v);
+    const oficial = esOficial(v);
+    const tema = esTemaCompleto(v);
+
+    // Score: MENOR es mejor. Vamos por:
+    //  1. Sin penalidad si parece video "live/mix/cover" -> +META (descartado)
+    //  2. Sin penalidad si NO parece audio/oficial -> +META/2 (descartado)
+    //  3. Penalidad por duración fuera de rango
+    //  4. Entre los oficiales/audios, preferimos la versión LARGA (canción completa).
+    let s = 0;
+    if (live) s += META;
+    if (!tema) s += META / 2;
+    if (fueraDeRango) s += 500;
+    if (oficial || tema) s -= Math.max(0, dur) / 6; // más larga = mejor (canción completa)
+    else s += dur / 10; // para resultados no-oficiales/audios: prefer short (descartamos lives)
+    return { v, score: s };
   });
   scored.sort((a, b) => a.score - b.score);
   return scored[0]?.v || results.videos[0] || null;
 }
+
 
 
 export async function GET(req) {
