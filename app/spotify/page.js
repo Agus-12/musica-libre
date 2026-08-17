@@ -203,17 +203,18 @@ export default function SpotifyPage() {
     setPlaylistModal({ item_type: itemType, item_id: String(itemId), name, artist: artistName, cover_url: coverUrl, source });
   }
 
-  function handleShare(e, itemType, itemId, name, artistName, source, sourceUrl) {
+  function handleShare(e, itemType, itemId, name, artistName, source, sourceUrl, coverUrl) {
     e.stopPropagation();
-    // Si tenemos la URL original de la canción/álbum en la plataforma fuente, usar esa
-    // Si no, construir un link a nuestra app como fallback
+    // El link compartido va a nuestra página /share (tipo SpotiDown)
+    // donde la persona ve la portada y puede descargarla
     const base = window.location.origin;
-    const fallbackUrl = itemType === "album"
-      ? base + "/spotify?album=" + itemId + "&source=" + source
-      : itemType === "artist"
-      ? base + "/spotify?artist=" + itemId
-      : base + "/spotify?album=" + (album?.id || "") + "&source=" + (album?.source || source);
-    const url = sourceUrl || fallbackUrl;
+    const params = new URLSearchParams();
+    params.set("name", name || "");
+    if (artistName) params.set("artist", artistName);
+    if (coverUrl) params.set("cover", coverUrl);
+    if (sourceUrl) params.set("url", sourceUrl);
+    else if (source) params.set("source", source);
+    const url = base + "/share?" + params.toString();
     if (navigator.share) {
       navigator.share({ title: name + " - " + artistName, text: "Escucha " + name + " de " + artistName, url }).catch(() => {});
       return;
@@ -363,7 +364,7 @@ export default function SpotifyPage() {
               <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4 }}>
                 <ActionBtn active={isFavorite("album", album.id)} onClick={e => handleFavorite(e, "album", album.id, album.name, album.artist, album.cover_xl || album.cover_big, album.source)} type="fav" size="lg" />
                 <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "album", album.id, album.name, album.artist, album.cover_xl || album.cover_big, album.source)} type="add" size="lg" />
-                <ShareBtn onClick={e => handleShare(e, "album", album.id, album.name, album.artist, album.source, album.source_url)} copied={copiedId === String(album.id)} size="lg" />
+                <ShareBtn onClick={e => handleShare(e, "album", album.id, album.name, album.artist, album.source, album.source_url, album.cover_xl || album.cover_big || album.cover_medium)} copied={copiedId === String(album.id)} size="lg" />
               </div>
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
@@ -403,7 +404,7 @@ export default function SpotifyPage() {
                       {track.duration && <span style={{ color: "#555", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
                       <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} type="fav" size="sm" />
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
-                      <ShareBtn onClick={e => handleShare(e, "track", trackKey, track.name, track.artist || album.artist, album.source, track.source_url || album.source_url)} copied={copiedId === trackKey} size="sm" />
+                      <ShareBtn onClick={e => handleShare(e, "track", trackKey, track.name, track.artist || album.artist, album.source, track.source_url || album.source_url, album.cover_xl || album.cover_big || album.cover_medium)} copied={copiedId === trackKey} size="sm" />
                       {track.preview_url && (
                         <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : "#7c5cfc"}>
@@ -570,7 +571,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
           <div style={{ position: "absolute", top: 5, right: 5, display: "flex", gap: 3 }}>
             <ActionBtn active={isFavorite("album", a.id)} onClick={e => onFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="fav" size="sm" />
             <ActionBtn active={false} onClick={e => onPlaylist(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="add" size="sm" />
-            <ShareBtn onClick={e => { e.stopPropagation(); const url = a.source_url || (window.location.origin + "/spotify?album=" + a.id + "&source=" + (a.source || source)); if(navigator.share){navigator.share({title:a.name+" - "+a.artist,url}).catch(()=>{});}else{navigator.clipboard.writeText(url);} }} size="sm" />
+            <ShareBtn onClick={e => { e.stopPropagation(); const base = window.location.origin; const p = new URLSearchParams(); p.set("name", a.name || ""); if(a.artist) p.set("artist", a.artist); if(a.cover_big || a.cover_xl || a.cover_medium) p.set("cover", a.cover_big || a.cover_xl || a.cover_medium); if(a.source_url) p.set("url", a.source_url); else if(a.source || source) p.set("source", a.source || source); const url = base + "/share?" + p.toString(); if(navigator.share){navigator.share({title:a.name+" - "+a.artist,url}).catch(()=>{});}else{navigator.clipboard.writeText(url);} }} size="sm" />
           </div>
           <div style={{ padding: "7px 9px" }}>
             <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>

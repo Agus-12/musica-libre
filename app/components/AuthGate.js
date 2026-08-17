@@ -1,9 +1,23 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUser } from "./UserContext";
+
+// Rutas públicas que no requieren login
+const PUBLIC_PATHS = ["/share"];
 
 export default function AuthGate({ children }) {
   const { user, loading, checkSession } = useUser();
+  const [isPublic, setIsPublic] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname;
+      setIsPublic(PUBLIC_PATHS.some(p => path.startsWith(p)));
+    }
+  }, []);
+
+  // Si es ruta pública, no bloquear
+  if (isPublic) return children;
   const [mode, setMode] = useState(null); // null = landing, "login", "register"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
