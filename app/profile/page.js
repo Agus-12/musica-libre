@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { useUser } from "../components/UserContext";
 
+const MUSIC_ICON = <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>;
+
 export default function ProfilePage() {
   const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
   const [tab, setTab] = useState("favorites");
@@ -33,6 +35,22 @@ export default function ProfilePage() {
   }
 
   const SM = { padding: "6px 14px", borderRadius: 6, border: "none", color: "#fff", fontSize: "0.85em", cursor: "pointer", fontWeight: 600 };
+
+  // Render cover image with nice fallback
+  function CoverImg({ url, size = "100%", rounded = 0 }) {
+    const w = typeof size === "string" ? size : size + "px";
+    const h = w;
+    if (url) {
+      return <img src={url} style={{ width: w, height: h, borderRadius: rounded, objectFit: "cover", display: "block" }} />;
+    }
+    return (
+      <div style={{ width: w, height: h, borderRadius: rounded, background: "linear-gradient(135deg, #1a1a2e, #2a2a3e)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 20 }}>
@@ -81,11 +99,7 @@ export default function ProfilePage() {
               {filteredFavs.map(f => (
                 <div key={f.id} style={{ background: "#1a1a2e", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a3e", position: "relative" }}>
                   <a href={`/spotify?album=${f.item_id}&source=${f.source}`} style={{ textDecoration: "none", display: "block" }}>
-                    {f.cover_url ? (
-                      <img src={f.cover_url} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} />
-                    ) : (
-                      <div style={{ width: "100%", aspectRatio: 1, background: "linear-gradient(135deg, #1a1a2e, #2a2a3e)", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
-                    )}
+                    <CoverImg url={f.cover_url} />
                   </a>
                   <div style={{ padding: "7px 9px" }}>
                     <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
@@ -114,7 +128,7 @@ export default function ProfilePage() {
               {playlists.map(pl => (
                 <div key={pl.id} onClick={() => openPlaylist(pl)} style={{ background: "#1a1a2e", borderRadius: 10, padding: 14, cursor: "pointer", border: "1px solid #2a2a3e", position: "relative" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                    {pl.cover_url ? <img src={pl.cover_url} style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover" }} /> : <div style={{ width: 44, height: 44, borderRadius: 6, background: "linear-gradient(135deg,#7c5cfc,#1ed760)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3em" }}>?</div>}
+                    {pl.cover_url ? <img src={pl.cover_url} style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover" }} /> : <div style={{ width: 44, height: 44, borderRadius: 6, background: "linear-gradient(135deg,#7c5cfc,#1ed760)", display: "flex", alignItems: "center", justifyContent: "center" }}>{MUSIC_ICON}</div>}
                     <div>
                       <div style={{ color: "#ccc", fontWeight: 600, fontSize: "0.9em" }}>{pl.name}</div>
                       {pl.description && <div style={{ color: "#555", fontSize: "0.72em" }}>{pl.description}</div>}
@@ -134,7 +148,7 @@ export default function ProfilePage() {
         <div>
           <button onClick={() => setSelectedPlaylist(null)} style={{ ...SM, background: "#333", marginBottom: 15, color: "#7c5cfc" }}>← Volver</button>
           <div style={{ background: "#1a1a2e", borderRadius: 10, padding: 16, marginBottom: 15, border: "1px solid #2a2a3e", display: "flex", gap: 12, alignItems: "center" }}>
-            {selectedPlaylist.cover_url ? <img src={selectedPlaylist.cover_url} style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover" }} /> : <div style={{ width: 56, height: 56, borderRadius: 8, background: "linear-gradient(135deg,#7c5cfc,#1ed760)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5em" }}>?</div>}
+            <CoverImg url={selectedPlaylist.cover_url} size={56} rounded={8} />
             <div>
               <h2 style={{ fontSize: "1.2em", marginBottom: 2 }}>{selectedPlaylist.name}</h2>
               <p style={{ color: "#888", fontSize: "0.8em" }}>{selectedPlaylist.description || "Sin descripción"} · {playlistItems.length} items</p>
@@ -146,7 +160,7 @@ export default function ProfilePage() {
             <div style={{ background: "#1a1a2e", borderRadius: 10, border: "1px solid #2a2a3e", overflow: "hidden" }}>
               {playlistItems.map(item => (
                 <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "1px solid #2a2a3e" }}>
-                  {item.cover_url ? <img src={item.cover_url} style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover" }} /> : <div style={{ width: 40, height: 40, borderRadius: 6, background: "#2a2a3e" }} />}
+                  <CoverImg url={item.cover_url} size={40} rounded={6} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ color: "#e0e0e0", fontSize: "0.88em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
                     <div style={{ color: "#666", fontSize: "0.75em" }}>{item.artist}</div>
