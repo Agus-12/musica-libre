@@ -37,23 +37,44 @@ export default function SpotifyPage() {
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
-      audioRef.current.addEventListener("ended", () => setPlayingTrack(null));
+      audioRef.current.addEventListener("ended", () => { setPlayingTrack(null); if(navigator.mediaSession){ navigator.mediaSession.playbackState = "none"; navigator.mediaSession.metadata = null; } });
     }
   }, []);
 
-  function playPreview(url, trackId) {
+  function playPreview(url, trackId, trackName, trackArtist, trackCover) {
     const audio = audioRef.current;
     if (!audio) return;
     if (playingTrack === trackId) {
       audio.pause();
       audio.currentTime = 0;
       setPlayingTrack(null);
+      // Clear media session
+      if (navigator.mediaSession) {
+        navigator.mediaSession.metadata = null;
+      }
     } else {
       audio.pause();
       audio.currentTime = 0;
       audio.src = url;
       audio.play().catch(() => {});
       setPlayingTrack(trackId);
+      // Set media session metadata (shows on phone dashboard/lock screen)
+      if (navigator.mediaSession) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: trackName || "Canción",
+          artist: trackArtist || "",
+          album: album?.name || "",
+          artwork: trackCover ? [
+            { src: trackCover, sizes: "256x256", type: "image/jpeg" },
+            { src: trackCover, sizes: "512x512", type: "image/jpeg" },
+          ] : [],
+        });
+        navigator.mediaSession.playbackState = "playing";
+        // Handle play/pause from phone controls
+        navigator.mediaSession.setActionHandler("play", () => { audio.play(); navigator.mediaSession.playbackState = "playing"; });
+        navigator.mediaSession.setActionHandler("pause", () => { audio.pause(); navigator.mediaSession.playbackState = "paused"; });
+        navigator.mediaSession.setActionHandler("stop", () => { audio.pause(); audio.currentTime = 0; setPlayingTrack(null); navigator.mediaSession.playbackState = "none"; });
+      }
     }
   }
 
@@ -354,7 +375,7 @@ export default function SpotifyPage() {
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
                       <ShareBtn onClick={e => handleShare(e, "track", trackKey, track.name, track.artist || album.artist, album.source)} copied={copiedId === trackKey} size="sm" />
                       {track.preview_url && (
-                        <button onClick={() => playPreview(track.preview_url, trackKey)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : "#7c5cfc"}>
                             {isPlaying ? <><rect x="0" y="1" width="3" height="10" rx="1"/><rect x="6" y="1" width="3" height="10" rx="1"/></> : <polygon points="0,0 10,6 0,12"/>}
                           </svg>
