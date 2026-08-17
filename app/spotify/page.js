@@ -98,7 +98,7 @@ export default function SpotifyPage() {
     }
   }, []);
 
-  function playPreview(url, trackId, trackName, trackArtist, trackCover) {
+  async function playPreview(url, trackId, trackName, trackArtist, trackCover) {
     const audio = audioRef.current;
     if (!audio) return;
     if (playingTrack === trackId) {
@@ -113,7 +113,16 @@ export default function SpotifyPage() {
     // Stop current and play new
     audio.pause();
     audio.currentTime = 0;
-    audio.src = url;
+    // Check if we have a full MP3 cached
+    let playUrl = url;
+    try {
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const key = (trackArtist + " " + trackName).trim();
+      if (mp3s[key]?.audio_url) {
+        playUrl = mp3s[key].audio_url;
+      }
+    } catch {}
+    audio.src = playUrl;
     setPlayingTrack(trackId);
 
     // Set media session BEFORE playing
@@ -336,9 +345,44 @@ export default function SpotifyPage() {
         } catch {}
       }
       addSavedOfflineId(itemId);
-      const msg = itemType === "album" ? "❤️ Álbum guardado en favoritos y offline" : "❤️ Guardada en favoritos y offline";
+      // Descargar MP3 completo en background (no bloquea la UI)
+      if (itemType === "album" && album?.tracks) {
+        for (let i = 0; i < album.tracks.length; i++) {
+          const t = album.tracks[i];
+          downloadFullMP3InBackground(t.name, t.artist || artistName, t.source_url || sourceUrl);
+        }
+      } else {
+        downloadFullMP3InBackground(name, artistName, sourceUrl);
+      }
+      const msg = itemType === "album" ? "❤️ Álbum guardado — descargando MP3s..." : "❤️ Guardada — descargando MP3...";
       showOfflineMsg(msg);
     }
+  }
+
+  // Download full MP3 in background and save offline (no UI block)
+  async function downloadFullMP3InBackground(trackName, artistName, sourceUrl) {
+    const searchQuery = (artistName + " " + trackName).trim();
+    try {
+      const params = new URLSearchParams();
+      params.set("q", searchQuery);
+      params.set("action", "download");
+      if (sourceUrl) params.set("spotify_url", sourceUrl);
+      const res = await fetch("/api/download-mp3?" + params.toString());
+      const data = await res.json();
+      if (data.audio_url) {
+        // Guardar el MP3 completo en caché offline
+        if ("caches" in window) {
+          const cache = await caches.open("ml-saved-v1");
+          await cache.add(data.audio_url);
+        }
+        // Guardar referencia en localStorage
+        try {
+          const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+          saved[searchQuery] = { audio_url: data.audio_url, title: data.title, saved_at: Date.now() };
+          localStorage.setItem("ml_mp3", JSON.stringify(saved));
+        } catch {}
+      }
+    } catch {}
   }
 
   async function handleDownloadMP3(e, trackName, artistName, sourceUrl) {

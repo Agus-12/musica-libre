@@ -8,7 +8,6 @@
     "start": "next start"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.109.0",
     "cheerio": "^1.0.0",

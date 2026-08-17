@@ -1,72 +1,96 @@
 import { NextRequest, NextResponse } from "next/server";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
-// Download full MP3 from YouTube (matching by song name + artist)
-// No API keys needed — uses yt-search + ytdl-core
+const execFileAsync = promisify(execFile);
+
+// Download full MP3 from YouTube by searching song name + artist
+// Uses yt-search (search) + yt-dlp (download) — no API keys needed
+
+async function fetchJSON(url) {
+  const resp = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!resp.ok) throw new Error("HTTP " + resp.status);
+  return await resp.json();
+}
 
 export async function GET(req) {
   const p = req.nextUrl.searchParams;
   const query = p.get("q") || "";
   const spotifyUrl = p.get("spotify_url") || "";
+  const action = p.get("action") || "search"; // search or download
 
   if (!query && !spotifyUrl) {
-    return NextResponse.json({ error: "Falta búsqueda (q) o spotify_url" }, { status: 400 });
+    return NextResponse.json({ error: "Falta búsqueda (q)" }, { status: 400 });
   }
 
   try {
-    // If we have a Spotify URL, try to get the track info first
     let searchQuery = query;
-    
-    if (spotifyUrl) {
+
+    // If we have a Spotify URL, get the track title from oEmbed
+    if (spotifyUrl && spotifyUrl.includes("spotify.com")) {
       try {
-        const oembedRes = await fetch("https://open.spotify.com/oembed?url=" + encodeURIComponent(spotifyUrl));
-        if (oembedRes.ok) {
-          const oembed = await oembedRes.json();
-          if (oembed.title) searchQuery = oembed.title + " audio";
-        }
+        const oembed = await fetchJSON("https://open.spotify.com/oembed?url=" + encodeURIComponent(spotifyUrl));
+        if (oembed.title) searchQuery = oembed.title;
       } catch {}
     }
 
-    // Search YouTube for the song
+    // Search YouTube using yt-search
     const ytSearch = await import("yt-search");
     const results = await ytSearch.default(searchQuery + " audio");
-    
+
     if (!results.videos || results.videos.length === 0) {
       return NextResponse.json({ error: "No se encontró la canción en YouTube" }, { status: 404 });
     }
 
-    // Pick the first result that looks like a music video (prefer "audio" or "official")
+    // Pick best result (prefer "audio", "official", "lyric")
     let video = results.videos[0];
-    for (const v of results.videos.slice(0, 5)) {
-      const title = (v.title || "").toLowerCase();
-      if (title.includes("audio") || title.includes("official") || title.includes("lyric")) {
+    for (const v of results.videos.slice(0, 8)) {
+      const t = (v.title || "").toLowerCase();
+      if (t.includes("audio") || t.includes("official audio") || t.includes("lyric")) {
         video = v;
         break;
       }
     }
 
-    // Get the audio stream URL using ytdl-core
-    const ytdl = await import("@distube/ytdl-core");
-    const info = await ytdl.default.getInfo(video.url);
-    
-    // Find the best audio-only format
-    const audioFormats = ytdl.default.filterFormats(info.formats, "audioonly");
-    const bestAudio = audioFormats && audioFormats.length > 0 
-      ? audioFormats.reduce((best, f) => (f.audioBitrate || 0) > (best.audioBitrate || 0) ? f : best, audioFormats[0])
-      : null;
+    // If just searching, return info
+    if (action === "search") {
+      return NextResponse.json({
+        success: true,
+        video_id: video.videoId,
+        title: video.title,
+        duration: video.duration?.seconds || 0,
+        query: searchQuery,
+        url: video.url,
+      });
+    }
 
-    if (!bestAudio || !bestAudio.url) {
+    // Download: use yt-dlp to get the direct audio URL
+    const { stdout } = await execFileAsync("yt-dlp", [
+      "--get-url",
+      "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+      "--no-playlist",
+      "--no-warnings",
+      "--js-runtimes", "deno,node",
+      video.url,
+    ], { timeout: 30000 });
+
+    const audioUrl = stdout.trim().split("\n")[0];
+
+    if (!audioUrl) {
       return NextResponse.json({ error: "No se pudo obtener el audio" }, { status: 500 });
     }
 
-    // Return the audio URL so the client can download and cache it
+    // Return the direct audio URL
     return NextResponse.json({
       success: true,
-      audio_url: bestAudio.url,
+      audio_url: audioUrl,
       video_id: video.videoId,
       title: video.title,
       duration: video.duration?.seconds || 0,
       query: searchQuery,
-      quality: bestAudio.audioBitrate + "kbps",
     });
 
   } catch (e) {
