@@ -256,7 +256,15 @@ export default function SpotifyPage() {
     toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source, extraData);
     
     if (wasFav) {
-      // Se quitó el ❤️ → también eliminar del offline
+      // Se quitó el ❤️ → eliminar canciones del álbum de favoritos + offline
+      if (itemType === "album") {
+        // Eliminar todas las canciones del álbum de favoritos
+        const albumTracks = favorites.filter(f => f.item_type === "track" && (f.extra_data?.album_id === String(itemId) || f.item_id?.startsWith(String(itemId) + "-")));
+        for (const tf of albumTracks) {
+          toggleFavorite("track", tf.item_id);
+        }
+      }
+      // Eliminar del offline cache
       try {
         const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
         const entry = saved[String(itemId)];
@@ -286,15 +294,21 @@ export default function SpotifyPage() {
           }
         } catch {}
       }
-      // Si es álbum, guardar todas las canciones
+      // Si es álbum, guardar todas las canciones como favoritos + offline
       if (itemType === "album" && album?.tracks) {
         const trackIds = [];
         for (let i = 0; i < album.tracks.length; i++) {
           const t = album.tracks[i];
           const tKey = String(t.id || `${itemId}-${i}`);
+          // Agregar cada canción a favoritos
+          if (!isFavorite("track", tKey)) {
+            toggleFavorite("track", tKey, t.name, t.artist || artistName, coverUrl, source, { preview_url: t.preview_url || "", album_id: String(itemId) });
+          }
+          // Cachear audio preview
           if (t.preview_url) {
             try { if ("caches" in window) { const c = await caches.open("ml-saved-v1"); await c.add(t.preview_url); } } catch {}
           }
+          // Guardar metadata offline
           try {
             const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
             saved[tKey] = { name: t.name, artist: t.artist || artistName, cover_url: coverUrl, source, album_id: String(itemId), saved_at: Date.now() };
