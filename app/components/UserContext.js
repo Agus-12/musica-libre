@@ -3,17 +3,28 @@ import { useState, useEffect, createContext, useContext, useCallback } from "rea
 
 const UserContext = createContext(null);
 
+// Offline cache helpers
+function saveOffline(key, data) {
+  try { localStorage.setItem("ml_offline_" + key, JSON.stringify(data)); } catch {}
+}
+function loadOffline(key) {
+  try { return JSON.parse(localStorage.getItem("ml_offline_" + key)); } catch { return null; }
+}
+
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [favorites, setFavorites] = useState([]);
-  const [playlists, setPlaylists] = useState([]);
+  const [favorites, setFavorites] = useState(loadOffline("favorites") || []);
+  const [playlists, setPlaylists] = useState(loadOffline("playlists") || []);
   const [loading, setLoading] = useState(true);
 
-  // Check session on mount
   useEffect(() => {
     checkSession();
   }, []);
+
+  // Keep offline cache in sync
+  useEffect(() => { saveOffline("favorites", favorites); }, [favorites]);
+  useEffect(() => { saveOffline("playlists", playlists); }, [playlists]);
 
   async function checkSession() {
     try {
@@ -22,10 +33,27 @@ export function UserProvider({ children }) {
       if (data.user) {
         setUser(data.user);
         setProfile(data.profile);
+        // Save for offline
+        saveOffline("user", data.user);
+        saveOffline("profile", data.profile);
         loadFavorites();
         loadPlaylists();
+      } else {
+        // Try offline cached session
+        const cachedUser = loadOffline("user");
+        if (cachedUser) {
+          setUser(cachedUser);
+          setProfile(loadOffline("profile"));
+        }
       }
-    } catch {}
+    } catch {
+      // Offline: try cached session
+      const cachedUser = loadOffline("user");
+      if (cachedUser) {
+        setUser(cachedUser);
+        setProfile(loadOffline("profile"));
+      }
+    }
     setLoading(false);
   }
 
@@ -34,7 +62,9 @@ export function UserProvider({ children }) {
       const res = await fetch("/api/favorites");
       const data = await res.json();
       if (data.favorites) setFavorites(data.favorites);
-    } catch {}
+    } catch {
+      // Offline: already loaded from localStorage
+    }
   }
 
   async function loadPlaylists() {
@@ -42,7 +72,9 @@ export function UserProvider({ children }) {
       const res = await fetch("/api/playlists");
       const data = await res.json();
       if (data.playlists) setPlaylists(data.playlists);
-    } catch {}
+    } catch {
+      // Offline: already loaded from localStorage
+    }
   }
 
   const isFavorite = useCallback((itemType, itemId) => {
@@ -52,70 +84,95 @@ export function UserProvider({ children }) {
   async function toggleFavorite(itemType, itemId, name, artist, coverUrl, source) {
     if (!user) return false;
     const isFav = isFavorite(itemType, itemId);
+
+    // Optimistic update (works offline)
+    if (isFav) {
+      setFavorites(prev => prev.filter(f => !(f.item_type === itemType && f.item_id === String(itemId))));
+    } else {
+      const newFav = {
+        id: "temp-" + Date.now(),
+        item_type: itemType,
+        item_id: String(itemId),
+        name, artist,
+        cover_url: coverUrl,
+        source: source || "deezer",
+        created_at: new Date().toISOString(),
+      };
+      setFavorites(prev => [newFav, ...prev]);
+    }
+
+    // Cache cover image for offline
+    if (coverUrl && "serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: "CACHE_URLS",
+        urls: [coverUrl],
+      });
+    }
+
+    // Try to sync with server
     try {
       if (isFav) {
-        const res = await fetch("/api/favorites", {
+        await fetch("/api/favorites", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ item_type: itemType, item_id: String(itemId) }),
         });
-        if (res.ok) {
-          setFavorites(prev => prev.filter(f => !(f.item_type === itemType && f.item_id === String(itemId))));
-          return false;
-        }
       } else {
-        const res = await fetch("/api/favorites", {
+        await fetch("/api/favorites", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            item_type: itemType,
-            item_id: String(itemId),
-            name,
-            artist,
-            cover_url: coverUrl,
-            source: source || "deezer",
-          }),
+          body: JSON.stringify({ item_type: itemType, item_id: String(itemId), name, artist, cover_url: coverUrl, source: source || "deezer" }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.favorite) setFavorites(prev => [data.favorite, ...prev]);
-          return true;
-        }
       }
-    } catch {}
-    return isFav;
+    } catch {
+      // Offline: optimistic update already done, will sync when back online
+    }
+    return !isFav;
   }
 
   async function createPlaylist(name, description) {
-    const res = await fetch("/api/playlists", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
-    });
-    const data = await res.json();
-    if (data.playlist) {
-      setPlaylists(prev => [data.playlist, ...prev]);
-      return data.playlist;
-    }
-    return null;
+    const tempPl = {
+      id: "temp-" + Date.now(),
+      name, description,
+      cover_url: "",
+      is_public: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setPlaylists(prev => [tempPl, ...prev]);
+
+    try {
+      const res = await fetch("/api/playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description }),
+      });
+      const data = await res.json();
+      if (data.playlist) {
+        setPlaylists(prev => prev.map(p => p.id === tempPl.id ? data.playlist : p));
+        return data.playlist;
+      }
+    } catch {}
+    return tempPl;
   }
 
   async function addToPlaylist(playlistId, itemType, itemId, name, artist, coverUrl, source) {
-    const res = await fetch("/api/playlists", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "add-item",
-        playlist_id: playlistId,
-        item_type: itemType,
-        item_id: String(itemId),
-        name,
-        artist,
-        cover_url: coverUrl,
-        source: source || "deezer",
-      }),
-    });
-    return res.ok;
+    try {
+      const res = await fetch("/api/playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add-item",
+          playlist_id: playlistId,
+          item_type: itemType,
+          item_id: String(itemId),
+          name, artist,
+          cover_url: coverUrl,
+          source: source || "deezer",
+        }),
+      });
+      return res.ok;
+    } catch { return false; }
   }
 
   return (
