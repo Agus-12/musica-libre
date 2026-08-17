@@ -81,7 +81,7 @@ export function UserProvider({ children }) {
     return favorites.some(f => f.item_type === itemType && f.item_id === String(itemId));
   }, [favorites]);
 
-  async function toggleFavorite(itemType, itemId, name, artist, coverUrl, source) {
+  async function toggleFavorite(itemType, itemId, name, artist, coverUrl, source, extraData) {
     if (!user) return false;
     const isFav = isFavorite(itemType, itemId);
 
@@ -96,6 +96,7 @@ export function UserProvider({ children }) {
         name, artist,
         cover_url: coverUrl,
         source: source || "deezer",
+        extra_data: extraData || {},
         created_at: new Date().toISOString(),
       };
       setFavorites(prev => [newFav, ...prev]);
@@ -121,7 +122,7 @@ export function UserProvider({ children }) {
         await fetch("/api/favorites", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ item_type: itemType, item_id: String(itemId), name, artist, cover_url: coverUrl, source: source || "deezer" }),
+          body: JSON.stringify({ item_type: itemType, item_id: String(itemId), name, artist, cover_url: coverUrl, source: source || "deezer", extra_data: extraData || {} }),
         });
       }
     } catch {

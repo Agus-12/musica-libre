@@ -1,8 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useUser } from "../components/UserContext";
-
-const MUSIC_ICON = <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>;
 
 export default function ProfilePage() {
   const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
@@ -10,6 +8,98 @@ export default function ProfilePage() {
   const [favType, setFavType] = useState("album");
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [playlistItems, setPlaylistItems] = useState([]);
+  const [playingId, setPlayingId] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(null);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      audioRef.current.addEventListener("ended", () => {
+        setPlayingId(null);
+        if ("mediaSession" in navigator) {
+          navigator.mediaSession.playbackState = "none";
+        }
+      });
+    }
+  }, []);
+
+  async function playFavorite(fav) {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // If same track, pause
+    if (playingId === fav.id) {
+      audio.pause();
+      audio.currentTime = 0;
+      setPlayingId(null);
+      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+      return;
+    }
+
+    // Get preview URL from extra_data, or try loading the album
+    let previewUrl = fav.extra_data?.preview_url || "";
+
+    // If no preview saved, try to load from album API
+    if (!previewUrl && fav.extra_data?.album_id) {
+      setLoadingPreview(fav.id);
+      try {
+        const source = fav.source || "deezer";
+        const endpoint = source === "itunes"
+          ? "/api/music?action=lookup&id=" + fav.extra_data.album_id + "&source=itunes"
+          : "/api/music?action=album&id=" + fav.extra_data.album_id + "&source=deezer";
+        const res = await fetch(endpoint);
+        const data = await res.json();
+        // Find the track in the album
+        const track = data.tracks?.find(t => t.name === fav.name);
+        if (track?.preview_url) previewUrl = track.preview_url;
+      } catch {}
+      setLoadingPreview(null);
+    }
+
+    if (!previewUrl) {
+      // No preview available, just go to the album page
+      window.location.href = "/spotify?album=" + (fav.item_id || fav.extra_data?.album_id) + "&source=" + (fav.source || "deezer");
+      return;
+    }
+
+    // Play with Media Session
+    audio.pause();
+    audio.currentTime = 0;
+    audio.src = previewUrl;
+    setPlayingId(fav.id);
+
+    if ("mediaSession" in navigator) {
+      const coverUrl = fav.cover_url || "";
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: fav.name || "Cancion",
+          artist: fav.artist || "",
+          album: "",
+          artwork: coverUrl ? [
+            { src: coverUrl, sizes: "96x96", type: "image/jpeg" },
+            { src: coverUrl, sizes: "256x256", type: "image/jpeg" },
+            { src: coverUrl, sizes: "512x512", type: "image/jpeg" },
+          ] : [],
+        });
+      } catch {}
+      navigator.mediaSession.playbackState = "playing";
+      navigator.mediaSession.setActionHandler("play", () => {
+        audio.play().catch(() => {});
+        navigator.mediaSession.playbackState = "playing";
+        setPlayingId(fav.id);
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        audio.pause();
+        navigator.mediaSession.playbackState = "paused";
+      });
+      try { navigator.mediaSession.setActionHandler("stop", () => { audio.pause(); audio.currentTime = 0; setPlayingId(null); navigator.mediaSession.playbackState = "none"; }); } catch {}
+      try { navigator.mediaSession.setActionHandler("nexttrack", null); } catch {}
+      try { navigator.mediaSession.setActionHandler("previoustrack", null); } catch {}
+    }
+
+    audio.play().catch(() => {});
+  }
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: "#7c5cfc" }}>Cargando...</div>;
 
@@ -36,19 +126,39 @@ export default function ProfilePage() {
 
   const SM = { padding: "6px 14px", borderRadius: 6, border: "none", color: "#fff", fontSize: "0.85em", cursor: "pointer", fontWeight: 600 };
 
-  // Render cover image with nice fallback
   function CoverImg({ url, size = "100%", rounded = 0 }) {
     const w = typeof size === "string" ? size : size + "px";
-    const h = w;
-    if (url) {
-      return <img src={url} style={{ width: w, height: h, borderRadius: rounded, objectFit: "cover", display: "block" }} />;
-    }
+    if (url) return <img src={url} style={{ width: w, height: w, borderRadius: rounded, objectFit: "cover", display: "block" }} />;
     return (
-      <div style={{ width: w, height: h, borderRadius: rounded, background: "linear-gradient(135deg, #1a1a2e, #2a2a3e)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5">
-          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-        </svg>
+      <div style={{ width: w, height: w, borderRadius: rounded, background: "linear-gradient(135deg, #1a1a2e, #2a2a3e)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       </div>
+    );
+  }
+
+  function PlayBtn({ fav }) {
+    const isPlaying = playingId === fav.id;
+    const isLoading = loadingPreview === fav.id;
+    // Only show for tracks that might have a preview
+    if (fav.item_type !== "track") return null;
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); playFavorite(fav); }}
+        style={{
+          position: "absolute", top: 5, left: 5,
+          background: isPlaying ? "rgba(124,92,252,0.9)" : "rgba(0,0,0,0.6)",
+          border: "none", borderRadius: "50%", width: 28, height: 28,
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        {isLoading ? (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        ) : isPlaying ? (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="#fff"><rect x="0" y="0" width="3" height="10" rx="1"/><rect x="6" y="0" width="3" height="10" rx="1"/></svg>
+        ) : (
+          <svg width="10" height="12" viewBox="0 0 10 12" fill="#fff"><polygon points="0,0 10,6 0,12"/></svg>
+        )}
+      </button>
     );
   }
 
@@ -98,16 +208,17 @@ export default function ProfilePage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(145px, 1fr))", gap: 10 }}>
               {filteredFavs.map(f => (
                 <div key={f.id} style={{ background: "#1a1a2e", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a3e", position: "relative" }}>
-                  <a href={`/spotify?album=${f.item_id}&source=${f.source}`} style={{ textDecoration: "none", display: "block" }}>
+                  <a href={`/spotify?album=${f.extra_data?.album_id || f.item_id}&source=${f.source}`} style={{ textDecoration: "none", display: "block" }}>
                     <CoverImg url={f.cover_url} />
                   </a>
+                  <PlayBtn fav={f} />
+                  <button onClick={() => toggleFavorite(f.item_type, f.item_id)} style={{ position: "absolute", top: 5, right: 5, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
                   <div style={{ padding: "7px 9px" }}>
                     <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
                     <div style={{ color: "#666", fontSize: "0.68em" }}>{f.artist}</div>
                   </div>
-                  <button onClick={() => toggleFavorite(f.item_type, f.item_id)} style={{ position: "absolute", top: 5, right: 5, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </button>
                 </div>
               ))}
             </div>
@@ -128,7 +239,7 @@ export default function ProfilePage() {
               {playlists.map(pl => (
                 <div key={pl.id} onClick={() => openPlaylist(pl)} style={{ background: "#1a1a2e", borderRadius: 10, padding: 14, cursor: "pointer", border: "1px solid #2a2a3e", position: "relative" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                    {pl.cover_url ? <img src={pl.cover_url} style={{ width: 44, height: 44, borderRadius: 6, objectFit: "cover" }} /> : <div style={{ width: 44, height: 44, borderRadius: 6, background: "linear-gradient(135deg,#7c5cfc,#1ed760)", display: "flex", alignItems: "center", justifyContent: "center" }}>{MUSIC_ICON}</div>}
+                    <CoverImg url={pl.cover_url} size={44} rounded={6} />
                     <div>
                       <div style={{ color: "#ccc", fontWeight: 600, fontSize: "0.9em" }}>{pl.name}</div>
                       {pl.description && <div style={{ color: "#555", fontSize: "0.72em" }}>{pl.description}</div>}

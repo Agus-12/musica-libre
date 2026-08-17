@@ -189,9 +189,9 @@ export default function SpotifyPage() {
     setTimeout(() => setDownloading(""), 2000);
   }
 
-  function handleFavorite(e, itemType, itemId, name, artistName, coverUrl, source) {
+  function handleFavorite(e, itemType, itemId, name, artistName, coverUrl, source, extraData) {
     e.stopPropagation();
-    toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source);
+    toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source, extraData);
   }
 
   function handleAddToPlaylist(e, itemType, itemId, name, artistName, coverUrl, source) {
@@ -394,7 +394,7 @@ export default function SpotifyPage() {
                         {track.artist && track.artist !== album.artist && <div style={{ color: "#666", fontSize: "0.75em" }}>{track.artist}</div>}
                       </div>
                       {track.duration && <span style={{ color: "#555", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
-                      <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="fav" size="sm" />
+                      <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} type="fav" size="sm" />
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
                       <ShareBtn onClick={e => handleShare(e, "track", trackKey, track.name, track.artist || album.artist, album.source)} copied={copiedId === trackKey} size="sm" />
                       {track.preview_url && (
