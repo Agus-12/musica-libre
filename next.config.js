@@ -7,6 +7,11 @@ const nextConfig = {
       { protocol: "http", hostname: "**" },
     ],
   },
+  // Force these packages to be bundled in serverless functions (Vercel)
+  serverExternalPackages: ["cheerio", "yt-search"],
+  experimental: {
+    serverComponentsExternalPackages: ["cheerio", "yt-search"],
+  },
 };
 
 module.exports = nextConfig;
