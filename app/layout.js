@@ -1,4 +1,5 @@
 import { UserProvider } from "./components/UserContext";
+import { ToastProvider } from "./components/ToastContext";
 import AuthGate from "./components/AuthGate";
 import Navbar from "./components/Navbar";
 import PWASetup from "./components/PWASetup";
@@ -25,11 +26,13 @@ export default function RootLayout({ children }) {
       </head>
       <body style={{ margin: 0, background: "#0f0f1a", color: "#e0e0e0", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
         <UserProvider>
-          <AuthGate>
-            <Navbar>
-              {children}
-            </Navbar>
-          </AuthGate>
+          <ToastProvider>
+            <AuthGate>
+              <Navbar>
+                {children}
+              </Navbar>
+            </AuthGate>
+          </ToastProvider>
         </UserProvider>
         <PWASetup />
       </body>

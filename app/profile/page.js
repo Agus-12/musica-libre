@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "../components/UserContext";
+import { useToast } from "../components/ToastContext";
 
 export default function ProfilePage() {
   const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
@@ -11,6 +12,7 @@ export default function ProfilePage() {
   const [playingId, setPlayingId] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(null);
   const audioRef = useRef(null);
+  const toast = useToast();
 
   useEffect(() => {
     if (!audioRef.current) {
@@ -40,11 +42,44 @@ export default function ProfilePage() {
     // Get preview URL from extra_data, or try loading the album
     let previewUrl = fav.extra_data?.preview_url || "";
 
-    // If no preview saved, try to load from album API
-    if (!previewUrl && fav.extra_data?.album_id) {
+    // Check if we have a full MP3 cached first
+    let isFullMp3 = false;
+    try {
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const keys = [
+        String(fav.item_id),
+        (fav.artist + " " + fav.name).trim(),
+        (fav.name + " " + fav.artist).trim(),
+        fav.name.trim(),
+      ];
+      for (const k of keys) {
+        if (mp3s[k]?.audio_url) {
+          previewUrl = mp3s[k].audio_url;
+          isFullMp3 = true;
+          break;
+        }
+      }
+    } catch {}
+
+    // Try to serve from Service Worker cache (YouTube URLs expire)
+    if (isFullMp3 && "caches" in window) {
+      try {
+        const cache = await caches.open("ml-saved-v1");
+        const cached = await cache.match(previewUrl);
+        if (cached && cached.ok) {
+          const blob = await cached.blob();
+          if (blob.size > 1000) {
+            previewUrl = URL.createObjectURL(blob);
+          }
+        }
+      } catch {}
+    }
+
+    // If no MP3 cached, try to load preview from album API
+    if (!isFullMp3 && !previewUrl && fav.extra_data?.album_id) {
       setLoadingPreview(fav.id);
       try {
-        const source = fav.source || "deezer";
+        const source = fav.source || "itunes";
         const endpoint = source === "itunes"
           ? "/api/music?action=lookup&id=" + fav.extra_data.album_id + "&source=itunes"
           : "/api/music?action=album&id=" + fav.extra_data.album_id + "&source=deezer";
@@ -55,6 +90,11 @@ export default function ProfilePage() {
         if (track?.preview_url) previewUrl = track.preview_url;
       } catch {}
       setLoadingPreview(null);
+    }
+
+    // Show notification if playing full MP3
+    if (isFullMp3) {
+      toast.success("🎵 Reproduciendo MP3 completo: " + fav.name, 3000);
     }
 
     if (!previewUrl) {
@@ -141,6 +181,20 @@ export default function ProfilePage() {
   function PlayBtn({ fav }) {
     const isPlaying = playingId === fav.id;
     const isLoading = loadingPreview === fav.id;
+    // Check if full MP3 is available
+    let hasMp3 = false;
+    try {
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const keys = [
+        String(fav.item_id),
+        (fav.artist + " " + fav.name).trim(),
+        (fav.name + " " + fav.artist).trim(),
+        fav.name.trim(),
+      ];
+      for (const k of keys) {
+        if (mp3s[k]?.audio_url) { hasMp3 = true; break; }
+      }
+    } catch {}
     // Only show for tracks that might have a preview
     if (fav.item_type !== "track") return null;
     return (
@@ -148,7 +202,7 @@ export default function ProfilePage() {
         onClick={(e) => { e.stopPropagation(); playFavorite(fav); }}
         style={{
           position: "absolute", top: 5, left: 5,
-          background: isPlaying ? "rgba(124,92,252,0.9)" : "rgba(0,0,0,0.6)",
+          background: isPlaying ? "rgba(124,92,252,0.9)" : hasMp3 ? "rgba(34,197,94,0.8)" : "rgba(0,0,0,0.6)",
           border: "none", borderRadius: "50%", width: 28, height: 28,
           cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
         }}

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "../components/UserContext";
+import { useToast } from "../components/ToastContext";
 import AddToPlaylistModal from "../components/AddToPlaylistModal";
 
 export default function SpotifyPage() {
@@ -19,7 +20,6 @@ export default function SpotifyPage() {
   const [charts, setCharts] = useState(null);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [playingTrack, setPlayingTrack] = useState(null);
-  const [offlineMsg, setOfflineMsg] = useState("");
   const [savedOfflineIds, setSavedOfflineIds] = useState(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -27,6 +27,7 @@ export default function SpotifyPage() {
       return new Set(Object.keys(saved));
     } catch { return new Set(); }
   });
+  const toast = useToast();
 
   // Checar si una canción ya está guardada offline
   function isSavedOffline(itemId) {
@@ -43,10 +44,21 @@ export default function SpotifyPage() {
     setSavedOfflineIds(prev => { const n = new Set(prev); n.delete(String(itemId)); return n; });
   }
 
-  // Mostrar mensaje temporal
-  function showOfflineMsg(msg) {
-    setOfflineMsg(msg);
-    setTimeout(() => setOfflineMsg(""), 4000);
+  // Checar si una canción tiene MP3 completo disponible offline
+  function hasFullMp3(trackId, trackName, trackArtist) {
+    try {
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const keys = [
+        String(trackId),
+        (trackArtist + " " + trackName).trim(),
+        (trackName + " " + trackArtist).trim(),
+        trackName.trim(),
+      ];
+      for (const k of keys) {
+        if (mp3s[k]?.audio_url) return true;
+      }
+    } catch {}
+    return false;
   }
 
   // Sincronizar offline con favoritos — si se elimina un álbum favorito, quitarlo y sus canciones de offline
@@ -113,12 +125,16 @@ export default function SpotifyPage() {
     // Stop current and play new
     audio.pause();
     audio.currentTime = 0;
-    // Check if we have a full MP3 cached
+    
+    // Check if we have a full MP3 cached — try multiple strategies
     let playUrl = url;
+    let isFullMp3 = false;
+    
     try {
       const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-      // Try multiple key formats
+      // Try multiple key formats: by track ID, by artist+name, by name+artist, by name only
       const keys = [
+        String(trackId),
         (trackArtist + " " + trackName).trim(),
         (trackName + " " + trackArtist).trim(),
         trackName.trim(),
@@ -126,21 +142,50 @@ export default function SpotifyPage() {
       for (const k of keys) {
         if (mp3s[k]?.audio_url) {
           playUrl = mp3s[k].audio_url;
+          isFullMp3 = true;
           break;
         }
       }
     } catch {}
-    // Try to serve from cache (YouTube URLs expire)
-    if (playUrl !== url && "caches" in window) {
+    
+    // If we found a full MP3 URL, try to serve it from Service Worker cache
+    // (YouTube audio URLs expire quickly, so cache is essential)
+    if (isFullMp3 && playUrl !== url && "caches" in window) {
       try {
         const cache = await caches.open("ml-saved-v1");
         const cached = await cache.match(playUrl);
-        if (cached) {
+        if (cached && cached.ok) {
           const blob = await cached.blob();
-          playUrl = URL.createObjectURL(blob);
+          if (blob.size > 1000) { // Valid audio file
+            playUrl = URL.createObjectURL(blob);
+          } else {
+            // Cached file is too small (corrupt), fall back to preview
+            playUrl = url;
+            isFullMp3 = false;
+          }
+        } else {
+          // Not in cache anymore — the URL probably expired
+          // Try fetching directly (might work if URL hasn't expired yet)
+          try {
+            const directRes = await fetch(playUrl, { mode: "no-cors" });
+            // If we get here, the URL might work — but no-cors doesn't let us read it
+            // So we just try to use it directly
+          } catch {
+            // URL expired, fall back to preview
+            playUrl = url;
+            isFullMp3 = false;
+          }
         }
-      } catch {}
+      } catch {
+        // Cache error, try the URL directly
+      }
     }
+    
+    // Show notification if playing full MP3 vs preview
+    if (isFullMp3) {
+      toast.success("🎵 Reproduciendo MP3 completo: " + trackName, 3000);
+    }
+    
     audio.src = playUrl;
     setPlayingTrack(trackId);
 
@@ -310,7 +355,7 @@ export default function SpotifyPage() {
         // Refrescar palomitas
         setSavedOfflineIds(new Set(Object.keys(saved)));
       } catch {}
-      showOfflineMsg("💔 Eliminada de favoritos y offline");
+      toast.error("💔 Eliminada de favoritos y offline", 3000);
     } else {
       // Se puso el ❤️ → también guardar offline
       if (coverUrl) {
@@ -368,18 +413,19 @@ export default function SpotifyPage() {
       if (itemType === "album" && album?.tracks) {
         for (let i = 0; i < album.tracks.length; i++) {
           const t = album.tracks[i];
-          downloadFullMP3InBackground(t.name, t.artist || artistName, t.source_url || sourceUrl);
+          const tKey = String(t.id || `${itemId}-${i}`);
+          downloadFullMP3InBackground(t.name, t.artist || artistName, t.source_url || album.source_url, tKey);
         }
       } else {
-        downloadFullMP3InBackground(name, artistName, sourceUrl);
+        downloadFullMP3InBackground(name, artistName, extraData?.source_url || album?.source_url, String(itemId));
       }
       const msg = itemType === "album" ? "❤️ Álbum guardado — buscando MP3s..." : "❤️ Guardada — buscando MP3...";
-      showOfflineMsg(msg);
+      toast.download(msg, 4000);
     }
   }
 
   // Download full MP3 in background and save offline
-  async function downloadFullMP3InBackground(trackName, artistName, sourceUrl) {
+  async function downloadFullMP3InBackground(trackName, artistName, sourceUrl, trackId) {
     const searchQuery = (artistName + " " + trackName).trim();
     try {
       const params = new URLSearchParams();
@@ -406,10 +452,13 @@ export default function SpotifyPage() {
         } catch {}
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          saved[searchQuery] = { audio_url: ytAudioUrl || "", apple_url: data.apple_url, method: "aaplmusicdownloader", title: trackName, saved_at: Date.now() };
+          const entry = { audio_url: ytAudioUrl || "", apple_url: data.apple_url, method: "aaplmusicdownloader", title: trackName, saved_at: Date.now() };
+          saved[searchQuery] = entry;
+          // Also save by track ID for easy lookup during playback
+          if (trackId) saved[String(trackId)] = entry;
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
-        showOfflineMsg(ytAudioUrl ? "✅ MP3 guardado — " + trackName : "🎵 Apple Music disponible — " + trackName);
+        toast.success(ytAudioUrl ? "✅ MP3 guardado offline — " + trackName : "🎵 Apple Music disponible — " + trackName, 5000);
         return;
       }
       if (data.audio_url) {
@@ -420,17 +469,20 @@ export default function SpotifyPage() {
         }
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          saved[searchQuery] = { audio_url: data.audio_url, title: data.title, saved_at: Date.now() };
+          const entry = { audio_url: data.audio_url, title: data.title, saved_at: Date.now() };
+          saved[searchQuery] = entry;
+          // Also save by track ID for easy lookup during playback
+          if (trackId) saved[String(trackId)] = entry;
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
-        showOfflineMsg("✅ MP3 descargado: " + trackName);
+        toast.success("✅ MP3 descargado offline: " + trackName, 5000);
       } else if (data.method === "aaplmusicdownloader") {
-        showOfflineMsg("🎵 MP3 disponible vía Apple Music — " + trackName);
+        toast.info("🎵 MP3 disponible vía Apple Music — " + trackName, 5000);
       } else {
-        showOfflineMsg("⚠️ No se encontró MP3 para " + trackName);
+        toast.warning("⚠️ No se encontró MP3 para " + trackName, 5000);
       }
     } catch {
-      showOfflineMsg("⚠️ Error buscando MP3");
+      toast.error("⚠️ Error buscando MP3", 4000);
     }
   }
 
@@ -443,7 +495,7 @@ export default function SpotifyPage() {
     e.stopPropagation();
     // Si ya está guardado offline, solo mostrar mensaje
     if (isSavedOffline(itemId)) {
-      showOfflineMsg("🎵 Ya está disponible offline");
+      toast.info("🎵 Ya está disponible offline", 3000);
       return;
     }
     // 1) Guardar en favoritos (perfil)
@@ -513,7 +565,7 @@ export default function SpotifyPage() {
       localStorage.setItem("ml_offline", JSON.stringify(saved));
     } catch {}
     const msg = itemType === "album" ? "✅ Álbum guardado offline con todas sus canciones" : "✅ Guardada para ver sin internet";
-    showOfflineMsg(msg);
+    toast.success(msg, 4000);
     addSavedOfflineId(itemId);
   }
 
@@ -529,13 +581,6 @@ export default function SpotifyPage() {
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "15px 20px", minHeight: "100vh", position: "relative" }}>
       {playlistModal && <AddToPlaylistModal item={playlistModal} onClose={() => setPlaylistModal(null)} />}
-      {/* Mensaje offline flotante */}
-      {offlineMsg && (
-        <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", background: "rgba(34,197,94,0.95)", color: "#fff", padding: "10px 20px", borderRadius: 12, fontSize: "0.9em", fontWeight: 600, boxShadow: "0 4px 20px rgba(34,197,94,0.4)", zIndex: 9999, whiteSpace: "nowrap", animation: "fadeInUp 0.3s ease" }}>
-          {offlineMsg}
-          <style>{"@keyframes fadeInUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}"}</style>
-        </div>
-      )}
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
@@ -712,10 +757,13 @@ export default function SpotifyPage() {
                       <ShareBtn onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} saved={isFavorite("track", trackKey)} size="sm" />
 
                       {track.preview_url && (
-                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : "#7c5cfc"}>
+                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium)} style={{ background: isPlaying ? "#7c5cfc" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "rgba(34,197,94,0.2)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
+                          <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "#22c55e" : "#7c5cfc"}>
                             {isPlaying ? <><rect x="0" y="1" width="3" height="10" rx="1"/><rect x="6" y="1" width="3" height="10" rx="1"/></> : <polygon points="0,0 10,6 0,12"/>}
                           </svg>
+                          {hasFullMp3(trackKey, track.name, track.artist || album.artist) && !isPlaying && (
+                            <span style={{ position: "absolute", bottom: -1, right: -1, width: 8, height: 8, background: "#22c55e", borderRadius: "50%", border: "1.5px solid #0f0f1a" }}></span>
+                          )}
                         </button>
                       )}
                     </div>
