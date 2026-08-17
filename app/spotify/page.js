@@ -1,12 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useUser } from "../components/UserContext";
-import AuthModal from "../components/AuthModal";
 import AddToPlaylistModal from "../components/AddToPlaylistModal";
 
 export default function SpotifyPage() {
   const { user, isFavorite, toggleFavorite, checkSession } = useUser();
-  const [showAuth, setShowAuth] = useState(false);
   const [playlistModal, setPlaylistModal] = useState(null); // item to add to playlist
   const [tab, setTab] = useState("search");
   const [query, setQuery] = useState("");
@@ -112,17 +110,14 @@ export default function SpotifyPage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: 20, minHeight: "100vh" }}>
-      {showAuth && <AuthModal onClose={() => { setShowAuth(false); checkSession(); }} />}
+      
       {playlistModal && <AddToPlaylistModal item={playlistModal} onClose={() => setPlaylistModal(null)} />}
 
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: "1.8em", marginBottom: 4 }}>🎵 Música <span style={{ color: "#1ed760" }}>Libre</span></h1>
-        <p style={{ color: "#888", fontSize: "0.9em" }}>
-          Buscá y descargá portadas — <strong style={{ color: "#22c55e" }}>sin Premium</strong>, gratis y sin login
-          {user && <span> • <a href="/profile" style={{ color: "#7c5cfc" }}>Mi perfil</a></span>}
-        </p>
-      </div>
+      {/* Info */}
+      <p style={{ color: "#888", fontSize: "0.9em", marginBottom: 20 }}>
+        Buscá y descargá portadas — <strong style={{ color: "#22c55e" }}>sin Premium</strong>, gratis
+        {user && <span> • <a href="/profile" style={{ color: "#7c5cfc" }}>Mi perfil</a></span>}
+      </p>
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>

@@ -1,0 +1,174 @@
+"use client";
+import { useState } from "react";
+import { useUser } from "./UserContext";
+
+export default function AuthGate({ children }) {
+  const { user, loading, checkSession } = useUser();
+  const [mode, setMode] = useState(null); // null = landing, "login", "register"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a14" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "3em", marginBottom: 10, animation: "pulse 1.5s infinite" }}>🎵</div>
+          <p style={{ color: "#7c5cfc", fontSize: "1.1em" }}>Cargando...</p>
+        </div>
+        <style>{`@keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.95); } }`}</style>
+      </div>
+    );
+  }
+
+  if (user) return children;
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSubmitting(true); setError(""); setSuccess("");
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          mode === "login"
+            ? { action: "login", email, password }
+            : { action: "register", email, password, username }
+        ),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+      } else if (mode === "register" && !data.session) {
+        setSuccess("¡Registrado! Revisá tu email para confirmar tu cuenta y después iniciá sesión.");
+      } else {
+        await checkSession();
+      }
+    } catch (e) { setError(e.message); }
+    setSubmitting(false);
+  }
+
+  const IN = { width: "100%", padding: "14px 16px", borderRadius: 10, border: "1px solid rgba(124,92,252,0.3)", background: "rgba(26,26,46,0.8)", color: "#fff", fontSize: "1em", outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" };
+  const BTN = { width: "100%", padding: "14px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #7c5cfc, #5a3fd6)", color: "#fff", fontSize: "1em", cursor: "pointer", fontWeight: 700, letterSpacing: 0.5, transition: "transform 0.15s, box-shadow 0.15s" };
+
+  // ── LANDING (not login/register yet) ──
+  if (!mode) {
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #0a0a14 0%, #0f0f1a 40%, #0a1a0f 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px", position: "relative", overflow: "hidden" }}>
+        {/* Decorative blobs */}
+        <div style={{ position: "absolute", top: "-20%", right: "-10%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,92,252,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: "-20%", left: "-10%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle, rgba(30,215,96,0.06) 0%, transparent 70%)", pointerEvents: "none" }} />
+
+        <div style={{ maxWidth: 460, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
+          {/* Logo */}
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontSize: "clamp(3em, 8vw, 4.5em)" }}>🎵</span>
+          </div>
+          <h1 style={{ fontSize: "clamp(2em, 6vw, 3em)", marginBottom: 6, lineHeight: 1.1 }}>
+            Música <span style={{ color: "#1ed760" }}>Libre</span>
+          </h1>
+          <p style={{ color: "#888", fontSize: "clamp(0.9em, 2.5vw, 1.05em)", marginBottom: 35, lineHeight: 1.5, maxWidth: 380, margin: "0 auto 35px" }}>
+            Buscá álbumes, descargá portadas en alta calidad, guardá favoritos y creá tus playlists
+          </p>
+
+          {/* Features */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 35, textAlign: "left" }}>
+            {[
+              { icon: "🔍", text: "Buscar álbumes y artistas" },
+              { icon: "⬇️", text: "Descargar portadas HD" },
+              { icon: "❤️", text: "Guardar favoritos" },
+              { icon: "🎵", text: "Crear playlists" },
+            ].map((f, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, background: "rgba(26,26,46,0.6)", border: "1px solid rgba(42,42,62,0.5)" }}>
+                <span style={{ fontSize: "1.2em" }}>{f.icon}</span>
+                <span style={{ color: "#aaa", fontSize: "0.8em", lineHeight: 1.3 }}>{f.text}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA buttons */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320, margin: "0 auto" }}>
+            <button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} style={{ ...BTN, padding: "16px", fontSize: "1.05em" }}>
+              Iniciar sesión
+            </button>
+            <button onClick={() => { setMode("register"); setError(""); setSuccess(""); }} style={{ ...BTN, background: "transparent", border: "2px solid rgba(124,92,252,0.4)", color: "#7c5cfc" }}>
+              Crear cuenta gratis
+            </button>
+          </div>
+
+          <p style={{ color: "#444", fontSize: "0.75em", marginTop: 25 }}>
+            Sin cuenta Premium • Gratis • Sin Spotify
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── LOGIN / REGISTER form ──
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #0a0a14 0%, #0f0f1a 50%, #0a1a0f 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px", position: "relative", overflow: "hidden" }}>
+      {/* Decorative blobs */}
+      <div style={{ position: "absolute", top: "-20%", right: "-10%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,92,252,0.08) 0%, transparent 70%)", pointerEvents: "none" }} />
+
+      <div style={{ maxWidth: 400, width: "100%", position: "relative", zIndex: 1 }}>
+        {/* Back button */}
+        <button onClick={() => { setMode(null); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "0.9em", marginBottom: 20, display: "flex", alignItems: "center", gap: 6, padding: 0 }}>
+          ← Volver
+        </button>
+
+        <div style={{ textAlign: "center", marginBottom: 25 }}>
+          <span style={{ fontSize: "2.5em" }}>🎵</span>
+          <h2 style={{ fontSize: "1.6em", marginBottom: 4 }}>
+            {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+          </h2>
+          <p style={{ color: "#888", fontSize: "0.9em" }}>
+            {mode === "login" ? "Entrá a tu cuenta" : "Es gratis y tarda 10 segundos"}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {mode === "register" && (
+            <div>
+              <label style={{ color: "#888", fontSize: "0.8em", marginBottom: 4, display: "block" }}>Nombre de usuario</label>
+              <input value={username} onChange={e => setUsername(e.target.value)} placeholder="tu_usuario" style={IN} required />
+            </div>
+          )}
+          <div>
+            <label style={{ color: "#888", fontSize: "0.8em", marginBottom: 4, display: "block" }}>Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" style={IN} required />
+          </div>
+          <div>
+            <label style={{ color: "#888", fontSize: "0.8em", marginBottom: 4, display: "block" }}>Contraseña</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" style={IN} required minLength={6} />
+          </div>
+
+          {error && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: "0.85em" }}>
+              ❌ {error}
+            </div>
+          )}
+          {success && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", color: "#22c55e", fontSize: "0.85em" }}>
+              ✅ {success}
+            </div>
+          )}
+
+          <button type="submit" disabled={submitting} style={{ ...BTN, marginTop: 5, opacity: submitting ? 0.7 : 1 }}>
+            {submitting ? "⏳ Esperá..." : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+          </button>
+        </form>
+
+        <div style={{ textAlign: "center", marginTop: 20, color: "#888", fontSize: "0.85em" }}>
+          {mode === "login" ? (
+            <>¿No tenés cuenta? <button onClick={() => { setMode("register"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", fontWeight: 600 }}>Registrate</button></>
+          ) : (
+            <>¿Ya tenés cuenta? <button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", fontWeight: 600 }}>Iniciá sesión</button></>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

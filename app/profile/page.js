@@ -1,11 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useUser } from "../components/UserContext";
-import AuthModal from "../components/AuthModal";
 
 export default function ProfilePage() {
   const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
-  const [showAuth, setShowAuth] = useState(false);
+  
   const [tab, setTab] = useState("favorites"); // favorites, playlists
   const [favType, setFavType] = useState("album"); // album, artist, track
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -23,19 +22,7 @@ export default function ProfilePage() {
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: "#7c5cfc", fontSize: "1.2em" }}>⏳ Cargando...</div>;
 
-  if (!user) {
-    return (
-      <div style={{ maxWidth: 500, margin: "0 auto", padding: 40, textAlign: "center" }}>
-        <div style={{ fontSize: "4em", marginBottom: 15 }}>🔒</div>
-        <h1 style={{ fontSize: "1.5em", marginBottom: 10 }}>Iniciá sesión</h1>
-        <p style={{ color: "#888", marginBottom: 25 }}>Para ver tu perfil, favoritos y playlists</p>
-        <button onClick={() => setShowAuth(true)} style={{ padding: "14px 28px", borderRadius: 12, border: "none", background: "#7c5cfc", color: "#fff", fontSize: "1em", cursor: "pointer", fontWeight: 700 }}>
-          Iniciar sesión
-        </button>
-        {showAuth && <AuthModal onClose={() => { setShowAuth(false); checkSession(); }} />}
-      </div>
-    );
-  }
+
 
   const filteredFavs = favorites.filter(f => f.item_type === favType);
 
