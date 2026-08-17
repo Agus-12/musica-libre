@@ -159,6 +159,7 @@ export async function GET(req) {
               name: s.trackName || "",
               artist: s.artistName || main.artistName || "",
               duration: s.trackTimeMillis ? formatDurationMs(s.trackTimeMillis) : "",
+              duration_ms: s.trackTimeMillis || 0,
               preview_url: s.previewUrl || "",
               source_url: s.trackViewUrl || "",
             })),

@@ -127,7 +127,7 @@ async function fetchJSON(url) {
   return await resp.json();
 }
 
-async function buscarEnYouTube(searchQuery) {
+async function buscarEnYouTube(searchQuery, expectedDuration) {
   const ytSearch = await import("yt-search");
   let results = await ytSearch.default(searchQuery + " official audio");
   if (!results.videos || results.videos.length === 0) {
@@ -135,7 +135,6 @@ async function buscarEnYouTube(searchQuery) {
   }
   if (!results.videos || results.videos.length === 0) return null;
 
-  // yt-search devuelve `duration` como texto "3:45" o número (segundos)
   const toSec = (d) => {
     if (d == null) return 9999;
     if (typeof d === "number") return d;
@@ -145,38 +144,46 @@ async function buscarEnYouTube(searchQuery) {
     return 9999;
   };
 
-  // Clasificamos cada candidato segun su titulo.
-  const tituloParece = (v, re) => new RegExp(re, "i").test((v.title || "").replace(/�/g, ""));
-  const esOficial = (v) => tituloParece(v, "oficial|official");
-  const esTemaCompleto = (v) => tituloParece(v, "audio|oficial|lyric|letra"); // "Audio/Estudio" cuenta como audio
-  const esLive = (v) =>
+  const tituloParece = (v, re) => new RegExp(re, "i").test((v.title || "").replace(/\uFFFD/g, ""));
+  const esMashup = (v) =>
     tituloParece(v, "live|remix|mashup|cover|reaction|chapter|preview|trailer|shorts") ||
-    tituloParece(v, "1 hour|1h|hour|8 horas|extended|intro|trailer|preview");
+    tituloParece(v, "1 ?h|hour|8 horas|extended|intro|trailer|preview|feat|ft\.|featuring");
+  const esTema = (v) => tituloParece(v, "oficial|official|audio|lyric|letra");
 
   const META = 8000;
   const scored = (results.videos || []).slice(0, 12).map((v) => {
     const dur = toSec(v.duration);
-    const fueraDeRango = dur < 120 || dur > 600; // 2 min a 10 min — descartamos live/mashup muy largos
-    const live = esLive(v);
-    const oficial = esOficial(v);
-    const tema = esTemaCompleto(v);
+    const mashup = esMashup(v);
+    const tema = esTema(v);
 
-    // Score: MENOR es mejor. Vamos por:
-    //  1. Sin penalidad si parece video "live/mix/cover" -> +META (descartado)
-    //  2. Sin penalidad si NO parece audio/oficial -> +META/2 (descartado)
-    //  3. Penalidad por duración fuera de rango
-    //  4. Entre los oficiales/audios, preferimos la versión LARGA (canción completa).
     let s = 0;
-    if (live) s += META;
-    if (!tema) s += META / 2;
-    if (fueraDeRango) s += 500;
-    if (oficial || tema) s -= Math.max(0, dur) / 6; // más larga = mejor (canción completa)
-    else s += dur / 10; // para resultados no-oficiales/audios: prefer short (descartamos lives)
+    // 1) Descartar todo lo que parezca mashup / live / cover / reaction.
+    if (mashup) s += META;
+    // 2) Si no parece un tema oficial/audio, tambien descartamos.
+    else if (!tema) s += META / 2;
+
+    // 3) Duracion esperada (de iTunes): si la tenemos, priorizamos videos
+    //    cuya duracion real sea similar a la del preview original.
+    if (expectedDuration && expectedDuration > 0) {
+      const diff = Math.abs(dur - expectedDuration);
+      // Si se va mas del 30% del target, descartamos (mashup de 7 min vs 3 min).
+      if (diff > expectedDuration * 0.3) s += 4000;
+      // Si esta dentro del 10% del target, lo premiamos fuerte.
+      else if (diff < expectedDuration * 0.1) s -= 1500;
+      // Si dura igualitos, bonus extra.
+      else if (diff < expectedDuration * 0.04) s -= 3000;
+    }
+
+    // 4) Entre los NO-descartados: preferimos los mas largos (porque una
+    //    cancion de 3:22 suele estar completa; una de 2:30 puede ser preview).
+    if (tema) s -= Math.max(0, dur) / 12;
+
     return { v, score: s };
   });
   scored.sort((a, b) => a.score - b.score);
   return scored[0]?.v || results.videos[0] || null;
 }
+
 
 
 
@@ -194,7 +201,7 @@ export async function GET(req) {
     // ── Apple Music / iTunes ──
     const appleUrl = itunesUrl || "";
     if (appleUrl.includes("apple.com") || appleUrl.includes("itunes.apple.com")) {
-      const video = await buscarEnYouTube(query).catch(() => null);
+      const video = await buscarEnYouTube(query, null).catch(() => null);
 
       /* Mismo orden que en la búsqueda normal: primero la Mac de casa,
          que es la única que puede dar un archivo cacheable. Antes esta
@@ -247,7 +254,7 @@ export async function GET(req) {
       } catch {}
     }
 
-    const video = await buscarEnYouTube(searchQuery);
+    const video = await buscarEnYouTube(searchQuery, p.get("expected_duration") ? Number(p.get("expected_duration")) : null);
     if (!video) {
       return NextResponse.json(
         { error: "No se encontró la canción en YouTube" },

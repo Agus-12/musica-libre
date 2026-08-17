@@ -423,10 +423,17 @@ export default function SpotifyPage() {
           name: t.name,
           artist: t.artist || artistName,
           cover: coverUrl,
+          duration_ms: t.duration_ms || null,
         }));
         enqueueAlbum(name, tracksForQueue);
       } else {
-        enqueueAlbum(name, [{ key: String(itemId), name, artist: artistName, cover: coverUrl }]);
+        let durMs = null;
+        if (extraData && extraData.duration_ms) durMs = extraData.duration_ms;
+        else if (album && album.tracks) {
+          const tk = album.tracks.find(t => String(t.id) === String(itemId) || t.name === name);
+          if (tk && tk.duration_ms) durMs = tk.duration_ms;
+        }
+        enqueueAlbum(name, [{ key: String(itemId), name, artist: artistName, cover: coverUrl, duration_ms: durMs }]);
       }
       const msg = itemType === "album" ? "Álbum guardado — descargando en segundo plano" : "Guardada — descargando en segundo plano";
       toast.info(msg, 4000);
@@ -685,7 +692,7 @@ export default function SpotifyPage() {
                         {track.artist && track.artist !== album.artist && <div style={{ color: "#666", fontSize: "0.75em" }}>{track.artist}</div>}
                       </div>
                       {track.duration && <span style={{ color: "#555", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
-                      <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} type="fav" size="sm" />
+                      <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "", duration_ms: track.duration_ms || 0 })} type="fav" size="sm" />
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
                       <ShareBtn onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} saved={isFavorite("track", trackKey)} size="sm" />
 

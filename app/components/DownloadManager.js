@@ -77,6 +77,7 @@ export function DownloadProvider({ children }) {
           name: t.name,
           artist: t.artist,
           cover: t.cover,
+          duration_ms: t.duration_ms || null,
           status: "pending",
           savedAt: Date.now() + i,
         }));
@@ -102,6 +103,11 @@ async function processOne(track, currentQueue, setQueue) {
   const sq = (track.artist + " " + track.name).trim();
   const params = new URLSearchParams();
   params.set("q", sq);
+  // Duracion real (de iTunes, en segundos) para que el filtro de YouTube
+  // busque una version de longitud similar y NO un live/mashup de 7-8 min.
+  if (track.duration_ms) {
+    params.set("expected_duration", Math.round(track.duration_ms / 1000));
+  }
   const res = await fetch("/api/download-mp3?" + params.toString());
   const data = await res.json().catch(() => ({}));
 
