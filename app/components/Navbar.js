@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import LogoAura from "./LogoAura";
 import { useUser } from "./UserContext";
 
 // Iconos SVG con el mismo trazo que el resto de la app (línea de 2px, 24x24)
@@ -39,14 +40,15 @@ export default function Navbar({ children }) {
         backdropFilter: "blur(10px)",
         borderBottom: "1px solid rgba(42,42,62,0.5)",
         padding: "0 16px",
+        paddingTop: "env(safe-area-inset-top)",
+        paddingLeft: "max(16px, env(safe-area-inset-left))",
+        paddingRight: "max(16px, env(safe-area-inset-right))",
+        boxSizing: "border-box",
       }}>
         <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", height: 56 }}>
           {/* Logo */}
           <a href="/spotify" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 9, marginRight: "auto" }}>
-            <Ico d={ICON_MUSIC} size={20} stroke="#1ed760" />
-            <span style={{ fontWeight: 700, fontSize: "1.1em", color: "#e0e0e0" }}>
-              Música <span style={{ color: "#1ed760" }}>Libre</span>
-            </span>
+            <LogoAura height={24} />
           </a>
 
           {/* Desktop links */}
@@ -79,10 +81,15 @@ export default function Navbar({ children }) {
           </div>
 
           {/* Mobile menu button */}
-          <button onClick={() => setMenuOpen(!menuOpen)} style={{
-            display: "none", background: "none", border: "none",
-            color: "#aaa", fontSize: "1.4em", cursor: "pointer", marginLeft: 8, padding: 4,
-          }} className="mobile-menu-btn">
+          <button onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
+            style={{
+              display: "none", background: "none", border: "none",
+              color: "#aaa", fontSize: "1.4em", cursor: "pointer", marginLeft: 8,
+              /* 44x44 es el mínimo que recomienda Apple para poder tocarlo bien */
+              width: 44, height: 44, padding: 0, alignItems: "center",
+              justifyContent: "center", flexShrink: 0, position: "relative", zIndex: 2,
+            }} className="mobile-menu-btn">
             {menuOpen ? "✕" : "☰"}
           </button>
         </div>
@@ -90,8 +97,10 @@ export default function Navbar({ children }) {
         {/* Mobile dropdown */}
         {menuOpen && (
           <div style={{
-            padding: "8px 16px 16px", borderTop: "1px solid rgba(42,42,62,0.5)",
+            padding: "8px 16px calc(16px + env(safe-area-inset-bottom))",
+            borderTop: "1px solid rgba(42,42,62,0.5)",
             display: "flex", flexDirection: "column", gap: 4,
+            maxHeight: "70vh", overflowY: "auto",
           }} className="mobile-dropdown">
             {links.map(l => (
               <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)} style={{
@@ -120,7 +129,7 @@ export default function Navbar({ children }) {
       <style>{`
         @media (max-width: 640px) {
           .desktop-nav { display: none !important; }
-          .mobile-menu-btn { display: block !important; }
+          .mobile-menu-btn { display: flex !important; }
         }
         @media (min-width: 641px) {
           .mobile-dropdown { display: none !important; }

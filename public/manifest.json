@@ -1,24 +1,30 @@
 {
-  "name": "Música Libre",
-  "short_name": "Música Libre",
+  "name": "AURA",
+  "short_name": "AURA",
   "description": "Buscá álbumes, descargá portadas, guardá favoritos y creá playlists",
   "start_url": "/spotify",
   "display": "standalone",
-  "background_color": "#0f0f1a",
-  "theme_color": "#7c5cfc",
+  "background_color": "#0a0a14",
+  "theme_color": "#0a0a14",
   "orientation": "any",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["music", "entertainment"],
@@ -26,12 +32,12 @@
     {
       "name": "Buscar música",
       "url": "/spotify",
-      "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Mi perfil",
       "url": "/profile",
-      "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

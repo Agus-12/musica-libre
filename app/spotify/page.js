@@ -463,8 +463,16 @@ export default function SpotifyPage() {
         if (data.audio_url && "caches" in window) {
           try {
             const c = await caches.open("ml-saved-v1");
-            await c.add(data.audio_url);
-            guardadoOffline = true;
+            /* Ojo: usamos fetch + put en vez de cache.add().
+               add() puede disparar una petición con Range y el Cache API
+               se niega a guardar respuestas 206. Pidiéndolo nosotros nos
+               aseguramos de guardar el archivo ENTERO (200), que es lo
+               que después el service worker recorta para el iPhone. */
+            const resp = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" } });
+            if (resp.ok && resp.status === 200) {
+              await c.put(data.audio_url, resp.clone());
+              guardadoOffline = true;
+            }
           } catch { /* si falla, seguimos con el iframe */ }
         }
         try {

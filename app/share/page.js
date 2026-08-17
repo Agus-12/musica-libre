@@ -189,7 +189,7 @@ export default function SharePage() {
       <div style={{ maxWidth: 480, width: "100%", textAlign: "center" }}>
         {/* Logo */}
         <div style={{ marginBottom: 24 }}>
-          <span style={{ fontSize: "1.4em", fontWeight: 800, background: "linear-gradient(135deg, #7c5cfc, #e040fb)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>🎵 Música Libre</span>
+          <span style={{ fontSize: "1.4em", fontWeight: 800, background: "linear-gradient(135deg, #7c5cfc, #e040fb)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AURA</span>
         </div>
 
         {/* Cover Art */}
@@ -253,7 +253,7 @@ export default function SharePage() {
             href="/spotify"
             style={{ color: "#666", fontSize: "0.85em", textDecoration: "underline", marginTop: 8 }}
           >
-            Explorar más música en Música Libre →
+            Explorar más música en AURA →
           </a>
         </div>
 

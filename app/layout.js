@@ -5,14 +5,14 @@ import Navbar from "./components/Navbar";
 import PWASetup from "./components/PWASetup";
 
 export const metadata = {
-  title: "🎵 Música Libre — Descargá portadas y creá playlists",
+  title: "AURA — Tu música, siempre con vos",
   description: "Buscá álbumes, descargá portadas en alta calidad, guardá favoritos y creá playlists — sin cuenta Premium",
   manifest: "/manifest.json",
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-status-bar-style": "black-translucent",
-    "apple-mobile-web-app-title": "Música Libre",
+    "apple-mobile-web-app-status-bar-style": "black",
+    "apple-mobile-web-app-title": "AURA",
   },
 };
 
@@ -22,7 +22,7 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#7c5cfc",
+  themeColor: "#0a0a14",
 };
 
 export default function RootLayout({ children }) {
@@ -30,9 +30,10 @@ export default function RootLayout({ children }) {
     <html lang="es">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="icon" href="/favicon-64.png" sizes="64x64" />
       </head>
-      <body style={{ margin: 0, background: "#0f0f1a", color: "#e0e0e0", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <body style={{ margin: 0, background: "#0a0a14", color: "#e0e0e0", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
         <UserProvider>
           <ToastProvider>
             <AuthGate>

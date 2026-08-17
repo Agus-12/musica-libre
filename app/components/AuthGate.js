@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useUser } from "./UserContext";
+import LogoAura from "./LogoAura";
 
 // Rutas públicas que no requieren login
 const PUBLIC_PATHS = ["/share"];
@@ -30,7 +31,7 @@ export default function AuthGate({ children }) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a14" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "3em", marginBottom: 10, animation: "pulse 1.5s infinite" }}>🎵</div>
+          <div style={{ marginBottom: 14, animation: "pulse 1.5s infinite" }}><LogoAura height={40} /></div>
           <p style={{ color: "#7c5cfc", fontSize: "1.1em" }}>Cargando...</p>
         </div>
         <style>{`@keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.95); } }`}</style>
@@ -79,11 +80,9 @@ export default function AuthGate({ children }) {
         <div style={{ maxWidth: 460, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
           {/* Logo */}
           <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: "clamp(3em, 8vw, 4.5em)" }}>🎵</span>
+            <LogoAura height={40} />
           </div>
-          <h1 style={{ fontSize: "clamp(2em, 6vw, 3em)", marginBottom: 6, lineHeight: 1.1 }}>
-            Música <span style={{ color: "#1ed760" }}>Libre</span>
-          </h1>
+          <p style={{ color: "#6a6a80", fontSize: "0.8em", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, marginTop: 14 }}>Tu música, siempre con vos</p>
           <p style={{ color: "#888", fontSize: "clamp(0.9em, 2.5vw, 1.05em)", marginBottom: 35, lineHeight: 1.5, maxWidth: 380, margin: "0 auto 35px" }}>
             Buscá álbumes, descargá portadas en alta calidad, guardá favoritos y creá tus playlists
           </p>
@@ -134,7 +133,7 @@ export default function AuthGate({ children }) {
         </button>
 
         <div style={{ textAlign: "center", marginBottom: 25 }}>
-          <span style={{ fontSize: "2.5em" }}>🎵</span>
+          <LogoAura height={40} />
           <h2 style={{ fontSize: "1.6em", marginBottom: 4 }}>
             {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
           </h2>

@@ -456,7 +456,7 @@ export default function ProfilePage() {
     const as = item.cover_url ? "/api/proxy?url=" + encodeURIComponent(item.cover_url) : "/icon-512.png";
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: item.title || "", artist: item.artist || "", album: "Música Libre",
+        title: item.title || "", artist: item.artist || "", album: "AURA",
         artwork: [
           { src: as, sizes: "96x96",   type: "image/jpeg" },
           { src: as, sizes: "192x192", type: "image/jpeg" },
@@ -483,7 +483,7 @@ export default function ProfilePage() {
     mediaFixRef.current = [600, 1500, 3000].map(ms => setTimeout(() => {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title: item.title || "", artist: item.artist || "", album: "Música Libre",
+          title: item.title || "", artist: item.artist || "", album: "AURA",
           artwork: [
             { src: as, sizes: "96x96",   type: "image/jpeg" },
             { src: as, sizes: "192x192", type: "image/jpeg" },

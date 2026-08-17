@@ -67,6 +67,40 @@ async function obtenerAudioUrl(videoUrl) {
   }
 }
 
+/* ── Servidor casero (tu Mac mini) ──────────────────────────────
+   Vercel no puede bajar de YouTube porque bloquea las IPs de
+   datacenter. Tu Mac usa la IP de tu casa, que no está bloqueada.
+   Si configuraste MUSICA_SERVER, le preguntamos a ella primero.
+
+   Devuelve una URL absoluta al archivo, que el navegador puede
+   cachear y reproducir offline (el servidor casero responde
+   Range/206, que es lo que el iPhone necesita).            */
+async function pedirAlServidorCasero({ videoId, query }) {
+  const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
+  if (!base) return null;
+
+  const token = process.env.MUSICA_TOKEN || "";
+  const p = new URLSearchParams();
+  if (videoId) p.set("v", videoId); else p.set("q", query || "");
+  if (token) p.set("token", token);
+
+  try {
+    const resp = await fetch(`${base}/resolver?${p}`, {
+      // Bajar y convertir puede tardar; damos margen pero no infinito.
+      signal: AbortSignal.timeout(120000),
+      headers: { Accept: "application/json" },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data.ok || !data.audio_path) return null;
+    return { url: base + data.audio_path, bytes: data.bytes || 0 };
+  } catch {
+    // La Mac está apagada, sin internet o tardó demasiado.
+    // No es fatal: seguimos con el iframe de YouTube.
+    return null;
+  }
+}
+
 async function fetchJSON(url) {
   const resp = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
@@ -148,14 +182,28 @@ export async function GET(req) {
       );
     }
 
-    // Intento de audio descargable (offline real). Si no se puede, va null.
-    const audioUrl = await obtenerAudioUrl(video.url);
+    /* Buscamos audio descargable en este orden:
+       1. Tu Mac mini (IP de casa, YouTube no la bloquea)  ← lo normal
+       2. yt-dlp local (sólo si corrés la app en tu compu)
+       3. Nada → el iframe de YouTube de siempre
+       Cualquier falla cae al siguiente sin romper la app. */
+    let audioUrl = null;
+    let fuente = null;
+
+    const casero = await pedirAlServidorCasero({ videoId: video.videoId, query: searchQuery });
+    if (casero) { audioUrl = casero.url; fuente = "casa"; }
+
+    if (!audioUrl) {
+      audioUrl = await obtenerAudioUrl(video.url);
+      if (audioUrl) fuente = "local";
+    }
 
     return NextResponse.json({
       success: true,
       method: audioUrl ? "audio" : "youtube",
       audio_url: audioUrl,                 // null → la app usa el iframe
       offline: Boolean(audioUrl),
+      fuente,                              // "casa" | "local" | null
       video_id: video.videoId,
       video_url: video.url,
       title: video.title,
