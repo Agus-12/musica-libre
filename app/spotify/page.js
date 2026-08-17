@@ -416,7 +416,7 @@ export default function SpotifyPage() {
           const tKey = String(t.id || `${itemId}-${i}`);
           downloadFullMP3InBackground(t.name, t.artist || artistName, t.source_url || album.source_url, tKey);
         }
-      } else {
+      } else if (itemType === "track") {
         downloadFullMP3InBackground(name, artistName, extraData?.source_url || album?.source_url, String(itemId));
       }
       const msg = itemType === "album" ? "❤️ Álbum guardado — buscando MP3s..." : "❤️ Guardada — buscando MP3...";
