@@ -1,10 +1,10 @@
 // Música Libre - Service Worker
 // Handles offline caching for PWA
 
-const CACHE_NAME = 'musica-libre-v4';
-const STATIC_CACHE = 'ml-static-v4';
+const CACHE_NAME = 'musica-libre-v5';
+const STATIC_CACHE = 'ml-static-v5';
 const DATA_CACHE = 'ml-data-v3';
-const IMAGE_CACHE = 'ml-images-v3';
+const IMAGE_CACHE = 'ml-images-v4';
 const SAVED_CACHE = 'ml-saved-v1';
 
 // Static assets to cache immediately
@@ -48,6 +48,13 @@ self.addEventListener('fetch', (event) => {
 
   // Skip chrome-extension and other non-http
   if (!url.protocol.startsWith('http')) return;
+
+  // Portadas servidas por nuestro proxy: cache primero, así se ven sin
+  // internet (incluida la carátula de la pantalla de bloqueo).
+  if (url.pathname.startsWith('/api/proxy')) {
+    event.respondWith(cacheFirstWithNetwork(event, IMAGE_CACHE));
+    return;
+  }
 
   // API requests: network first, fallback to cache
   if (url.pathname.startsWith('/api/')) {

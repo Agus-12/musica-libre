@@ -68,6 +68,9 @@ export default function ProfilePage() {
   const playerInitRef = useRef(null);     // promesa de creación (evita duplicados)
   const pendingRef = useRef(null);        // canción a tocar apenas el player esté listo
   const kickRef = useRef(null);           // reintentos de play
+  const mediaFixRef = useRef(null);       // reescritura de la portada en la pantalla de bloqueo
+  const wakeRef = useRef(null);           // reanudar al volver a la app
+  const [isOnline, setIsOnline] = useState(true);
   const [downloadedMusic, setDownloadedMusic] = useState([]);
 
   // Arrastre de la barra de progreso estilo iTunes
@@ -166,8 +169,62 @@ export default function ProfilePage() {
   // Si se cierra la reproducción, replegamos la pantalla completa
   useEffect(() => { if (playingKey === null) setExpanded(false); }, [playingKey]);
 
-  // Limpieza de los reintentos de play al desmontar
-  useEffect(() => () => { if (kickRef.current) clearInterval(kickRef.current); }, []);
+  // Limpieza de temporizadores al desmontar
+  useEffect(() => () => {
+    if (kickRef.current) clearInterval(kickRef.current);
+    if (mediaFixRef.current) mediaFixRef.current.forEach(clearTimeout);
+    if (wakeRef.current) clearInterval(wakeRef.current);
+  }, []);
+
+  // Estado de conexión (para el modo offline)
+  useEffect(() => {
+    const set = () => setIsOnline(navigator.onLine);
+    set();
+    window.addEventListener("online", set);
+    window.addEventListener("offline", set);
+    return () => { window.removeEventListener("online", set); window.removeEventListener("offline", set); };
+  }, []);
+
+  /* Que la música NO se corte al salir de la app.
+     Cuando el celular manda el navegador a segundo plano, suele pausar el
+     iframe. Al volver, si estábamos reproduciendo, lo reanudamos. Además
+     mantenemos viva la sesión con un "latido" mientras suena. */
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState !== "visible") return;
+      if (!playerRef.current || !playerReadyRef.current) return;
+      if (!isPlaying) return;
+      try {
+        const st = playerRef.current.getPlayerState();
+        if (st !== 1) { playerRef.current.playVideo(); kickPlay(); }
+      } catch {}
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onVisibility);
+    window.addEventListener("focus", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onVisibility);
+      window.removeEventListener("focus", onVisibility);
+    };
+  }, [isPlaying]);
+
+  // Latido: si el sistema pausa el video por estar en segundo plano, reanudar
+  useEffect(() => {
+    if (!isPlaying) {
+      if (wakeRef.current) { clearInterval(wakeRef.current); wakeRef.current = null; }
+      return;
+    }
+    wakeRef.current = setInterval(() => {
+      const p = playerRef.current;
+      if (!p || !playerReadyRef.current) return;
+      try {
+        // Estado 2 = pausado. Si nosotros creemos que suena, lo despertamos.
+        if (p.getPlayerState() === 2) p.playVideo();
+      } catch {}
+    }, 1000);
+    return () => { if (wakeRef.current) { clearInterval(wakeRef.current); wakeRef.current = null; } };
+  }, [isPlaying]);
 
   // ── Arrastre de la barra (mouse + touch), estilo iTunes ──
   function pctFromEvent(e) {
@@ -337,11 +394,19 @@ export default function ProfilePage() {
 
   function setupMediaSession(item) {
     if (!("mediaSession" in navigator)) return;
-    const as = item.cover_url ? "/api/proxy?url=" + encodeURIComponent(item.cover_url) : "";
+    // Usamos /api/proxy para servir la portada desde nuestro dominio: así el
+    // sistema la puede leer y además queda cacheada para offline.
+    const as = item.cover_url ? "/api/proxy?url=" + encodeURIComponent(item.cover_url) : "/icon-512.png";
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: item.title || "", artist: item.artist || "", album: "",
-        artwork: as ? [{src:as,sizes:"96x96",type:"image/jpeg"},{src:as,sizes:"256x256",type:"image/jpeg"},{src:as,sizes:"512x512",type:"image/jpeg"}] : [],
+        title: item.title || "", artist: item.artist || "", album: "Música Libre",
+        artwork: [
+          { src: as, sizes: "96x96",   type: "image/jpeg" },
+          { src: as, sizes: "192x192", type: "image/jpeg" },
+          { src: as, sizes: "256x256", type: "image/jpeg" },
+          { src: as, sizes: "384x384", type: "image/jpeg" },
+          { src: as, sizes: "512x512", type: "image/jpeg" },
+        ],
       });
     } catch {}
     navigator.mediaSession.playbackState = "playing";
@@ -352,9 +417,35 @@ export default function ProfilePage() {
     // Botones de anterior/siguiente en la pantalla de bloqueo del celular
     try { navigator.mediaSession.setActionHandler("nexttrack", () => playNext()); } catch {}
     try { navigator.mediaSession.setActionHandler("previoustrack", () => playPrev()); } catch {}
+
+    /* IMPORTANTE: cuando el iframe de YouTube arranca, PISA nuestra metadata
+       con la del video (por eso en la pantalla de bloqueo aparecía la
+       miniatura de YouTube y no la portada del álbum). Se la volvemos a
+       escribir un rato después de que empieza a sonar. */
+    if (mediaFixRef.current) mediaFixRef.current.forEach(clearTimeout);
+    mediaFixRef.current = [600, 1500, 3000].map(ms => setTimeout(() => {
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: item.title || "", artist: item.artist || "", album: "Música Libre",
+          artwork: [
+            { src: as, sizes: "96x96",   type: "image/jpeg" },
+            { src: as, sizes: "192x192", type: "image/jpeg" },
+            { src: as, sizes: "256x256", type: "image/jpeg" },
+            { src: as, sizes: "384x384", type: "image/jpeg" },
+            { src: as, sizes: "512x512", type: "image/jpeg" },
+          ],
+        });
+      } catch {}
+    }, ms));
   }
 
   async function playDownloaded(item) {
+    // Sin internet el iframe de YouTube no puede cargar: avisamos claro en
+    // vez de quedarnos en silencio como si estuviera roto.
+    if (!navigator.onLine && item.video_id && !item.audio_url) {
+      toast.warning("Sin conexión: esta canción se reproduce desde YouTube y necesita internet", 4000);
+      return;
+    }
     // Misma canción → alternar play/pausa
     if (playingKey === item.key && playerRef.current && playerReadyRef.current) {
       try {
@@ -551,6 +642,19 @@ export default function ProfilePage() {
             </div>
           ) : (
             <>
+            {/* Aviso de modo offline */}
+            {!isOnline && (
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",background:"rgba(234,179,8,0.08)",border:"1px solid rgba(234,179,8,0.25)",borderRadius:10,padding:"11px 13px",marginBottom:12}}>
+                <span style={{flexShrink:0,marginTop:1}}>
+                  <Ico d={<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={17} stroke="#eab308"/>
+                </span>
+                <div style={{fontSize:"0.8em",lineHeight:1.5,color:"#d4bc6a"}}>
+                  <strong style={{color:"#eab308"}}>Sin conexión.</strong> Solo podés escuchar los adelantos guardados.
+                  Las canciones completas se reproducen desde YouTube y necesitan internet.
+                </div>
+              </div>
+            )}
+
             {/* Buscador + controles */}
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
               <div style={{position:"relative",flex:1,minWidth:190}}>
@@ -622,12 +726,19 @@ export default function ProfilePage() {
                       {cp && <div style={{marginTop:4,height:3,borderRadius:2,background:"#2a2a3e",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"#22c55e",width:progress+"%",transition:"width 0.5s linear"}}/></div>}
                     </div>
                     {cp && <span style={{color:"#22c55e",fontSize:"0.72em",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{fmt(currentTime)} / {fmt(duration)}</span>}
-                    {/* OFF badge */}
-                    {item.video_id && <span style={{padding:"2px 6px",borderRadius:4,fontSize:"0.6em",fontWeight:700,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.3)"}}>OFF</span>}
-                    {/* Refresh */}
-                    {iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "#555", "none", "Buscar de nuevo")}
-                    {/* Delete */}
-                    {iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "#555", "none", "Eliminar")}
+                    {/* Estado: sin internet la canción completa (YouTube) no
+                        suena, así que lo decimos en vez de mostrar "OFF". */}
+                    {item.video_id && (
+                      isOnline
+                        ? <span style={{padding:"2px 6px",borderRadius:4,fontSize:"0.6em",fontWeight:700,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.3)"}}>OFF</span>
+                        : <span title="Necesita internet" style={{display:"inline-flex",alignItems:"center",flexShrink:0,padding:"2px 5px",borderRadius:4,background:"rgba(234,179,8,0.12)",border:"1px solid rgba(234,179,8,0.3)"}}>
+                            <Ico d={<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={11} stroke="#eab308"/>
+                          </span>
+                    )}
+                    {/* Sin internet ocultamos re-descargar y borrar: no se
+                        pueden completar offline y sólo confunden. */}
+                    {isOnline && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "#555", "none", "Buscar de nuevo")}
+                    {isOnline && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "#555", "none", "Eliminar")}
                   </div>
                 );
               })}
@@ -660,8 +771,17 @@ export default function ProfilePage() {
                 try{const m=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=[String(f.item_id),(f.artist+" "+f.name).trim(),(f.name+" "+f.artist).trim(),f.name.trim()];for(const k of ks){if(m[k]?.video_id||m[k]?.audio_url){isDl=true;break;}}}catch{}
                 return (
                   <div key={f.id} style={{background:"#1a1a2e",borderRadius:10,overflow:"hidden",border:"1px solid #2a2a3e",position:"relative"}}>
-                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{textDecoration:"none",display:"block"}}><CoverImg url={f.cover_url}/></a>
-                    {isDl && <span style={{position:"absolute",bottom:28,left:4,background:"rgba(34,197,94,0.9)",color:"#fff",padding:"1px 5px",borderRadius:4,fontSize:"0.6em",fontWeight:700}}>OFF</span>}
+                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{textDecoration:"none",display:"block",position:"relative"}}>
+                      <CoverImg url={f.cover_url}/>
+                      {/* Insignia dentro de la portada, abajo a la izquierda:
+                          antes caía sobre el nombre y se empalmaba con el texto. */}
+                      {isDl && (
+                        <span style={{position:"absolute",bottom:6,left:6,display:"inline-flex",alignItems:"center",gap:3,background:"rgba(8,10,14,0.82)",color:"#22c55e",padding:"3px 6px",borderRadius:5,fontSize:"0.58em",fontWeight:800,letterSpacing:.3,border:"1px solid rgba(34,197,94,0.45)",backdropFilter:"blur(4px)"}}>
+                          <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={9} stroke="#22c55e" sw={2.6}/>
+                          OFF
+                        </span>
+                      )}
+                    </a>
                     <button onClick={()=>toggleFavorite(f.item_type,f.item_id)} style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:"50%",width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="#ef4444"/>
                     </button>
