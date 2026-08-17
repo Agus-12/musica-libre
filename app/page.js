@@ -43,13 +43,13 @@ export default function MirrorPage() {
         Podés <strong>navegar</strong> dentro del espejo y <strong>descargar cualquier archivo</strong> con un click.
       </p>
 
-      {/* Spotify App Link */}
+      {/* Música Libre Link */}
       <a href="/spotify" style={{ display: "block", background: "linear-gradient(135deg,#1a1a2e,#0a2a1a)", border: "2px solid #1ed760", borderRadius: 12, padding: "16px 20px", marginBottom: 25, textDecoration: "none", color: "#e0e0e0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: "2em" }}>🎵</span>
           <div>
-            <div style={{ color: "#1ed760", fontWeight: 700, fontSize: "1.1em" }}>Spotify Downloader</div>
-            <div style={{ color: "#888", fontSize: "0.85em" }}>Buscar álbumes, ver portadas, escuchar previews, descargar imágenes en alta calidad</div>
+            <div style={{ color: "#1ed760", fontWeight: 700, fontSize: "1.1em" }}>Música Libre</div>
+            <div style={{ color: "#888", fontSize: "0.85em" }}>Buscar álbumes, descargar portadas en alta calidad — sin cuenta Premium, gratis y sin login</div>
           </div>
           <span style={{ marginLeft: "auto", color: "#1ed760", fontSize: "1.5em" }}>→</span>
         </div>
