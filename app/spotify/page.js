@@ -385,47 +385,6 @@ export default function SpotifyPage() {
     } catch {}
   }
 
-  async function handleDownloadMP3(e, trackName, artistName, sourceUrl) {
-    e.stopPropagation();
-    const searchQuery = (artistName + " " + trackName).trim();
-    showOfflineMsg("🔍 Buscando MP3 de " + trackName + "...");
-    try {
-      const params = new URLSearchParams();
-      params.set("q", searchQuery);
-      if (sourceUrl) params.set("spotify_url", sourceUrl);
-      const res = await fetch("/api/download-mp3?" + params.toString());
-      const data = await res.json();
-      if (data.error) {
-        showOfflineMsg("❌ " + data.error);
-        return;
-      }
-      // Descargar el MP3 y guardarlo en caché offline
-      if (data.audio_url) {
-        if ("caches" in window) {
-          const cache = await caches.open("ml-saved-v1");
-          await cache.add(data.audio_url);
-        }
-        // También descargar como archivo
-        try {
-          const audioRes = await fetch(data.audio_url);
-          if (audioRes.ok) {
-            const blob = await audioRes.blob();
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = (trackName || "song").replace(/[^a-zA-Z0-9 ]/g, "") + ".mp3";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(a.href);
-          }
-        } catch {}
-        showOfflineMsg("✅ MP3 descargado y guardado offline — " + (data.quality || ""));
-      }
-    } catch (err) {
-      showOfflineMsg("❌ Error al buscar MP3");
-    }
-  }
-
   function handleAddToPlaylist(e, itemType, itemId, name, artistName, coverUrl, source) {
     e.stopPropagation();
     setPlaylistModal({ item_type: itemType, item_id: String(itemId), name, artist: artistName, cover_url: coverUrl, source });
@@ -679,10 +638,7 @@ export default function SpotifyPage() {
               {(album.cover_xl || album.cover_big) && !album.images?.length && (
                 <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 <DlBtn onClick={() => downloadImage(album.cover_xl || album.cover_big, "cover.jpg")} color="#22c55e" label="Descargar portada" />
-                <button onClick={async () => { showOfflineMsg("🔍 Buscando MP3 del álbum..."); try { const params = new URLSearchParams(); params.set("q", album.artist + " " + album.name); if(album.source_url) params.set("spotify_url", album.source_url); const res = await fetch("/api/download-mp3?" + params.toString()); const data = await res.json(); if(data.error){ showOfflineMsg("❌ " + data.error); return; } if(data.audio_url){ if("caches" in window){ const cache = await caches.open("ml-saved-v1"); await cache.add(data.audio_url); } showOfflineMsg("✅ MP3 encontrado — " + (data.quality||"")); } }catch{ showOfflineMsg("❌ Error al buscar MP3"); } }} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "#1ed760", color: "#fff", fontSize: "0.78em", cursor: "pointer", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                  Descargar MP3
-                </button>
+                
               </div>
               )}
             </div>
@@ -705,9 +661,7 @@ export default function SpotifyPage() {
                       <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} type="fav" size="sm" />
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
                       <ShareBtn onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} saved={isFavorite("track", trackKey)} size="sm" />
-                      <button onClick={e => handleDownloadMP3(e, track.name, track.artist || album.artist, track.source_url || album.source_url)} style={{ background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }} title="Descargar MP3 completo">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#1ed760" strokeWidth="2.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                      </button>
+
                       {track.preview_url && (
                         <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : "#7c5cfc"}>
