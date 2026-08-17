@@ -13,41 +13,41 @@ export default function SpotifyPage() {
   const [oembedResult, setOembedResult] = useState(null);
   const [downloading, setDownloading] = useState("");
 
-  // ── Search (Deezer) ──
+  // ── Search (auto: Deezer → iTunes fallback) ──
   async function search() {
     if (!query.trim()) return;
-    setLoading(true); setError(""); setResults(null); setTab("search");
+    setLoading(true); setError(""); setResults(null); setAlbum(null); setArtist(null);
     try {
-      const res = await fetch("/api/music?action=search&q=" + encodeURIComponent(query) + "&limit=20");
+      const res = await fetch("/api/music?action=search&q=" + encodeURIComponent(query) + "&source=auto&limit=20");
       const data = await res.json();
-      if (data.error) {
-        // Fallback to iTunes
-        const fb = await fetch("/api/music?action=search&q=" + encodeURIComponent(query) + "&source=itunes&entity=album&limit=20");
-        const fbData = await fb.json();
-        if (fbData.error) setError(data.error);
-        else setResults({ albums: fbData.albums || [], artists: [], source: "itunes" });
-      } else {
-        setResults({ ...data, source: "deezer" });
-      }
+      if (data.error) setError(data.error);
+      else setResults(data);
     } catch (e) { setError(e.message); }
     setLoading(false);
   }
 
   // ── Album detail ──
   async function loadAlbum(albumId, source = "deezer") {
-    setLoading(true); setError(""); setAlbum(null);
+    setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try {
-      const res = await fetch("/api/music?action=album&id=" + albumId + "&source=" + source);
-      const data = await res.json();
-      if (data.error) setError(data.error);
-      else setAlbum(data);
+      if (source === "itunes") {
+        const res = await fetch("/api/music?action=lookup&id=" + albumId + "&source=itunes");
+        const data = await res.json();
+        if (data.error) setError(data.error);
+        else setAlbum(data);
+      } else {
+        const res = await fetch("/api/music?action=album&id=" + albumId + "&source=deezer");
+        const data = await res.json();
+        if (data.error) setError(data.error);
+        else setAlbum(data);
+      }
     } catch (e) { setError(e.message); }
     setLoading(false);
   }
 
-  // ── Artist detail ──
+  // ── Artist detail (Deezer only) ──
   async function loadArtist(artistId) {
-    setLoading(true); setError(""); setArtist(null);
+    setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try {
       const res = await fetch("/api/music?action=artist&id=" + artistId + "&source=deezer");
       const data = await res.json();
@@ -81,17 +81,6 @@ export default function SpotifyPage() {
     setTimeout(() => setDownloading(""), 2000);
   }
 
-  function downloadAll(images, prefix) {
-    images.forEach((img, i) => {
-      setTimeout(() => downloadImage(img.url, prefix + "_" + (img.label || img.size || i) + ".jpg"), i * 400);
-    });
-  }
-
-  // ── Extract Spotify ID from URL for embed ──
-  function getSpotifyEmbed(type, id) {
-    return `https://open.spotify.com/embed/${type}/${id}?utm_source=generator&theme=0`;
-  }
-
   // ── Styles ──
   const IS = { padding: "12px 14px", borderRadius: 10, border: "1px solid #333", background: "#1a1a2e", color: "#fff", fontSize: "1em", outline: "none", width: "100%", boxSizing: "border-box" };
   const BS = { padding: "10px 18px", borderRadius: 10, border: "none", background: "#7c5cfc", color: "#fff", fontSize: "0.9em", cursor: "pointer", fontWeight: 600 };
@@ -100,9 +89,10 @@ export default function SpotifyPage() {
 
   const albums = results?.albums || [];
   const artists = results?.artists || [];
+  const src = results?.source || "";
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: 20 }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: 20, minHeight: "100vh" }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: "1.8em", marginBottom: 4 }}>
@@ -115,13 +105,13 @@ export default function SpotifyPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={() => setTab("search")} style={TabS(tab === "search")}>🔍 Buscar</button>
-        <button onClick={() => setTab("url")} style={TabS(tab === "url")}>🔗 URL de Spotify</button>
-        <button onClick={() => setTab("itunes")} style={TabS(tab === "itunes")}>🍎 iTunes</button>
+        <button onClick={() => { setTab("search"); setAlbum(null); setArtist(null); }} style={TabS(tab === "search" && !album && !artist)}>🔍 Buscar</button>
+        <button onClick={() => { setTab("url"); setAlbum(null); setArtist(null); }} style={TabS(tab === "url")}>🔗 URL de Spotify</button>
+        <button onClick={() => { setTab("itunes"); setAlbum(null); setArtist(null); }} style={TabS(tab === "itunes")}>🍎 iTunes</button>
       </div>
 
-      {/* ── TAB: Search (Deezer) ── */}
-      {tab === "search" && (
+      {/* ── TAB: Search ── */}
+      {tab === "search" && !album && !artist && (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <input
@@ -132,18 +122,17 @@ export default function SpotifyPage() {
               style={{ ...IS, flex: 1, minWidth: 200 }}
             />
             <button onClick={search} disabled={loading} style={BS}>
-              {loading ? "Buscando..." : "Buscar"}
+              {loading ? "⏳" : "🔍 Buscar"}
             </button>
           </div>
 
-          {loading && <div style={{ textAlign: "center", padding: 40, color: "#1ed760", fontSize: "1.1em" }}>⏳ Buscando...</div>}
-
+          {loading && <Spinner />}
           {error && <ErrorMsg error={error} />}
 
           {!loading && results && (
             <div>
-              <div style={{ color: "#555", fontSize: "0.8em", marginBottom: 15 }}>
-                Fuente: {results.source === "deezer" ? "🟢 Deezer" : "🍎 iTunes"}
+              <div style={{ display: "inline-block", padding: "4px 10px", borderRadius: 6, fontSize: "0.75em", marginBottom: 15, background: src === "deezer" ? "#1a2e1a" : "#2e1a1a", color: src === "deezer" ? "#22c55e" : "#ef4444", border: `1px solid ${src === "deezer" ? "#2a4a2a" : "#4a2a2a"}` }}>
+                Fuente: {src === "deezer" ? "🟢 Deezer (portadas 1400px)" : "🍎 iTunes (portadas 600px)"}
               </div>
 
               {artists.length > 0 && (
@@ -151,14 +140,14 @@ export default function SpotifyPage() {
                   <h3 style={{ color: "#1ed760", marginBottom: 12 }}>🎤 Artistas</h3>
                   <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10 }}>
                     {artists.map(a => (
-                      <div key={a.id} onClick={() => loadArtist(a.id)} style={{ flex: "0 0 120px", background: "#1a1a2e", borderRadius: 12, padding: 12, textAlign: "center", cursor: "pointer", border: "1px solid #2a2a3e", transition: "transform 0.2s" }}>
+                      <div key={a.id} onClick={() => a.source === "deezer" ? loadArtist(a.id) : null} style={{ flex: "0 0 120px", background: "#1a1a2e", borderRadius: 12, padding: 12, textAlign: "center", cursor: a.source === "deezer" ? "pointer" : "default", border: "1px solid #2a2a3e" }}>
                         {a.picture_medium ? (
                           <img src={a.picture_medium} style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", marginBottom: 6 }} />
                         ) : (
                           <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#2a2a3e", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2em" }}>🎤</div>
                         )}
                         <div style={{ color: "#ccc", fontSize: "0.8em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
-                        <div style={{ color: "#555", fontSize: "0.7em" }}>{a.nb_album || 0} álbumes</div>
+                        {a.nb_album > 0 && <div style={{ color: "#555", fontSize: "0.7em" }}>{a.nb_album} álbumes</div>}
                       </div>
                     ))}
                   </div>
@@ -168,7 +157,7 @@ export default function SpotifyPage() {
               {albums.length > 0 && (
                 <div>
                   <h3 style={{ color: "#1ed760", marginBottom: 12 }}>💿 Álbumes</h3>
-                  <AlbumGrid albums={albums} onSelect={(id) => loadAlbum(id, results.source)} />
+                  <AlbumGrid albums={albums} onSelect={(id) => loadAlbum(id, src)} />
                 </div>
               )}
 
@@ -181,7 +170,7 @@ export default function SpotifyPage() {
       )}
 
       {/* ── TAB: Spotify URL (oEmbed) ── */}
-      {tab === "url" && (
+      {tab === "url" && !album && !artist && (
         <div>
           <p style={{ color: "#888", fontSize: "0.9em", marginBottom: 15 }}>
             Pegá cualquier URL de Spotify (álbum, canción, playlist, artista) y te saco la portada:
@@ -195,49 +184,47 @@ export default function SpotifyPage() {
               style={{ ...IS, flex: 1, minWidth: 200 }}
             />
             <button onClick={resolveOEmbed} disabled={loading} style={BS}>
-              {loading ? "Cargando..." : "Obtener info"}
+              {loading ? "⏳" : "🔗 Obtener info"}
             </button>
           </div>
 
           <div style={{ background: "#1a1a2e", borderRadius: 8, padding: 12, marginBottom: 15, border: "1px solid #2a2a3e" }}>
-            <div style={{ color: "#888", fontSize: "0.8em", marginBottom: 6 }}>Ejemplos:</div>
+            <div style={{ color: "#888", fontSize: "0.8em", marginBottom: 6 }}>Ejemplos (click para usar):</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {[
-                "https://open.spotify.com/album/3RQQmkQEvNCY4prGKE6oc5",
-                "https://open.spotify.com/track/4cH3E7KQ8mM3AV7xVVdOyV",
-                "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBMwM",
-              ].map(url => (
-                <button key={url} onClick={() => { setOembedUrl(url); }} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", textAlign: "left", fontSize: "0.8em", padding: "2px 0" }}>
-                  {url.length > 55 ? url.slice(0, 55) + "..." : url}
+                { label: "Bad Bunny — Un Verano Sin Ti", url: "https://open.spotify.com/album/3RQQmkQEvNCY4prGKE6oc5" },
+                { label: "Rosalía — MOTOMAMI", url: "https://open.spotify.com/album/4LmHcKEDVYyLmGIEzSCVaD" },
+                { label: "Playlist: Today's Top Hits", url: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBMwM" },
+              ].map(ex => (
+                <button key={ex.url} onClick={() => setOembedUrl(ex.url)} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", textAlign: "left", fontSize: "0.8em", padding: "3px 0" }}>
+                  {ex.label}
                 </button>
               ))}
             </div>
           </div>
 
-          {loading && <div style={{ textAlign: "center", padding: 40, color: "#1ed760" }}>⏳ Obteniendo info...</div>}
+          {loading && <Spinner />}
           {error && <ErrorMsg error={error} />}
 
           {oembedResult && !loading && (
             <div style={{ background: "#1a1a2e", borderRadius: 16, padding: 25, border: "1px solid #2a2a3e" }}>
               <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
-                {oembedResult.thumbnail_large && (
-                  <img src={oembedResult.thumbnail_large} style={{ width: 200, height: 200, borderRadius: 12, objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} />
-                )}
-                {(!oembedResult.thumbnail_large && oembedResult.thumbnail) && (
-                  <img src={oembedResult.thumbnail} style={{ width: 200, height: 200, borderRadius: 12, objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} />
-                )}
+                <img
+                  src={oembedResult.thumbnail_large || oembedResult.thumbnail}
+                  style={{ width: 200, height: 200, borderRadius: 12, objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }}
+                />
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <h2 style={{ fontSize: "1.3em", marginBottom: 5 }}>{oembedResult.title}</h2>
                   <p style={{ color: "#1ed760", marginBottom: 10 }}>{oembedResult.provider}</p>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {oembedResult.thumbnail_large && (
                       <button onClick={() => downloadImage(oembedResult.thumbnail_large, oembedResult.title.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_large.jpg")} style={{ ...SM, background: "#22c55e" }}>
-                        {downloading ? "⏳" : "⬇️"} Descargar grande
+                        ⬇️ Grande
                       </button>
                     )}
                     {oembedResult.thumbnail && (
                       <button onClick={() => downloadImage(oembedResult.thumbnail, oembedResult.title.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_thumb.jpg")} style={{ ...SM, background: "#3b82f6" }}>
-                        ⬇️ Descargar miniatura
+                        ⬇️ Miniatura
                       </button>
                     )}
                   </div>
@@ -251,42 +238,26 @@ export default function SpotifyPage() {
         </div>
       )}
 
-      {/* ── TAB: iTunes Search ── */}
-      {tab === "itunes" && (
+      {/* ── TAB: iTunes ── */}
+      {tab === "itunes" && !album && !artist && (
         <div>
           <p style={{ color: "#888", fontSize: "0.9em", marginBottom: 15 }}>
-            Búsqueda alternativa con iTunes — portadas hasta 600px:
+            Búsqueda con iTunes — portadas hasta 600px, sin login:
           </p>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter") {
-                  setLoading(true); setError(""); setResults(null);
-                  fetch("/api/music?action=search&q=" + encodeURIComponent(query) + "&source=itunes&entity=album&limit=20")
-                    .then(r => r.json())
-                    .then(data => { if (data.error) setError(data.error); else setResults({ albums: data.albums || [], artists: [], source: "itunes" }); })
-                    .catch(e => setError(e.message))
-                    .finally(() => setLoading(false));
-                }
-              }}
+              onKeyDown={e => e.key === "Enter" && searchITunes()}
               placeholder="Buscar en iTunes..."
               style={{ ...IS, flex: 1, minWidth: 200 }}
             />
-            <button onClick={() => {
-              setLoading(true); setError(""); setResults(null);
-              fetch("/api/music?action=search&q=" + encodeURIComponent(query) + "&source=itunes&entity=album&limit=20")
-                .then(r => r.json())
-                .then(data => { if (data.error) setError(data.error); else setResults({ albums: data.albums || [], artists: [], source: "itunes" }); })
-                .catch(e => setError(e.message))
-                .finally(() => setLoading(false));
-            }} disabled={loading} style={{ ...BS, background: "#ef4444" }}>
-              {loading ? "Buscando..." : "Buscar iTunes"}
+            <button onClick={searchITunes} disabled={loading} style={{ ...BS, background: "#ef4444" }}>
+              {loading ? "⏳" : "🍎 Buscar iTunes"}
             </button>
           </div>
 
-          {loading && <div style={{ textAlign: "center", padding: 40, color: "#ef4444" }}>⏳ Buscando en iTunes...</div>}
+          {loading && <Spinner />}
           {error && <ErrorMsg error={error} />}
 
           {!loading && results && results.source === "itunes" && (
@@ -306,45 +277,54 @@ export default function SpotifyPage() {
 
       {/* ── Album Detail View ── */}
       {album && !loading && (
-        <div style={{ marginTop: 20 }}>
+        <div>
           <button onClick={() => setAlbum(null)} style={{ ...SM, background: "#555", marginBottom: 15 }}>← Volver</button>
           <div style={{ background: "#1a1a2e", borderRadius: 16, padding: 25, marginBottom: 20, border: "1px solid #2a2a3e", display: "flex", gap: 25, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <img src={album.cover_xl || album.cover_big || album.cover_medium} style={{ width: 250, height: 250, borderRadius: 12, objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} />
+            <img
+              src={album.cover_xl || album.cover_big || album.cover_medium}
+              style={{ width: 250, height: 250, borderRadius: 12, objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }}
+            />
             <div style={{ flex: 1, minWidth: 200 }}>
               <h2 style={{ fontSize: "1.5em", marginBottom: 5 }}>{album.name}</h2>
-              {album.artist_id ? (
+              {album.artist_id && album.source === "deezer" ? (
                 <p style={{ color: "#1ed760", marginBottom: 5, cursor: "pointer" }} onClick={() => { setAlbum(null); loadArtist(album.artist_id); }}>{album.artist}</p>
               ) : (
                 <p style={{ color: "#1ed760", marginBottom: 5 }}>{album.artist}</p>
               )}
-              <p style={{ color: "#888", marginBottom: 3 }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""}</p>
+              <p style={{ color: "#888", marginBottom: 3 }}>
+                {album.release_date || album.year}
+                {album.total_tracks ? ` — ${album.total_tracks} canciones` : ""}
+                {album.track_count ? ` — ${album.track_count} canciones` : ""}
+              </p>
               {album.label && <p style={{ color: "#555", fontSize: "0.85em", marginBottom: 3 }}>Sello: {album.label}</p>}
               {album.genres?.length > 0 && <p style={{ color: "#555", fontSize: "0.85em", marginBottom: 8 }}>Géneros: {album.genres.join(", ")}</p>}
               {album.genre && <p style={{ color: "#555", fontSize: "0.85em", marginBottom: 8 }}>Género: {album.genre}</p>}
 
               {/* Download buttons */}
               {album.images?.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ color: "#888", fontSize: "0.8em", marginBottom: 6 }}>Descargar portada:</div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ color: "#888", fontSize: "0.8em", marginBottom: 6 }}>⬇️ Descargar portada:</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {album.images.map((img, i) => (
-                      <button key={i} onClick={() => downloadImage(img.url, album.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_" + (img.label || img.size) + ".jpg")} style={{ ...SM, background: i === 0 ? "#22c55e" : "#3b82f6" }}>
+                      <button key={i} onClick={() => downloadImage(img.url, album.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_" + (img.label || img.size) + ".jpg")}
+                        style={{ ...SM, background: i === 0 ? "#22c55e" : "#3b82f6" }}>
                         ⬇️ {img.label || img.size}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              {/* iTunes albums don't have images array, add single download */}
-              {album.source === "itunes" && album.cover_xl && (
-                <button onClick={() => downloadImage(album.cover_xl, album.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_600x600.jpg")} style={{ ...SM, background: "#22c55e", marginTop: 10 }}>
-                  ⬇️ Descargar portada (600px)
+              {/* Fallback for albums without images array */}
+              {(album.cover_xl || album.cover_big) && !album.images?.length && (
+                <button onClick={() => downloadImage(album.cover_xl || album.cover_big, album.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_cover.jpg")}
+                  style={{ ...SM, background: "#22c55e", marginTop: 12 }}>
+                  ⬇️ Descargar portada
                 </button>
               )}
             </div>
           </div>
 
-          {/* Spotify embed (if we have a Deezer album, try embedding) */}
+          {/* Deezer embed */}
           {album.source === "deezer" && album.id && (
             <div style={{ borderRadius: 12, overflow: "hidden", marginBottom: 20 }}>
               <iframe
@@ -365,16 +345,15 @@ export default function SpotifyPage() {
                     <span style={{ color: "#555", width: 25, textAlign: "right", fontSize: "0.85em" }}>{track.number || i + 1}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ color: "#e0e0e0", fontSize: "0.95em" }}>{track.name}</div>
-                      <div style={{ color: "#666", fontSize: "0.8em" }}>{track.artist}</div>
+                      {track.artist && track.artist !== album.artist && <div style={{ color: "#666", fontSize: "0.8em" }}>{track.artist}</div>}
                     </div>
                     {track.duration && <span style={{ color: "#555", fontSize: "0.85em" }}>{track.duration}</span>}
                     {track.preview_url && (
                       <button onClick={() => {
                         const audio = document.getElementById("preview-" + i);
-                        if (audio.paused) { audio.play(); } else { audio.pause(); }
+                        if (audio.paused) { audio.play(); } else { audio.pause(); audio.currentTime = 0; }
                       }} style={{ ...SM, background: "#3b82f6", padding: "4px 10px", fontSize: "0.75em" }}>
-                        ▶️
-                        <audio id={"preview-" + i} src={track.preview_url} preload="none" />
+                        ▶️<audio id={"preview-" + i} src={track.preview_url} preload="none" onEnded={e => e.target.currentTime = 0} />
                       </button>
                     )}
                   </div>
@@ -387,7 +366,7 @@ export default function SpotifyPage() {
 
       {/* ── Artist Detail View ── */}
       {artist && !loading && (
-        <div style={{ marginTop: 20 }}>
+        <div>
           <button onClick={() => setArtist(null)} style={{ ...SM, background: "#555", marginBottom: 15 }}>← Volver</button>
           <div style={{ background: "#1a1a2e", borderRadius: 16, padding: 25, marginBottom: 20, border: "1px solid #2a2a3e", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
             {artist.picture_xl ? (
@@ -401,7 +380,8 @@ export default function SpotifyPage() {
               {artist.images?.length > 0 && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {artist.images.map((img, i) => (
-                    <button key={i} onClick={() => downloadImage(img.url, artist.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_" + (img.label || img.size) + ".jpg")} style={{ ...SM, background: i === 0 ? "#22c55e" : "#3b82f6" }}>
+                    <button key={i} onClick={() => downloadImage(img.url, artist.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_" + (img.label || img.size) + ".jpg")}
+                      style={{ ...SM, background: i === 0 ? "#22c55e" : "#3b82f6" }}>
                       ⬇️ {img.label || img.size}
                     </button>
                   ))}
@@ -420,6 +400,17 @@ export default function SpotifyPage() {
       )}
     </div>
   );
+
+  // ── iTunes search helper ──
+  function searchITunes() {
+    if (!query.trim()) return;
+    setLoading(true); setError(""); setResults(null);
+    fetch("/api/music?action=search&q=" + encodeURIComponent(query) + "&source=itunes&entity=album&limit=20")
+      .then(r => r.json())
+      .then(data => { if (data.error) setError(data.error); else setResults(data); })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }
 }
 
 // ── Sub-components ──
@@ -432,7 +423,7 @@ function AlbumGrid({ albums, onSelect }) {
           onMouseOver={e => e.currentTarget.style.transform = "scale(1.03)"}
           onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
         >
-          <img src={a.cover_big || a.cover_medium || a.cover_xl} style={{ width: "100%", aspectRatio: 1, objectFit: "cover" }} loading="lazy" />
+          <img src={a.cover_big || a.cover_xl || a.cover_medium} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} loading="lazy" />
           <div style={{ padding: "8px 10px" }}>
             <div style={{ color: "#ccc", fontSize: "0.8em", fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
             <div style={{ color: "#666", fontSize: "0.7em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.artist}</div>
@@ -450,4 +441,8 @@ function ErrorMsg({ error }) {
       <div style={{ color: "#ccc", fontSize: "0.9em" }}>{error}</div>
     </div>
   );
+}
+
+function Spinner() {
+  return <div style={{ textAlign: "center", padding: 40, color: "#1ed760", fontSize: "1.1em" }}>⏳ Cargando...</div>;
 }
