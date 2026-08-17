@@ -319,7 +319,7 @@ const servidor = http.createServer(async (req, res) => {
 
 servidor.listen(PUERTO, "0.0.0.0", () => {
   console.log("");
-  console.log("  🎵 Servidor de Música Libre andando");
+  console.log("  AURA · servidor de audio andando");
   console.log("  ─────────────────────────────────────");
   console.log("  Puerto  : " + PUERTO);
   console.log("  Guardando en: " + CARPETA);
