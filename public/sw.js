@@ -55,21 +55,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Images from external sources: cache first (but don't block)
-  if (request.destination === 'image' || url.pathname.startsWith('/api/proxy')) {
+  // Images and audio from external sources: cache first (serve offline)
+  if (request.destination === 'image' || request.destination === 'audio' || url.pathname.startsWith('/api/proxy')) {
     event.respondWith(cacheFirstWithNetwork(event, IMAGE_CACHE));
     return;
   }
 
-  // Static assets: cache first, then network
-  if (STATIC_ASSETS.includes(url.pathname) || 
-      url.pathname.match(/\.(js|css|woff2?|png|jpg|svg|ico)$/)) {
-    event.respondWith(cacheFirstWithNetwork(event, STATIC_CACHE));
-    return;
-  }
-
-  // Everything else: stale while revalidate
-  event.respondWith(staleWhileRevalidate(event, STATIC_CACHE));
+  // Check saved offline cache first for any URL we cached manually
+  event.respondWith((async () => {
+    try {
+      const savedCache = await caches.open(SAVED_CACHE);
+      const savedMatch = await savedCache.match(event.request);
+      if (savedMatch) return savedMatch;
+    } catch {}
+    // Not in saved cache — continue with normal strategy
+    if (STATIC_ASSETS.includes(url.pathname) || 
+        url.pathname.match(/\.(js|css|woff2?|png|jpg|svg|ico)$/)) {
+      return cacheFirstWithNetwork(event, STATIC_CACHE);
+    }
+    return staleWhileRevalidate(event, STATIC_CACHE);
+  })());
+  return;
 });
 
 // ── Strategies ──
