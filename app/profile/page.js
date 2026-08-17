@@ -3,16 +3,44 @@ import { useState, useEffect, useRef } from "react";
 import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 
+// YouTube IFrame API loader
+let ytApiLoaded = false;
+let ytApiPromise = null;
+function loadYTAPI() {
+  if (ytApiLoaded) return Promise.resolve();
+  if (ytApiPromise) return ytApiPromise;
+  ytApiPromise = new Promise((resolve) => {
+    window.onYouTubeIframeAPIReady = () => { ytApiLoaded = true; resolve(); };
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    setTimeout(() => { if (!ytApiLoaded) { ytApiLoaded = true; resolve(); } }, 5000);
+  });
+  return ytApiPromise;
+}
+
 export default function ProfilePage() {
   const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
   const [tab, setTab] = useState("downloads");
   const [favType, setFavType] = useState("album");
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [playlistItems, setPlaylistItems] = useState([]);
-  const [playingId, setPlayingId] = useState(null);
   const [downloadingItems, setDownloadingItems] = useState({});
-  const audioRef = useRef(null);
   const toast = useToast();
+
+  // Player state
+  const [playingKey, setPlayingKey] = useState(null);
+  const [playingTitle, setPlayingTitle] = useState("");
+  const [playingArtist, setPlayingArtist] = useState("");
+  const [playingCover, setPlayingCover] = useState("");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playerReady, setPlayerReady] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const playerRef = useRef(null);
+  const playerDivRef = useRef(null);
+  const progressRef = useRef(null);
 
   // Load downloaded music from localStorage
   const [downloadedMusic, setDownloadedMusic] = useState([]);
@@ -23,27 +51,19 @@ export default function ProfilePage() {
       const offline = JSON.parse(localStorage.getItem("ml_offline") || "{}");
       const items = [];
       for (const [key, entry] of Object.entries(mp3s)) {
-        if (!entry.audio_url && !entry.apple_url) continue;
-        // Try to find matching offline entry for cover art
+        if (!entry.video_id && !entry.apple_url && !entry.audio_url) continue;
         let coverUrl = "";
         let artistName = "";
         let trackName = entry.title || key;
-        // Parse key: "Artist SongName" format
         const offlineEntry = offline[key];
         if (offlineEntry) {
           coverUrl = offlineEntry.cover_url || "";
           artistName = offlineEntry.artist || "";
           trackName = offlineEntry.name || trackName;
         }
-        // Also try to find cover from favorites
         if (!coverUrl) {
           const favMatch = favorites.find(f => {
-            const keys = [
-              String(f.item_id),
-              (f.artist + " " + f.name).trim(),
-              (f.name + " " + f.artist).trim(),
-              f.name.trim(),
-            ];
+            const keys = [String(f.item_id), (f.artist + " " + f.name).trim(), (f.name + " " + f.artist).trim(), f.name.trim()];
             return keys.includes(key);
           });
           if (favMatch) {
@@ -57,13 +77,13 @@ export default function ProfilePage() {
           title: trackName,
           artist: artistName,
           cover_url: coverUrl,
+          video_id: entry.video_id || "",
           audio_url: entry.audio_url || "",
           apple_url: entry.apple_url || "",
-          method: entry.method || (entry.audio_url ? "youtube" : "aaplmusicdownloader"),
+          method: entry.method || (entry.video_id ? "youtube" : entry.audio_url ? "youtube" : "aaplmusicdownloader"),
           saved_at: entry.saved_at || 0,
         });
       }
-      // Sort by most recent
       items.sort((a, b) => b.saved_at - a.saved_at);
       setDownloadedMusic(items);
     } catch {
@@ -71,255 +91,225 @@ export default function ProfilePage() {
     }
   }
 
-  useEffect(() => {
-    refreshDownloads();
-  }, [favorites]);
+  useEffect(() => { refreshDownloads(); }, [favorites]);
 
+  // Initialize YouTube API
   useEffect(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.addEventListener("ended", () => {
-        setPlayingId(null);
-        if ("mediaSession" in navigator) {
-          navigator.mediaSession.playbackState = "none";
-          navigator.mediaSession.metadata = null;
-        }
-      });
-    }
+    loadYTAPI();
   }, []);
 
+  // Progress tracking interval
+  useEffect(() => {
+    if (isPlaying && playerRef.current) {
+      progressRef.current = setInterval(() => {
+        try {
+          const t = playerRef.current.getCurrentTime();
+          const d = playerRef.current.getDuration();
+          setCurrentTime(t || 0);
+          setDuration(d || 0);
+          setProgress(d > 0 ? (t / d) * 100 : 0);
+        } catch {}
+      }, 500);
+    } else {
+      if (progressRef.current) clearInterval(progressRef.current);
+    }
+    return () => { if (progressRef.current) clearInterval(progressRef.current); };
+  }, [isPlaying]);
+
   async function playDownloaded(item) {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    // If same track, pause
-    if (playingId === item.key) {
-      audio.pause();
-      audio.currentTime = 0;
-      setPlayingId(null);
-      if ("mediaSession" in navigator) {
-        navigator.mediaSession.playbackState = "none";
-      }
-      return;
-    }
-
-    audio.pause();
-    audio.currentTime = 0;
-
-    let playUrl = item.audio_url;
-    if (!playUrl) {
-      toast.warning("⚠️ No hay audio reproducible. Usá Apple Music para descargar.", 4000);
-      if (item.apple_url) {
-        window.open("https://aaplmusicdownloader.com/", "_blank");
-      }
-      return;
-    }
-
-    // Try to serve from Service Worker cache first
-    let fromCache = false;
-    if ("caches" in window) {
+    // If same song, toggle play/pause
+    if (playingKey === item.key && playerRef.current) {
       try {
-        const cache = await caches.open("ml-saved-v1");
-        const cached = await cache.match(playUrl);
-        if (cached && cached.ok) {
-          const blob = await cached.blob();
-          if (blob.size > 1000) {
-            playUrl = URL.createObjectURL(blob);
-            fromCache = true;
-          }
+        const state = playerRef.current.getPlayerState();
+        if (state === 1) { // playing
+          playerRef.current.pauseVideo();
+          setIsPlaying(false);
+          return;
+        } else {
+          playerRef.current.playVideo();
+          setIsPlaying(true);
+          return;
         }
       } catch {}
     }
 
-    // If not in cache, try fetching directly
-    if (!fromCache && playUrl.startsWith("http")) {
+    // Need a video_id to play
+    if (!item.video_id) {
+      // Try to find it via search
+      toast.download("🔍 Buscando en YouTube: " + item.title, 3000);
       try {
-        const res = await fetch(playUrl);
-        if (res.ok) {
-          const blob = await res.blob();
-          if (blob.size > 1000) {
-            playUrl = URL.createObjectURL(blob);
-            // Re-cache it
-            try {
-              const cache = await caches.open("ml-saved-v1");
-              await cache.put(item.audio_url, new Response(blob));
-            } catch {}
+        const searchQuery = (item.artist + " " + item.title).trim() || item.key;
+        const res = await fetch("/api/download-mp3?q=" + encodeURIComponent(searchQuery));
+        const data = await res.json();
+        if (data.video_id) {
+          // Save video_id for next time
+          try {
+            const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+            saved[item.key] = { ...saved[item.key], video_id: data.video_id, saved_at: Date.now() };
+            localStorage.setItem("ml_mp3", JSON.stringify(saved));
+          } catch {}
+          item.video_id = data.video_id;
+          refreshDownloads();
+        } else {
+          toast.error("❌ No se encontró en YouTube", 3000);
+          if (item.apple_url) {
+            toast.info("🍎 Podés descargarla desde aaplmusicdownloader.com", 4000);
           }
+          return;
         }
       } catch {
-        toast.error("❌ El audio expiró. Buscando de nuevo...", 3000);
-        // Try to re-download
-        reDownload(item);
+        toast.error("❌ Error buscando en YouTube", 3000);
         return;
       }
     }
 
-    audio.src = playUrl;
-    setPlayingId(item.key);
-
-    // Media Session
-    if ("mediaSession" in navigator) {
-      const coverUrl = item.cover_url || "";
-      const artworkSrc = coverUrl ? "/api/proxy?url=" + encodeURIComponent(coverUrl) : "";
-      try {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: item.title || "Canción",
-          artist: item.artist || "",
-          album: "",
-          artwork: artworkSrc ? [
-            { src: artworkSrc, sizes: "96x96", type: "image/jpeg" },
-            { src: artworkSrc, sizes: "256x256", type: "image/jpeg" },
-            { src: artworkSrc, sizes: "512x512", type: "image/jpeg" },
-          ] : [],
-        });
-      } catch {}
-      navigator.mediaSession.playbackState = "playing";
-      navigator.mediaSession.setActionHandler("play", () => {
-        audio.play().catch(() => {});
-        navigator.mediaSession.playbackState = "playing";
-        setPlayingId(item.key);
-      });
-      navigator.mediaSession.setActionHandler("pause", () => {
-        audio.pause();
-        navigator.mediaSession.playbackState = "paused";
-      });
-      try { navigator.mediaSession.setActionHandler("stop", () => { audio.pause(); audio.currentTime = 0; setPlayingId(null); navigator.mediaSession.playbackState = "none"; }); } catch {}
-      try { navigator.mediaSession.setActionHandler("nexttrack", null); } catch {}
-      try { navigator.mediaSession.setActionHandler("previoustrack", null); } catch {}
+    // Stop current player
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch {}
+      playerRef.current = null;
     }
 
-    audio.play().then(() => {
-      toast.success("🎵 Reproduciendo: " + item.title, 3000);
-    }).catch(() => {
-      toast.error("❌ No se pudo reproducir", 3000);
-      setPlayingId(null);
-    });
+    setPlayingKey(item.key);
+    setPlayingTitle(item.title);
+    setPlayingArtist(item.artist);
+    setPlayingCover(item.cover_url);
+    setIsPlaying(false);
+    setPlayerReady(false);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+
+    // Wait for YT API
+    await loadYTAPI();
+
+    // Create a fresh div for the player
+    const container = document.getElementById("yt-player-container");
+    if (container) container.innerHTML = "";
+
+    try {
+      playerRef.current = new window.YT.Player("yt-player-container", {
+        videoId: item.video_id,
+        height: "1",
+        width: "1",
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+          iv_load_policy: 3,
+          playsinline: 1,
+        },
+        events: {
+          onReady: (event) => {
+            setPlayerReady(true);
+            event.target.playVideo();
+            setIsPlaying(true);
+            const d = event.target.getDuration();
+            setDuration(d || 0);
+            toast.success("🎵 Reproduciendo: " + item.title, 3000);
+
+            // Media Session
+            if ("mediaSession" in navigator) {
+              const artworkSrc = item.cover_url ? "/api/proxy?url=" + encodeURIComponent(item.cover_url) : "";
+              try {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                  title: item.title || "Canción",
+                  artist: item.artist || "",
+                  album: "",
+                  artwork: artworkSrc ? [
+                    { src: artworkSrc, sizes: "96x96", type: "image/jpeg" },
+                    { src: artworkSrc, sizes: "256x256", type: "image/jpeg" },
+                    { src: artworkSrc, sizes: "512x512", type: "image/jpeg" },
+                  ] : [],
+                });
+              } catch {}
+              navigator.mediaSession.playbackState = "playing";
+              navigator.mediaSession.setActionHandler("play", () => {
+                if (playerRef.current) playerRef.current.playVideo();
+                setIsPlaying(true);
+                navigator.mediaSession.playbackState = "playing";
+              });
+              navigator.mediaSession.setActionHandler("pause", () => {
+                if (playerRef.current) playerRef.current.pauseVideo();
+                setIsPlaying(false);
+                navigator.mediaSession.playbackState = "paused";
+              });
+              try { navigator.mediaSession.setActionHandler("stop", () => {
+                if (playerRef.current) playerRef.current.stopVideo();
+                setIsPlaying(false);
+                navigator.mediaSession.playbackState = "none";
+                setPlayingKey(null);
+              }); } catch {}
+              try { navigator.mediaSession.setActionHandler("nexttrack", null); } catch {}
+              try { navigator.mediaSession.setActionHandler("previoustrack", null); } catch {}
+            }
+          },
+          onStateChange: (event) => {
+            const state = event.data;
+            if (state === 0) { // ENDED
+              setIsPlaying(false);
+              setPlayingKey(null);
+              if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+            } else if (state === 1) { // PLAYING
+              setIsPlaying(true);
+            } else if (state === 2) { // PAUSED
+              setIsPlaying(false);
+            }
+          },
+          onError: (event) => {
+            toast.error("❌ Error reproduciendo el video", 3000);
+            setPlayingKey(null);
+            setIsPlaying(false);
+          },
+        },
+      });
+    } catch (e) {
+      toast.error("❌ No se pudo crear el player", 3000);
+      setPlayingKey(null);
+    }
   }
 
-  async function playFavorite(fav) {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (playingId === fav.id) {
-      audio.pause();
-      audio.currentTime = 0;
-      setPlayingId(null);
-      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
-      return;
+  function stopPlayback() {
+    if (playerRef.current) {
+      try { playerRef.current.stopVideo(); } catch {}
+      try { playerRef.current.destroy(); } catch {}
+      playerRef.current = null;
     }
-
-    audio.pause();
-    audio.currentTime = 0;
-
-    // Check if we have a full MP3 cached
-    let playUrl = "";
-    let isFullMp3 = false;
-    try {
-      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-      const keys = [
-        String(fav.item_id),
-        (fav.artist + " " + fav.name).trim(),
-        (fav.name + " " + fav.artist).trim(),
-        fav.name.trim(),
-      ];
-      for (const k of keys) {
-        if (mp3s[k]?.audio_url) {
-          playUrl = mp3s[k].audio_url;
-          isFullMp3 = true;
-          break;
-        }
-      }
-    } catch {}
-
-    // Try Service Worker cache
-    if (isFullMp3 && playUrl && "caches" in window) {
-      try {
-        const cache = await caches.open("ml-saved-v1");
-        const cached = await cache.match(playUrl);
-        if (cached && cached.ok) {
-          const blob = await cached.blob();
-          if (blob.size > 1000) {
-            playUrl = URL.createObjectURL(blob);
-          } else {
-            playUrl = "";
-            isFullMp3 = false;
-          }
-        } else {
-          playUrl = "";
-          isFullMp3 = false;
-        }
-      } catch {}
-    }
-
-    // Fall back to preview
-    if (!isFullMp3) {
-      playUrl = fav.extra_data?.preview_url || "";
-    }
-
-    if (!playUrl) {
-      toast.info("💡 Descargá la canción primero con el ❤️ para escucharla completa", 4000);
-      return;
-    }
-
-    audio.src = playUrl;
-    setPlayingId(fav.id);
-
-    // Media Session
+    setPlayingKey(null);
+    setIsPlaying(false);
+    setPlayingTitle("");
+    setPlayingArtist("");
+    setPlayingCover("");
+    setProgress(0);
     if ("mediaSession" in navigator) {
-      const coverUrl = fav.cover_url || "";
-      const artworkSrc = coverUrl ? "/api/proxy?url=" + encodeURIComponent(coverUrl) : "";
-      try {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: fav.name || "Cancion",
-          artist: fav.artist || "",
-          album: "",
-          artwork: artworkSrc ? [
-            { src: artworkSrc, sizes: "96x96", type: "image/jpeg" },
-            { src: artworkSrc, sizes: "256x256", type: "image/jpeg" },
-            { src: artworkSrc, sizes: "512x512", type: "image/jpeg" },
-          ] : [],
-        });
-      } catch {}
-      navigator.mediaSession.playbackState = "playing";
-      navigator.mediaSession.setActionHandler("play", () => { audio.play().catch(() => {}); navigator.mediaSession.playbackState = "playing"; setPlayingId(fav.id); });
-      navigator.mediaSession.setActionHandler("pause", () => { audio.pause(); navigator.mediaSession.playbackState = "paused"; });
-      try { navigator.mediaSession.setActionHandler("stop", () => { audio.pause(); audio.currentTime = 0; setPlayingId(null); navigator.mediaSession.playbackState = "none"; }); } catch {}
-      try { navigator.mediaSession.setActionHandler("nexttrack", null); } catch {}
-      try { navigator.mediaSession.setActionHandler("previoustrack", null); } catch {}
+      navigator.mediaSession.playbackState = "none";
+      navigator.mediaSession.metadata = null;
     }
-
-    audio.play().then(() => {
-      if (isFullMp3) toast.success("🎵 MP3 completo: " + fav.name, 3000);
-    }).catch(() => {});
   }
 
   async function reDownload(item) {
     setDownloadingItems(prev => ({ ...prev, [item.key]: true }));
-    toast.download("⬇️ Buscando de nuevo: " + item.title, 3000);
+    toast.download("🔍 Buscando: " + item.title, 3000);
     try {
       const searchQuery = (item.artist + " " + item.title).trim() || item.key;
-      const params = new URLSearchParams();
-      params.set("q", searchQuery);
-      if (item.apple_url) params.set("itunes_url", item.apple_url);
-      const res = await fetch("/api/download-mp3?" + params.toString());
+      const res = await fetch("/api/download-mp3?q=" + encodeURIComponent(searchQuery));
       const data = await res.json();
-      if (data.audio_url) {
-        if ("caches" in window) {
-          const cache = await caches.open("ml-saved-v1");
-          await cache.add(data.audio_url);
-        }
+      if (data.video_id) {
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          saved[item.key] = { ...saved[item.key], audio_url: data.audio_url, saved_at: Date.now() };
+          saved[item.key] = { ...saved[item.key], video_id: data.video_id, saved_at: Date.now() };
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
-        toast.success("✅ Audio actualizado: " + item.title, 4000);
+        toast.success("✅ Encontrada: " + item.title, 4000);
         refreshDownloads();
       } else {
-        toast.warning("⚠️ No se encontró audio para re-descargar", 4000);
+        toast.warning("⚠️ No se encontró en YouTube", 4000);
       }
     } catch {
-      toast.error("❌ Error al re-descargar", 3000);
+      toast.error("❌ Error buscando", 3000);
     }
     setDownloadingItems(prev => ({ ...prev, [item.key]: false }));
   }
@@ -329,13 +319,10 @@ export default function ProfilePage() {
       const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       delete saved[item.key];
       localStorage.setItem("ml_mp3", JSON.stringify(saved));
-      // Also try to remove from cache
       if (item.audio_url && "caches" in window) {
-        try {
-          const cache = await caches.open("ml-saved-v1");
-          await cache.delete(item.audio_url);
-        } catch {}
+        try { const cache = await caches.open("ml-saved-v1"); await cache.delete(item.audio_url); } catch {}
       }
+      if (playingKey === item.key) stopPlayback();
       toast.success("🗑️ Eliminada: " + item.title, 3000);
       refreshDownloads();
     } catch {}
@@ -376,11 +363,20 @@ export default function ProfilePage() {
     );
   }
 
-  // Now playing bar at bottom
-  const nowPlaying = downloadedMusic.find(d => d.key === playingId) || favorites.find(f => f.id === playingId);
+  function formatTime(sec) {
+    if (!sec || isNaN(sec)) return "0:00";
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ":" + String(s).padStart(2, "0");
+  }
+
+  const hasPlayer = playingKey !== null;
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 20, paddingBottom: nowPlaying ? 80 : 20 }}>
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: 20, paddingBottom: hasPlayer ? 90 : 20 }}>
+      {/* Hidden YouTube player container */}
+      <div id="yt-player-container" style={{ position: "absolute", top: -9999, left: -9999, width: 1, height: 1, overflow: "hidden" }} />
+
       {/* Profile header */}
       <div style={{ background: "#1a1a2e", borderRadius: 14, padding: 22, marginBottom: 22, border: "1px solid #2a2a3e", display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: "linear-gradient(135deg, #7c5cfc, #1ed760)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2em", flexShrink: 0 }}>
@@ -422,88 +418,92 @@ export default function ProfilePage() {
           ) : (
             <div style={{ background: "#1a1a2e", borderRadius: 12, border: "1px solid #2a2a3e", overflow: "hidden" }}>
               {downloadedMusic.map(item => {
-                const isPlaying = playingId === item.key;
+                const isCurrentlyPlaying = playingKey === item.key;
                 const isDownloading = downloadingItems[item.key];
                 return (
-                  <div key={item.key} style={{
+                  <div key={item.key} onClick={() => playDownloaded(item)} style={{
                     display: "flex", alignItems: "center", gap: 12,
                     padding: "12px 14px",
                     borderBottom: "1px solid #2a2a3e",
-                    background: isPlaying ? "rgba(124,92,252,0.08)" : "transparent",
+                    background: isCurrentlyPlaying ? "rgba(34,197,94,0.08)" : "transparent",
+                    cursor: "pointer",
                     transition: "background 0.2s",
                   }}>
-                    {/* Cover */}
+                    {/* Cover + play overlay */}
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       <CoverImg url={item.cover_url} size={52} rounded={8} />
-                      {/* Play overlay on cover */}
-                      <button
-                        onClick={() => playDownloaded(item)}
-                        style={{
-                          position: "absolute", top: "50%", left: "50%",
-                          transform: "translate(-50%, -50%)",
-                          background: isPlaying ? "rgba(124,92,252,0.9)" : "rgba(0,0,0,0.7)",
-                          border: "none", borderRadius: "50%", width: 28, height: 28,
-                          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                          backdropFilter: "blur(4px)",
-                        }}
-                      >
-                        {isPlaying ? (
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="#fff"><rect x="0" y="0" width="3" height="10" rx="1"/><rect x="6" y="0" width="3" height="10" rx="1"/></svg>
+                      <div style={{
+                        position: "absolute", top: "50%", left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        background: isCurrentlyPlaying && isPlaying ? "rgba(34,197,94,0.9)" : "rgba(0,0,0,0.65)",
+                        border: "none", borderRadius: "50%", width: 26, height: 26,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        backdropFilter: "blur(4px)",
+                      }}>
+                        {isCurrentlyPlaying && isPlaying ? (
+                          <svg width="8" height="10" viewBox="0 0 8 10" fill="#fff"><rect x="0" y="0" width="2.5" height="10" rx="1"/><rect x="5" y="0" width="2.5" height="10" rx="1"/></svg>
                         ) : (
-                          <svg width="10" height="12" viewBox="0 0 10 12" fill="#fff"><polygon points="0,0 10,6 0,12"/></svg>
+                          <svg width="8" height="10" viewBox="0 0 8 10" fill="#fff"><polygon points="0,0 8,5 0,10"/></svg>
                         )}
-                      </button>
+                      </div>
                     </div>
 
-                    {/* Title + Artist */}
+                    {/* Title + Artist + progress */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: isPlaying ? "#7c5cfc" : "#e0e0e0", fontSize: "0.92em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ color: isCurrentlyPlaying ? "#22c55e" : "#e0e0e0", fontSize: "0.92em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {item.title}
                       </div>
                       <div style={{ color: "#666", fontSize: "0.78em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {item.artist}
                       </div>
+                      {/* Mini progress bar */}
+                      {isCurrentlyPlaying && (
+                        <div style={{ marginTop: 4, height: 3, borderRadius: 2, background: "#2a2a3e", overflow: "hidden" }}>
+                          <div style={{ height: "100%", borderRadius: 2, background: "#22c55e", width: progress + "%", transition: "width 0.5s linear" }} />
+                        </div>
+                      )}
                     </div>
 
-                    {/* Method badge */}
-                    <span style={{
-                      padding: "2px 7px", borderRadius: 5, fontSize: "0.65em", fontWeight: 700, flexShrink: 0,
-                      background: item.method === "aaplmusicdownloader" ? "rgba(239,68,68,0.15)" : "rgba(34,197,94,0.15)",
-                      color: item.method === "aaplmusicdownloader" ? "#ef4444" : "#22c55e",
-                      border: `1px solid ${item.method === "aaplmusicdownloader" ? "rgba(239,68,68,0.3)" : "rgba(34,197,94,0.3)"}`,
-                    }}>
-                      {item.method === "aaplmusicdownloader" ? "🍎 Apple" : "▶️ YT"}
-                    </span>
+                    {/* Time display */}
+                    {isCurrentlyPlaying && (
+                      <span style={{ color: "#22c55e", fontSize: "0.72em", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
+                    )}
 
-                    {/* Re-download button */}
+                    {/* YouTube badge */}
+                    {item.video_id && (
+                      <span style={{
+                        padding: "2px 6px", borderRadius: 4, fontSize: "0.6em", fontWeight: 700, flexShrink: 0,
+                        background: "rgba(239,68,68,0.15)", color: "#ef4444",
+                        border: "1px solid rgba(239,68,68,0.3)",
+                      }}>YT</span>
+                    )}
+
+                    {/* Apple badge */}
+                    {item.apple_url && (
+                      <span style={{
+                        padding: "2px 6px", borderRadius: 4, fontSize: "0.6em", fontWeight: 700, flexShrink: 0,
+                        background: "rgba(124,92,252,0.15)", color: "#7c5cfc",
+                        border: "1px solid rgba(124,92,252,0.3)",
+                      }}>🍎</span>
+                    )}
+
+                    {/* Re-download */}
                     <button
-                      onClick={() => reDownload(item)}
+                      onClick={(e) => { e.stopPropagation(); reDownload(item); }}
                       disabled={isDownloading}
-                      style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "0.85em", padding: 4, flexShrink: 0 }}
-                      title="Re-descargar audio"
+                      style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "0.8em", padding: 2, flexShrink: 0 }}
+                      title="Buscar de nuevo"
                     >
                       {isDownloading ? "⏳" : "🔄"}
                     </button>
 
-                    {/* Apple Music link */}
-                    {item.apple_url && (
-                      <a
-                        href={"https://aaplmusicdownloader.com/"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => { e.stopPropagation(); toast.info("🍎 Pegá este link en aaplmusicdownloader.com — copialo del botón de abajo", 5000); }}
-                        style={{ color: "#555", fontSize: "0.85em", textDecoration: "none", flexShrink: 0 }}
-                        title="Descargar de Apple Music"
-                      >
-                        🍎
-                      </a>
-                    )}
-
-                    {/* Delete button */}
+                    {/* Delete */}
                     <button
-                      onClick={() => deleteDownload(item)}
-                      style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "0.85em", padding: 4, flexShrink: 0 }}
-                      title="Eliminar descarga"
+                      onClick={(e) => { e.stopPropagation(); deleteDownload(item); }}
+                      style={{ background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "0.8em", padding: 2, flexShrink: 0 }}
+                      title="Eliminar"
                     >
                       🗑️
                     </button>
@@ -533,51 +533,21 @@ export default function ProfilePage() {
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(145px, 1fr))", gap: 10 }}>
               {filteredFavs.map(f => {
-                const isPlaying = playingId === f.id;
-                // Check if full MP3 is available
-                let hasMp3 = false;
+                // Check if downloaded (has video_id or audio_url)
+                let isDownloaded = false;
                 try {
                   const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-                  const keys = [
-                    String(f.item_id),
-                    (f.artist + " " + f.name).trim(),
-                    (f.name + " " + f.artist).trim(),
-                    f.name.trim(),
-                  ];
-                  for (const k of keys) {
-                    if (mp3s[k]?.audio_url) { hasMp3 = true; break; }
-                  }
+                  const keys = [String(f.item_id), (f.artist + " " + f.name).trim(), (f.name + " " + f.artist).trim(), f.name.trim()];
+                  for (const k of keys) { if (mp3s[k]?.video_id || mp3s[k]?.audio_url) { isDownloaded = true; break; } }
                 } catch {}
-                const showPlay = f.item_type === "track" && (f.extra_data?.preview_url || hasMp3);
                 return (
                   <div key={f.id} style={{ background: "#1a1a2e", borderRadius: 10, overflow: "hidden", border: "1px solid #2a2a3e", position: "relative" }}>
-                    <div style={{ position: "relative", cursor: showPlay ? "pointer" : "default" }} onClick={() => { if (showPlay) playFavorite(f); }}>
+                    <a href={`/spotify?album=${f.extra_data?.album_id || f.item_id}&source=${f.source}`} style={{ textDecoration: "none", display: "block" }}>
                       <CoverImg url={f.cover_url} />
-                      {/* Play overlay */}
-                      {showPlay && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); playFavorite(f); }}
-                          style={{
-                            position: "absolute", top: "50%", left: "50%",
-                            transform: "translate(-50%, -50%)",
-                            background: isPlaying ? "rgba(124,92,252,0.9)" : hasMp3 ? "rgba(34,197,94,0.85)" : "rgba(0,0,0,0.6)",
-                            border: "none", borderRadius: "50%", width: 36, height: 36,
-                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            backdropFilter: "blur(4px)",
-                          }}
-                        >
-                          {isPlaying ? (
-                            <svg width="12" height="12" viewBox="0 0 10 10" fill="#fff"><rect x="0" y="0" width="3" height="10" rx="1"/><rect x="6" y="0" width="3" height="10" rx="1"/></svg>
-                          ) : (
-                            <svg width="12" height="14" viewBox="0 0 10 12" fill="#fff"><polygon points="0,0 10,6 0,12"/></svg>
-                          )}
-                        </button>
-                      )}
-                      {/* MP3 badge */}
-                      {hasMp3 && (
-                        <span style={{ position: "absolute", bottom: 4, left: 4, background: "rgba(34,197,94,0.9)", color: "#fff", padding: "1px 5px", borderRadius: 4, fontSize: "0.6em", fontWeight: 700 }}>MP3</span>
-                      )}
-                    </div>
+                    </a>
+                    {isDownloaded && (
+                      <span style={{ position: "absolute", bottom: 28, left: 4, background: "rgba(34,197,94,0.9)", color: "#fff", padding: "1px 5px", borderRadius: 4, fontSize: "0.6em", fontWeight: 700 }}>⬇️</span>
+                    )}
                     <button onClick={() => toggleFavorite(f.item_type, f.item_id)} style={{ position: "absolute", top: 5, right: 5, background: "rgba(0,0,0,0.7)", border: "none", borderRadius: "50%", width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -652,36 +622,58 @@ export default function ProfilePage() {
       )}
 
       {/* ── Now Playing Bar (bottom) ── */}
-      {nowPlaying && (
+      {hasPlayer && (
         <div style={{
           position: "fixed", bottom: 0, left: 0, right: 0,
-          background: "rgba(15,15,26,0.97)",
+          background: "rgba(10,10,20,0.97)",
           borderTop: "1px solid #2a2a3e",
-          padding: "10px 16px",
-          display: "flex", alignItems: "center", gap: 12,
+          padding: "0",
           zIndex: 9999,
-          backdropFilter: "blur(12px)",
+          backdropFilter: "blur(16px)",
         }}>
-          {nowPlaying.cover_url && <img src={nowPlaying.cover_url} style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ color: "#7c5cfc", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              🎵 {nowPlaying.title || nowPlaying.name}
-            </div>
-            <div style={{ color: "#666", fontSize: "0.75em" }}>{nowPlaying.artist}</div>
-          </div>
-          <button
-            onClick={() => {
-              if (playingId && audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current.currentTime = 0;
-                setPlayingId(null);
-                if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
-              }
+          {/* Progress bar on top of the bar */}
+          <div style={{ height: 3, background: "#1a1a2e", cursor: "pointer" }}
+            onClick={(e) => {
+              if (!playerRef.current || !duration) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pct = (e.clientX - rect.left) / rect.width;
+              playerRef.current.seekTo(pct * duration, true);
+              setProgress(pct * 100);
             }}
-            style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+            <div style={{ height: "100%", background: "#22c55e", width: progress + "%", transition: "width 0.3s linear" }} />
+          </div>
+          <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+            {playingCover && <img src={playingCover} style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0, boxShadow: "0 2px 10px rgba(0,0,0,0.3)" }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: "#22c55e", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                🎵 {playingTitle}
+              </div>
+              <div style={{ color: "#888", fontSize: "0.75em" }}>{playingArtist} · {formatTime(currentTime)} / {formatTime(duration)}</div>
+            </div>
+            {/* Play/Pause */}
+            <button
+              onClick={() => {
+                if (!playerRef.current) return;
+                if (isPlaying) { playerRef.current.pauseVideo(); setIsPlaying(false); }
+                else { playerRef.current.playVideo(); setIsPlaying(true); }
+              }}
+              style={{ background: isPlaying ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.9)", border: "none", borderRadius: "50%", width: 36, height: 36, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            >
+              {isPlaying ? (
+                <svg width="12" height="12" viewBox="0 0 10 10" fill="#22c55e"><rect x="0" y="0" width="3" height="10" rx="1"/><rect x="6" y="0" width="3" height="10" rx="1"/></svg>
+              ) : (
+                <svg width="12" height="14" viewBox="0 0 10 12" fill="#fff"><polygon points="0,0 10,6 0,12"/></svg>
+              )}
+            </button>
+            {/* Stop */}
+            <button
+              onClick={stopPlayback}
+              style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="#ef4444"><rect x="0" y="0" width="10" height="10" rx="2"/></svg>
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -434,52 +434,43 @@ export default function SpotifyPage() {
       else if (sourceUrl) params.set("spotify_url", sourceUrl);
       const res = await fetch("/api/download-mp3?" + params.toString());
       const data = await res.json();
+      
       if (data.method === "aaplmusicdownloader") {
-        // iTunes: guardar apple_url + buscar en YouTube para audio reproducible
-        let ytAudioUrl = null;
-        try {
-          const ytParams = new URLSearchParams();
-          ytParams.set("q", searchQuery);
-          const ytRes = await fetch("/api/download-mp3?" + ytParams.toString());
-          const ytData = await ytRes.json();
-          if (ytData.audio_url) {
-            ytAudioUrl = ytData.audio_url;
-            if ("caches" in window) {
-              const cache = await caches.open("ml-saved-v1");
-              await cache.add(ytData.audio_url);
-            }
-          }
-        } catch {}
+        // iTunes: guardar apple_url + video_id para YouTube playback
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          const entry = { audio_url: ytAudioUrl || "", apple_url: data.apple_url, method: "aaplmusicdownloader", title: trackName, saved_at: Date.now() };
+          const entry = {
+            video_id: data.video_id || "",
+            apple_url: data.apple_url || "",
+            method: "aaplmusicdownloader",
+            title: trackName,
+            saved_at: Date.now(),
+          };
           saved[searchQuery] = entry;
-          // Also save by track ID for easy lookup during playback
           if (trackId) saved[String(trackId)] = entry;
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
-        toast.success(ytAudioUrl ? "✅ MP3 guardado offline — " + trackName : "🎵 Apple Music disponible — " + trackName, 5000);
+        toast.success(data.video_id ? "✅ Guardada — " + trackName : "🎵 Apple Music disponible — " + trackName, 5000);
         return;
       }
-      if (data.audio_url) {
-        // YouTube: guardar audio directo en caché offline
-        if ("caches" in window) {
-          const cache = await caches.open("ml-saved-v1");
-          await cache.add(data.audio_url);
-        }
+      
+      if (data.video_id) {
+        // YouTube: guardar video_id para reproducir vía YouTube IFrame
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          const entry = { audio_url: data.audio_url, title: data.title, saved_at: Date.now() };
+          const entry = {
+            video_id: data.video_id,
+            method: "youtube",
+            title: data.title || trackName,
+            saved_at: Date.now(),
+          };
           saved[searchQuery] = entry;
-          // Also save by track ID for easy lookup during playback
           if (trackId) saved[String(trackId)] = entry;
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
-        toast.success("✅ MP3 descargado offline: " + trackName, 5000);
-      } else if (data.method === "aaplmusicdownloader") {
-        toast.info("🎵 MP3 disponible vía Apple Music — " + trackName, 5000);
+        toast.success("✅ Listo para reproducir: " + trackName, 5000);
       } else {
-        toast.warning("⚠️ No se encontró MP3 para " + trackName, 5000);
+        toast.warning("⚠️ No se encontró en YouTube: " + trackName, 5000);
       }
     } catch {
       toast.error("⚠️ Error buscando MP3", 4000);
