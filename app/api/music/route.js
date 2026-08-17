@@ -28,7 +28,7 @@ export async function GET(req) {
   const action = p.get("action") || "search";
   const query = p.get("q") || "";
   const id = p.get("id") || "";
-  const source = p.get("source") || "auto"; // auto, deezer, itunes, oembed
+  const source = p.get("source") || "itunes"; // itunes only
   const limit = parseInt(p.get("limit") || "20");
 
   try {
@@ -52,22 +52,8 @@ export async function GET(req) {
       });
     }
 
-    // ── Determine source: iTunes primary (para aaplmusicdownloader), Deezer fallback ──
-    let effectiveSource = source;
-    if (source === "auto") {
-      // Try iTunes first (Apple Music links work with aaplmusicdownloader.com)
-      try {
-        await fetchJSON(ITUNES_BASE + "/search?term=test&limit=1");
-        effectiveSource = "itunes";
-      } catch {
-        try {
-          await fetchJSON(DEEZER_BASE + "/chart?limit=1");
-          effectiveSource = "deezer";
-        } catch {
-          effectiveSource = "itunes";
-        }
-      }
-    }
+    // ── Always use iTunes (Apple Music) ──
+    let effectiveSource = "itunes";
 
     // ── DEEZER ──
     if (effectiveSource === "deezer") {

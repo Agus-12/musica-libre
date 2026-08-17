@@ -46,7 +46,7 @@ export default function SpotifyPage() {
   // Mostrar mensaje temporal
   function showOfflineMsg(msg) {
     setOfflineMsg(msg);
-    setTimeout(() => setOfflineMsg(""), 3000);
+    setTimeout(() => setOfflineMsg(""), 4000);
   }
 
   // Sincronizar offline con favoritos — si se elimina un álbum favorito, quitarlo y sus canciones de offline
@@ -85,7 +85,7 @@ export default function SpotifyPage() {
     const params = new URLSearchParams(window.location.search);
     const albumId = params.get("album");
     const artistId = params.get("artist");
-    const source = params.get("source") || "deezer";
+    const source = params.get("source") || "itunes";
     if (albumId) loadAlbum(albumId, source);
     else if (artistId) loadArtist(artistId);
   }, []);
@@ -176,19 +176,21 @@ export default function SpotifyPage() {
     try {
       // Get top charts from iTunes + new releases
       const [topRes, newRes, latRes] = await Promise.all([
-        fetch("/api/music?action=search&q=top+hits+2025&source=itunes&entity=album&limit=10"),
-        fetch("/api/music?action=search&q=new+release&source=itunes&entity=album&limit=10"),
-        fetch("/api/music?action=search&q=latin+music+hits&source=itunes&entity=album&limit=10"),
+        fetch("/api/music?action=search&q=top+hits+2026&source=itunes&entity=album&limit=10").catch(() => null),
+        fetch("/api/music?action=search&q=new+release+2026&source=itunes&entity=album&limit=10").catch(() => null),
+        fetch("/api/music?action=search&q=latin+music+hits&source=itunes&entity=album&limit=10").catch(() => null),
       ]);
-      const topData = await topRes.json();
-      const newData = await newRes.json();
-      const latData = await latRes.json();
+      const topData = topRes ? await topRes.json().catch(() => ({})) : {};
+      const newData = newRes ? await newRes.json().catch(() => ({})) : {};
+      const latData = latRes ? await latRes.json().catch(() => ({})) : {};
       setCharts({
         top: topData.albums || [],
         newReleases: newData.albums || [],
         latin: latData.albums || [],
       });
-    } catch {}
+    } catch {
+      setCharts({ top: [], newReleases: [], latin: [] });
+    }
     setChartsLoading(false);
   }
 
@@ -212,12 +214,10 @@ export default function SpotifyPage() {
     setLoading(false);
   }
 
-  async function loadAlbum(albumId, source = "deezer") {
+  async function loadAlbum(albumId, source = "itunes") {
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try {
-      const endpoint = source === "itunes"
-        ? "/api/music?action=lookup&id=" + albumId + "&source=itunes"
-        : "/api/music?action=album&id=" + albumId + "&source=deezer";
+      const endpoint = "/api/music?action=lookup&id=" + albumId + "&source=itunes";
       const res = await fetch(endpoint);
       const data = await res.json();
       if (data.error) setError(data.error);
@@ -229,7 +229,7 @@ export default function SpotifyPage() {
   async function loadArtist(artistId) {
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try {
-      const res = await fetch("/api/music?action=artist&id=" + artistId + "&source=deezer");
+      const res = await fetch("/api/music?action=lookup&id=" + artistId + "&source=itunes");
       const data = await res.json();
       if (data.error) setError(data.error);
       else setArtist(data);
@@ -354,7 +354,7 @@ export default function SpotifyPage() {
       } else {
         downloadFullMP3InBackground(name, artistName, sourceUrl);
       }
-      const msg = itemType === "album" ? "❤️ Álbum guardado — descargando MP3s..." : "❤️ Guardada — descargando MP3...";
+      const msg = itemType === "album" ? "❤️ Álbum guardado — buscando MP3s..." : "❤️ Guardada — buscando MP3...";
       showOfflineMsg(msg);
     }
   }
@@ -376,6 +376,7 @@ export default function SpotifyPage() {
           saved[searchQuery] = { method: "aaplmusicdownloader", apple_url: data.apple_url, title: trackName, saved_at: Date.now() };
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
+        showOfflineMsg("🎵 Apple Music MP3 disponible — " + trackName);
         return;
       }
       if (data.audio_url) {
@@ -389,8 +390,15 @@ export default function SpotifyPage() {
           saved[searchQuery] = { audio_url: data.audio_url, title: data.title, saved_at: Date.now() };
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
+        showOfflineMsg("✅ MP3 descargado: " + trackName);
+      } else if (data.method === "aaplmusicdownloader") {
+        showOfflineMsg("🎵 MP3 disponible vía Apple Music — " + trackName);
+      } else {
+        showOfflineMsg("⚠️ No se encontró MP3 para " + trackName);
       }
-    } catch {}
+    } catch {
+      showOfflineMsg("⚠️ Error buscando MP3");
+    }
   }
 
   function handleAddToPlaylist(e, itemType, itemId, name, artistName, coverUrl, source) {
@@ -565,8 +573,8 @@ export default function SpotifyPage() {
                   <SectionHeader icon="" title="Artistas" subtitle="" />
                   <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10 }}>
                     {artists.map(a => (
-                      <div key={a.id} onClick={() => a.source === "deezer" ? loadArtist(a.id) : null} style={{ flex: "0 0 110px", background: "#1a1a2e", borderRadius: 12, padding: 10, textAlign: "center", cursor: "pointer", border: "1px solid #2a2a3e", position: "relative" }}>
-                        <ActionBtn pos="top-right" active={isFavorite("artist", a.id)} onClick={e => handleFavorite(e, "artist", a.id, a.name, "", a.picture_medium, a.source || "deezer")} type="fav" />
+                      <div key={a.id} onClick={() => loadArtist(a.id)} style={{ flex: "0 0 110px", background: "#1a1a2e", borderRadius: 12, padding: 10, textAlign: "center", cursor: "pointer", border: "1px solid #2a2a3e", position: "relative" }}>
+                        <ActionBtn pos="top-right" active={isFavorite("artist", a.id)} onClick={e => handleFavorite(e, "artist", a.id, a.name, "", a.picture_medium, a.source || "itunes")} type="fav" />
                         {a.picture_medium ? <img src={a.picture_medium} style={{ width: 70, height: 70, borderRadius: "50%", objectFit: "cover", marginBottom: 6 }} /> : <div style={{ width: 70, height: 70, borderRadius: "50%", background: "#2a2a3e", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center" }}>?</div>}
                         <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
                       </div>
@@ -630,7 +638,7 @@ export default function SpotifyPage() {
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
               <h2 style={{ fontSize: "1.4em", marginBottom: 4 }}>{album.name}</h2>
-              {album.artist_id && album.source === "deezer" ? (
+              {album.artist_id && album.source === "itunes" ? (
                 <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { setAlbum(null); loadArtist(album.artist_id); }}>{album.artist}</p>
               ) : <p style={{ color: "#1ed760", marginBottom: 4 }}>{album.artist}</p>}
               <p style={{ color: "#888", marginBottom: 2, fontSize: "0.9em" }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""} {album.track_count ? `— ${album.track_count} canciones` : ""}</p>
@@ -694,7 +702,7 @@ export default function SpotifyPage() {
             <div style={{ position: "relative" }}>
               {artist.picture_xl ? <img src={artist.picture_xl} style={{ width: 150, height: 150, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} /> : <div style={{ width: 150, height: 150, borderRadius: "50%", background: "#2a2a3e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "3em" }}>?</div>}
               <div style={{ position: "absolute", bottom: 4, right: 4 }}>
-                <ActionBtn active={isFavorite("artist", artist.id)} onClick={e => handleFavorite(e, "artist", artist.id, artist.name, "", artist.picture_xl, "deezer")} type="fav" size="lg" />
+                <ActionBtn active={isFavorite("artist", artist.id)} onClick={e => handleFavorite(e, "artist", artist.id, artist.name, "", artist.picture_xl, "itunes")} type="fav" size="lg" />
               </div>
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
@@ -712,7 +720,7 @@ export default function SpotifyPage() {
           {artist.albums?.length > 0 && (
             <div>
               <SectionHeader icon="" title={`Álbumes (${artist.nb_album || artist.albums.length})`} subtitle="" />
-              <AlbumGrid albums={artist.albums} source="deezer" onSelect={(id) => loadAlbum(id, "deezer")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
+              <AlbumGrid albums={artist.albums} source="itunes" onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
             </div>
           )}
         </div>
@@ -813,7 +821,7 @@ function RecommendationRow({ favorites, onSelect, onFavorite, onPlaylist, isFavo
   return (
     <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
       {favAlbums.map(f => (
-        <div key={f.id} onClick={() => onSelect(f.item_id, f.source || "deezer")} style={{ flex: "0 0 140px", background: "#1a1a2e", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid #2a2a3e" }}>
+        <div key={f.id} onClick={() => onSelect(f.item_id, f.source || "itunes")} style={{ flex: "0 0 140px", background: "#1a1a2e", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid #2a2a3e" }}>
           {f.cover_url ? <img src={f.cover_url} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", aspectRatio: 1, background: "#2a2a3e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2em" }}>?</div>}
           <div style={{ padding: "6px 8px" }}>
             <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
@@ -849,7 +857,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
 }
 
 function SourceBadge({ source }) {
-  return <div style={{ display: "inline-block", padding: "3px 9px", borderRadius: 6, fontSize: "0.72em", marginBottom: 12, background: source === "deezer" ? "#1a2e1a" : "#2e1a1a", color: source === "deezer" ? "#22c55e" : "#ef4444", border: `1px solid ${source === "deezer" ? "#2a4a2a" : "#4a2a2a"}` }}>{source === "deezer" ? "Deezer" : "iTunes"}</div>;
+  return <div style={{ display: "inline-block", padding: "3px 9px", borderRadius: 6, fontSize: "0.72em", marginBottom: 12, background: source === "itunes" ? "#2e1a1a" : "#1a2e1a", color: source === "itunes" ? "#ef4444" : "#22c55e", border: `1px solid ${source === "itunes" ? "#4a2a2a" : "#2a4a2a"}` }}>{source === "itunes" ? "Apple Music" : source}</div>;
 }
 
 function ErrorMsg({ error }) {
