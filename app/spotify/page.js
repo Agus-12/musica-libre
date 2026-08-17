@@ -117,11 +117,30 @@ export default function SpotifyPage() {
     let playUrl = url;
     try {
       const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-      const key = (trackArtist + " " + trackName).trim();
-      if (mp3s[key]?.audio_url) {
-        playUrl = mp3s[key].audio_url;
+      // Try multiple key formats
+      const keys = [
+        (trackArtist + " " + trackName).trim(),
+        (trackName + " " + trackArtist).trim(),
+        trackName.trim(),
+      ];
+      for (const k of keys) {
+        if (mp3s[k]?.audio_url) {
+          playUrl = mp3s[k].audio_url;
+          break;
+        }
       }
     } catch {}
+    // Try to serve from cache (YouTube URLs expire)
+    if (playUrl !== url && "caches" in window) {
+      try {
+        const cache = await caches.open("ml-saved-v1");
+        const cached = await cache.match(playUrl);
+        if (cached) {
+          const blob = await cached.blob();
+          playUrl = URL.createObjectURL(blob);
+        }
+      } catch {}
+    }
     audio.src = playUrl;
     setPlayingTrack(trackId);
 
@@ -370,13 +389,27 @@ export default function SpotifyPage() {
       const res = await fetch("/api/download-mp3?" + params.toString());
       const data = await res.json();
       if (data.method === "aaplmusicdownloader") {
-        // iTunes: guardar la info para abrir aaplmusicdownloader cuando quieran
+        // iTunes: guardar apple_url + buscar en YouTube para audio reproducible
+        let ytAudioUrl = null;
+        try {
+          const ytParams = new URLSearchParams();
+          ytParams.set("q", searchQuery);
+          const ytRes = await fetch("/api/download-mp3?" + ytParams.toString());
+          const ytData = await ytRes.json();
+          if (ytData.audio_url) {
+            ytAudioUrl = ytData.audio_url;
+            if ("caches" in window) {
+              const cache = await caches.open("ml-saved-v1");
+              await cache.add(ytData.audio_url);
+            }
+          }
+        } catch {}
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          saved[searchQuery] = { method: "aaplmusicdownloader", apple_url: data.apple_url, title: trackName, saved_at: Date.now() };
+          saved[searchQuery] = { audio_url: ytAudioUrl || "", apple_url: data.apple_url, method: "aaplmusicdownloader", title: trackName, saved_at: Date.now() };
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
-        showOfflineMsg("🎵 Apple Music MP3 disponible — " + trackName);
+        showOfflineMsg(ytAudioUrl ? "✅ MP3 guardado — " + trackName : "🎵 Apple Music disponible — " + trackName);
         return;
       }
       if (data.audio_url) {
