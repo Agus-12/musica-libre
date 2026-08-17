@@ -18,9 +18,32 @@ function loadYTAPI() {
   return ytApiPromise;
 }
 
-function Ico({ d, size = 14, fill = "none", stroke = "currentColor", sw = 2 }) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={sw}>{d}</svg>;
+function Ico({ d, size = 14, fill = "none", stroke = "currentColor", sw = 2, viewBox = "0 0 24 24" }) {
+  return <svg width={size} height={size} viewBox={viewBox} fill={fill} stroke={stroke} strokeWidth={sw}>{d}</svg>;
 }
+
+/* Iconos de transporte dibujados en la grilla completa 24x24 para que
+   llenen bien el círculo (antes usaban coords 0-12 dentro de un viewBox
+   0 0 24 24, por eso se veían diminutos y descentrados). */
+const IcoPlay = ({ size = 14, color = "#fff" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}
+       style={{ display: "block", marginLeft: size * 0.08 }}>
+    <path d="M8 5.14v13.72a1 1 0 0 0 1.54.84l10.29-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14z"/>
+  </svg>
+);
+
+const IcoPause = ({ size = 14, color = "#fff" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ display: "block" }}>
+    <rect x="6" y="4" width="4.2" height="16" rx="1.4"/>
+    <rect x="13.8" y="4" width="4.2" height="16" rx="1.4"/>
+  </svg>
+);
+
+const IcoStop = ({ size = 14, color = "#fff" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ display: "block" }}>
+    <rect x="5.5" y="5.5" width="13" height="13" rx="2.5"/>
+  </svg>
+);
 
 export default function ProfilePage() {
   const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
@@ -41,7 +64,14 @@ export default function ProfilePage() {
   const [duration, setDuration] = useState(0);
   const playerRef = useRef(null);
   const progressRef = useRef(null);
+  const playerReadyRef = useRef(false);   // el iframe de YouTube ya está listo
+  const playerInitRef = useRef(null);     // promesa de creación (evita duplicados)
   const [downloadedMusic, setDownloadedMusic] = useState([]);
+
+  // Arrastre de la barra de progreso estilo iTunes
+  const [seeking, setSeeking] = useState(false);
+  const [seekPct, setSeekPct] = useState(0);
+  const barRef = useRef(null);
 
   function refreshDownloads() {
     try {
@@ -59,8 +89,35 @@ export default function ProfilePage() {
         }
         items.push({ key, title: trackName, artist: artistName, cover_url: coverUrl, video_id: entry.video_id || "", audio_url: entry.audio_url || "", apple_url: entry.apple_url || "", method: entry.method || (entry.video_id ? "youtube" : "apple"), saved_at: entry.saved_at || 0 });
       }
-      items.sort((a, b) => b.saved_at - a.saved_at);
-      setDownloadedMusic(items);
+
+      /* Cada canción se guarda con DOS claves ("artista titulo" y el id de la
+         pista) para poder buscarla de las dos formas. Eso hacía que apareciera
+         DUPLICADA en la lista. Acá agrupamos por la canción real y mostramos
+         una sola vez, quedándonos con la entrada más completa (la que tiene
+         portada y artista) y recordando todas sus claves para poder borrarlas
+         juntas. */
+      const grupos = new Map();
+      for (const it of items) {
+        const id = it.video_id || it.audio_url || it.apple_url
+          || (it.artist + "|" + it.title).toLowerCase().trim();
+        const prev = grupos.get(id);
+        if (!prev) {
+          grupos.set(id, { ...it, keys: [it.key] });
+        } else {
+          prev.keys.push(it.key);
+          // Nos quedamos con los datos más completos entre las dos entradas
+          const puntaje = (x) => (x.cover_url ? 2 : 0) + (x.artist ? 1 : 0);
+          if (puntaje(it) > puntaje(prev)) {
+            const keys = prev.keys;
+            grupos.set(id, { ...it, keys });
+          }
+          prev.saved_at = Math.max(prev.saved_at, it.saved_at);
+        }
+      }
+
+      const unicos = Array.from(grupos.values());
+      unicos.sort((a, b) => b.saved_at - a.saved_at);
+      setDownloadedMusic(unicos);
     } catch { setDownloadedMusic([]); }
   }
 
@@ -70,15 +127,114 @@ export default function ProfilePage() {
   useEffect(() => {
     if (isPlaying && playerRef.current) {
       progressRef.current = setInterval(() => {
+        // Mientras el dedo/mouse arrastra, no pisamos la posición manual
+        if (seeking) return;
         try { const t = playerRef.current.getCurrentTime(); const d = playerRef.current.getDuration(); setCurrentTime(t||0); setDuration(d||0); setProgress(d>0?(t/d)*100:0); } catch {}
-      }, 500);
+      }, 250);
     } else { if (progressRef.current) clearInterval(progressRef.current); }
     return () => { if (progressRef.current) clearInterval(progressRef.current); };
-  }, [isPlaying]);
+  }, [isPlaying, seeking]);
+
+  // ── Arrastre de la barra (mouse + touch), estilo iTunes ──
+  function pctFromEvent(e) {
+    const bar = barRef.current;
+    if (!bar) return 0;
+    const r = bar.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    return Math.max(0, Math.min(1, x / r.width));
+  }
+
+  function startSeek(e) {
+    if (!duration) return;
+    setSeeking(true);
+    setSeekPct(pctFromEvent(e) * 100);
+  }
+
+  useEffect(() => {
+    if (!seeking) return;
+    const move = (e) => { setSeekPct(pctFromEvent(e) * 100); if (e.cancelable) e.preventDefault(); };
+    const end = () => {
+      setSeeking(false);
+      setSeekPct((p) => { seekTo((p / 100) * (duration || 0)); return p; });
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+    window.addEventListener("touchmove", move, { passive: false });
+    window.addEventListener("touchend", end);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", end);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
+    };
+  }, [seeking, duration]);
+
+  // Crea el reproductor UNA sola vez y lo reutiliza. Antes se destruía y se
+  // recreaba en cada canción: como en el medio había awaits, el navegador
+  // perdía el "gesto del usuario" y bloqueaba el autoplay — por eso había que
+  // darle play una segunda vez en la barra de abajo.
+  function ensurePlayer() {
+    if (playerReadyRef.current && playerRef.current) return Promise.resolve(playerRef.current);
+    if (playerInitRef.current) return playerInitRef.current;
+
+    playerInitRef.current = new Promise((resolve) => {
+      const create = () => {
+        if (!window.YT || !window.YT.Player) { resolve(null); return; }
+        try {
+          playerRef.current = new window.YT.Player("yt-player-container", {
+            height: "1", width: "1",
+            playerVars: { controls:0, disablekb:1, fs:0, modestbranding:1, rel:0, showinfo:0, iv_load_policy:3, playsinline:1 },
+            events: {
+              onReady: () => { playerReadyRef.current = true; resolve(playerRef.current); },
+              onStateChange: (e) => {
+                if (e.data === 0) {           // terminó
+                  setIsPlaying(false);
+                  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+                } else if (e.data === 1) {    // reproduciendo
+                  setIsPlaying(true);
+                  try { setDuration(playerRef.current.getDuration() || 0); } catch {}
+                  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+                } else if (e.data === 2) {    // pausado
+                  setIsPlaying(false);
+                  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+                }
+              },
+              onError: () => { toast.error("Error reproduciendo", 3000); setIsPlaying(false); },
+            },
+          });
+        } catch { resolve(null); }
+      };
+      if (window.YT && window.YT.Player) create();
+      else loadYTAPI().then(create);
+    });
+    return playerInitRef.current;
+  }
+
+  function setupMediaSession(item) {
+    if (!("mediaSession" in navigator)) return;
+    const as = item.cover_url ? "/api/proxy?url=" + encodeURIComponent(item.cover_url) : "";
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: item.title || "", artist: item.artist || "", album: "",
+        artwork: as ? [{src:as,sizes:"96x96",type:"image/jpeg"},{src:as,sizes:"256x256",type:"image/jpeg"},{src:as,sizes:"512x512",type:"image/jpeg"}] : [],
+      });
+    } catch {}
+    navigator.mediaSession.playbackState = "playing";
+    navigator.mediaSession.setActionHandler("play", () => { playerRef.current?.playVideo(); setIsPlaying(true); });
+    navigator.mediaSession.setActionHandler("pause", () => { playerRef.current?.pauseVideo(); setIsPlaying(false); });
+    try { navigator.mediaSession.setActionHandler("stop", () => stopPlayback()); } catch {}
+    try { navigator.mediaSession.setActionHandler("seekto", (d) => { if (d.seekTime != null) seekTo(d.seekTime); }); } catch {}
+  }
 
   async function playDownloaded(item) {
-    if (playingKey === item.key && playerRef.current) {
-      try { const s = playerRef.current.getPlayerState(); if (s===1) { playerRef.current.pauseVideo(); setIsPlaying(false); return; } else { playerRef.current.playVideo(); setIsPlaying(true); return; } } catch {}
+    // Misma canción → alternar play/pausa
+    if (playingKey === item.key && playerRef.current && playerReadyRef.current) {
+      try {
+        const s = playerRef.current.getPlayerState();
+        if (s === 1) { playerRef.current.pauseVideo(); setIsPlaying(false); }
+        else { playerRef.current.playVideo(); setIsPlaying(true); }
+      } catch {}
+      return;
     }
     if (!item.video_id) {
       toast.info("Buscando en YouTube: " + item.title, 3000);
@@ -93,39 +249,37 @@ export default function ProfilePage() {
         } else { toast.error("No se encontro en YouTube", 3000); return; }
       } catch { toast.error("Error buscando", 3000); return; }
     }
-    if (playerRef.current) { try{playerRef.current.destroy();}catch{} playerRef.current=null; }
-    setPlayingKey(item.key); setPlayingTitle(item.title); setPlayingArtist(item.artist); setPlayingCover(item.cover_url); setIsPlaying(false); setProgress(0); setCurrentTime(0); setDuration(0);
-    await loadYTAPI();
-    const c = document.getElementById("yt-player-container"); if(c) c.innerHTML="";
+    setPlayingKey(item.key); setPlayingTitle(item.title); setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
+    setProgress(0); setCurrentTime(0); setDuration(0);
+
+    const player = await ensurePlayer();
+    if (!player) { toast.error("No se pudo iniciar el reproductor", 3000); setPlayingKey(null); return; }
+
     try {
-      playerRef.current = new window.YT.Player("yt-player-container", {
-        videoId: item.video_id, height:"1", width:"1",
-        playerVars: { autoplay:1, controls:0, disablekb:1, fs:0, modestbranding:1, rel:0, showinfo:0, iv_load_policy:3, playsinline:1 },
-        events: {
-          onReady: (e) => {
-            e.target.playVideo(); setIsPlaying(true); setDuration(e.target.getDuration()||0);
-            toast.success("Reproduciendo: "+item.title, 3000);
-            if ("mediaSession" in navigator) {
-              const as = item.cover_url ? "/api/proxy?url="+encodeURIComponent(item.cover_url) : "";
-              try { navigator.mediaSession.metadata = new MediaMetadata({ title:item.title||"", artist:item.artist||"", album:"", artwork:as?[{src:as,sizes:"96x96",type:"image/jpeg"},{src:as,sizes:"256x256",type:"image/jpeg"},{src:as,sizes:"512x512",type:"image/jpeg"}]:[] }); } catch {}
-              navigator.mediaSession.playbackState="playing";
-              navigator.mediaSession.setActionHandler("play",()=>{if(playerRef.current)playerRef.current.playVideo();setIsPlaying(true);navigator.mediaSession.playbackState="playing";});
-              navigator.mediaSession.setActionHandler("pause",()=>{if(playerRef.current)playerRef.current.pauseVideo();setIsPlaying(false);navigator.mediaSession.playbackState="paused";});
-              try{navigator.mediaSession.setActionHandler("stop",()=>{if(playerRef.current)playerRef.current.stopVideo();setIsPlaying(false);navigator.mediaSession.playbackState="none";setPlayingKey(null);});}catch{}
-              try{navigator.mediaSession.setActionHandler("nexttrack",null);}catch{}
-              try{navigator.mediaSession.setActionHandler("previoustrack",null);}catch{}
-            }
-          },
-          onStateChange: (e) => { if(e.data===0){setIsPlaying(false);setPlayingKey(null);} else if(e.data===1)setIsPlaying(true); else if(e.data===2)setIsPlaying(false); },
-          onError: () => { toast.error("Error reproduciendo",3000); setPlayingKey(null); setIsPlaying(false); },
-        },
-      });
-    } catch { toast.error("No se pudo crear el player",3000); setPlayingKey(null); }
+      // loadVideoById arranca solo — no hace falta destruir ni recrear nada.
+      player.loadVideoById(item.video_id);
+      setIsPlaying(true);
+      setupMediaSession(item);
+    } catch { toast.error("No se pudo reproducir", 3000); setPlayingKey(null); setIsPlaying(false); }
+  }
+
+  function seekTo(seconds) {
+    if (!playerRef.current || !playerReadyRef.current) return;
+    const d = duration || 0;
+    const t = Math.max(0, Math.min(seconds, d || seconds));
+    try {
+      playerRef.current.seekTo(t, true);
+      setCurrentTime(t);
+      if (d > 0) setProgress((t / d) * 100);
+    } catch {}
   }
 
   function stopPlayback() {
-    if(playerRef.current){try{playerRef.current.stopVideo();}catch{} try{playerRef.current.destroy();}catch{} playerRef.current=null;}
-    setPlayingKey(null);setIsPlaying(false);setPlayingTitle("");setPlayingArtist("");setPlayingCover("");setProgress(0);
+    // Ojo: NO destruimos el player, solo paramos. Así sigue listo para la
+    // próxima canción y el play responde al primer toque.
+    if (playerRef.current && playerReadyRef.current) { try { playerRef.current.stopVideo(); } catch {} }
+    setPlayingKey(null);setIsPlaying(false);setPlayingTitle("");setPlayingArtist("");setPlayingCover("");
+    setProgress(0);setCurrentTime(0);setDuration(0);
     if("mediaSession" in navigator){navigator.mediaSession.playbackState="none";navigator.mediaSession.metadata=null;}
   }
 
@@ -135,7 +289,7 @@ export default function ProfilePage() {
     try {
       const res = await fetch("/api/download-mp3?q="+encodeURIComponent((item.artist+" "+item.title).trim()||item.key));
       const data = await res.json();
-      if(data.video_id){try{const s=JSON.parse(localStorage.getItem("ml_mp3")||"{}");s[item.key]={...s[item.key],video_id:data.video_id,saved_at:Date.now()};localStorage.setItem("ml_mp3",JSON.stringify(s));}catch{} toast.success("Encontrada: "+item.title,4000);refreshDownloads();}
+      if(data.video_id){try{const s=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=item.keys&&item.keys.length?item.keys:[item.key];for(const k of ks)s[k]={...s[k],video_id:data.video_id,saved_at:Date.now()};localStorage.setItem("ml_mp3",JSON.stringify(s));}catch{} toast.success("Encontrada: "+item.title,4000);refreshDownloads();}
       else toast.warning("No se encontro",4000);
     } catch { toast.error("Error buscando",3000); }
     setDownloadingItems(p=>({...p,[item.key]:false}));
@@ -143,10 +297,50 @@ export default function ProfilePage() {
 
   async function deleteDownload(item) {
     try {
-      const s=JSON.parse(localStorage.getItem("ml_mp3")||"{}");delete s[item.key];localStorage.setItem("ml_mp3",JSON.stringify(s));
-      if(item.audio_url&&"caches" in window){try{const c=await caches.open("ml-saved-v1");await c.delete(item.audio_url);}catch{}}
-      if(playingKey===item.key)stopPlayback();
-      toast.success("Eliminada: "+item.title,3000);refreshDownloads();
+      // Borra TODAS las claves con las que se guardó esta canción
+      const claves = item.keys && item.keys.length ? item.keys : [item.key];
+
+      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      for (const k of claves) delete s[k];
+      localStorage.setItem("ml_mp3", JSON.stringify(s));
+
+      // También la metadata offline
+      try {
+        const off = JSON.parse(localStorage.getItem("ml_offline") || "{}");
+        for (const k of claves) delete off[k];
+        localStorage.setItem("ml_offline", JSON.stringify(off));
+      } catch {}
+
+      if (item.audio_url && "caches" in window) {
+        try { const c = await caches.open("ml-saved-v1"); await c.delete(item.audio_url); } catch {}
+      }
+      if (claves.includes(playingKey)) stopPlayback();
+
+      // Quitar de favoritos la canción correspondiente
+      const posibles = new Set(claves.map(k => String(k).toLowerCase()));
+      const tituloArtista = (item.artist + " " + item.title).trim().toLowerCase();
+      const artistaTitulo = (item.title + " " + item.artist).trim().toLowerCase();
+
+      const favsBorrar = favorites.filter(f => {
+        if (f.item_type !== "track") return false;
+        const id = String(f.item_id).toLowerCase();
+        if (posibles.has(id)) return true;
+        const n = (f.name || "").trim().toLowerCase();
+        const a = (f.artist || "").trim().toLowerCase();
+        return (a + " " + n) === tituloArtista || (n + " " + a) === artistaTitulo;
+      });
+
+      for (const f of favsBorrar) {
+        await toggleFavorite("track", f.item_id);
+      }
+
+      toast.success(
+        favsBorrar.length
+          ? "Eliminada de descargas y favoritos: " + item.title
+          : "Eliminada: " + item.title,
+        3000
+      );
+      refreshDownloads();
     } catch {}
   }
 
@@ -224,8 +418,8 @@ export default function ProfilePage() {
                     {/* Cover + play */}
                     <div style={{position:"relative",flexShrink:0}}>
                       <CoverImg url={item.cover_url} size={52} r={8}/>
-                      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:cp&&isPlaying?"rgba(34,197,94,0.9)":"rgba(0,0,0,0.65)",borderRadius:"50%",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}>
-                        {cp&&isPlaying ? <Ico d={<><rect x="0" y="0" width="3" height="10" rx="1"/><rect x="6" y="0" width="3" height="10" rx="1"/></>} size={8} stroke="#fff" fill="#fff"/> : <Ico d={<polygon points="0,0 10,6 0,12"/>} size={8} stroke="#fff" fill="#fff"/>}
+                      <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:cp&&isPlaying?"rgba(34,197,94,0.95)":"rgba(0,0,0,0.7)",borderRadius:"50%",width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)",boxShadow:"0 2px 8px rgba(0,0,0,0.4)"}}>
+                        {cp&&isPlaying ? <IcoPause size={15}/> : <IcoPlay size={15}/>}
                       </div>
                     </div>
                     {/* Info */}
@@ -340,22 +534,69 @@ export default function ProfilePage() {
 
       {/* Now Playing Bar */}
       {hp && (
-        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"rgba(10,10,20,0.97)",borderTop:"1px solid #2a2a3e",padding:0,zIndex:9999,backdropFilter:"blur(16px)"}}>
-          <div style={{height:3,background:"#1a1a2e",cursor:"pointer"}} onClick={e=>{if(!playerRef.current||!duration)return;const r=e.currentTarget.getBoundingClientRect();const p=(e.clientX-r.left)/r.width;playerRef.current.seekTo(p*duration,true);setProgress(p*100);}}>
-            <div style={{height:"100%",background:"#22c55e",width:progress+"%",transition:"width 0.3s linear"}}/>
-          </div>
-          <div style={{padding:"10px 16px",display:"flex",alignItems:"center",gap:12}}>
-            {playingCover && <img src={playingCover} style={{width:44,height:44,borderRadius:8,objectFit:"cover",flexShrink:0,boxShadow:"0 2px 10px rgba(0,0,0,0.3)"}}/>}
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{color:"#22c55e",fontSize:"0.88em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
-              <div style={{color:"#888",fontSize:"0.75em"}}>{playingArtist} · {fmt(currentTime)} / {fmt(duration)}</div>
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(180deg, rgba(22,22,38,0.98) 0%, rgba(12,12,22,0.99) 100%)",borderTop:"1px solid rgba(124,92,252,0.18)",zIndex:9999,backdropFilter:"blur(20px)",boxShadow:"0 -8px 32px rgba(0,0,0,0.45)"}}>
+          <div style={{maxWidth:900,margin:"0 auto",padding:"12px 16px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:14}}>
+              {/* Portada */}
+              {playingCover
+                ? <img src={playingCover} alt="" style={{width:52,height:52,borderRadius:10,objectFit:"cover",flexShrink:0,boxShadow:"0 4px 16px rgba(0,0,0,0.5)"}}/>
+                : <div style={{width:52,height:52,borderRadius:10,flexShrink:0,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={22} stroke="#555" sw={1.5}/>
+                  </div>}
+
+              {/* Título + barra estilo iTunes */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:"#f0f0f0",fontSize:"0.92em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
+                <div style={{color:"#8a8a9a",fontSize:"0.76em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:7}}>{playingArtist}</div>
+
+                <div style={{display:"flex",alignItems:"center",gap:9}}>
+                  <span style={{color:"#7a7a8a",fontSize:"0.68em",fontVariantNumeric:"tabular-nums",flexShrink:0,minWidth:32,textAlign:"right"}}>
+                    {fmt(seeking ? (seekPct/100)*duration : currentTime)}
+                  </span>
+
+                  {/* Barra arrastrable: click o deslizar para adelantar/retroceder */}
+                  <div
+                    ref={barRef}
+                    onMouseDown={startSeek}
+                    onTouchStart={startSeek}
+                    style={{flex:1,padding:"9px 0",cursor:"pointer",touchAction:"none"}}
+                  >
+                    <div style={{position:"relative",height:5,borderRadius:3,background:"rgba(255,255,255,0.11)"}}>
+                      <div style={{position:"absolute",top:0,left:0,height:"100%",borderRadius:3,width:(seeking?seekPct:progress)+"%",background:"linear-gradient(90deg,#22c55e,#4ade80)",transition:seeking?"none":"width 0.25s linear"}}/>
+                      {/* Perilla */}
+                      <div style={{position:"absolute",top:"50%",left:(seeking?seekPct:progress)+"%",transform:"translate(-50%,-50%)",width:seeking?15:12,height:seeking?15:12,borderRadius:"50%",background:"#fff",boxShadow:seeking?"0 0 0 5px rgba(34,197,94,0.28), 0 2px 8px rgba(0,0,0,0.5)":"0 2px 6px rgba(0,0,0,0.5)",transition:seeking?"width 0.12s, height 0.12s":"left 0.25s linear, width 0.12s, height 0.12s",pointerEvents:"none"}}/>
+                    </div>
+                  </div>
+
+                  <span style={{color:"#7a7a8a",fontSize:"0.68em",fontVariantNumeric:"tabular-nums",flexShrink:0,minWidth:32}}>{fmt(duration)}</span>
+                </div>
+              </div>
+
+              {/* Controles */}
+              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                <button onClick={()=>seekTo(Math.max(0,currentTime-15))} title="Retroceder 15s"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",alignItems:"center",justifyContent:"center",color:"#9a9aaa"}}>
+                  <Ico d={<><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></>} size={19} stroke="#9a9aaa" sw={2.2}/>
+                </button>
+
+                <button
+                  onClick={()=>{if(!playerRef.current||!playerReadyRef.current)return;if(isPlaying){playerRef.current.pauseVideo();setIsPlaying(false);}else{playerRef.current.playVideo();setIsPlaying(true);}}}
+                  title={isPlaying?"Pausar":"Reproducir"}
+                  style={{background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:"50%",width:44,height:44,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 4px 14px rgba(34,197,94,0.4)"}}>
+                  {isPlaying ? <IcoPause size={19}/> : <IcoPlay size={19}/>}
+                </button>
+
+                <button onClick={()=>seekTo(Math.min(duration,currentTime+15))} title="Adelantar 15s"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",alignItems:"center",justifyContent:"center",color:"#9a9aaa"}}>
+                  <Ico d={<><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></>} size={19} stroke="#9a9aaa" sw={2.2}/>
+                </button>
+
+                <button onClick={stopPlayback} title="Cerrar"
+                  style={{background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.28)",borderRadius:"50%",width:32,height:32,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <IcoStop size={12} color="#ef4444"/>
+                </button>
+              </div>
             </div>
-            <button onClick={()=>{if(!playerRef.current)return;if(isPlaying){playerRef.current.pauseVideo();setIsPlaying(false);}else{playerRef.current.playVideo();setIsPlaying(true);}}} style={{background:isPlaying?"rgba(34,197,94,0.2)":"rgba(34,197,94,0.9)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              {isPlaying ? <Ico d={<><rect x="0" y="0" width="3" height="10" rx="1"/><rect x="6" y="0" width="3" height="10" rx="1"/></>} size={12} stroke="#22c55e" fill="#22c55e"/> : <Ico d={<polygon points="0,0 10,6 0,12"/>} size={12} stroke="#fff" fill="#fff"/>}
-            </button>
-            <button onClick={stopPlayback} style={{background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"50%",width:32,height:32,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <Ico d={<rect x="0" y="0" width="10" height="10" rx="2"/>} size={10} stroke="#ef4444" fill="#ef4444"/>
-            </button>
           </div>
         </div>
       )}
