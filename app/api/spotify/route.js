@@ -1,32 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /* ═══════════════════════════════════════════════════
-   /api/spotify — Spotify Web API Proxy
-   
-   Handles:
-   - GET access token (client credentials)
-   - Search albums/artists/tracks
-   - Get album details with all images
-   - Get new releases
-   - Get artist details
-   
-   Credentials come from environment variables:
-   - SPOTIFY_CLIENT_ID
-   - SPOTIFY_CLIENT_SECRET
-   
-   Or from query params for setup:
-   - ?client_id=xxx&client_secret=yyy
+   /api/spotify — Spotify Web API Proxy (v2 — better error handling)
    ═══════════════════════════════════════════════════ */
 
 const SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API_BASE = "https://api.spotify.com/v1";
 
-// Token cache (lives for ~1 hour)
-let tokenCache = { token: "", expires: 0 };
+let tokenCache = { token: "", expires: 0, clientId: "" };
 
 async function getAccessToken(clientId, clientSecret) {
-  // Check cache
-  if (tokenCache.token && Date.now() < tokenCache.expires) {
+  // Check cache (invalidate if credentials changed)
+  if (tokenCache.token && Date.now() < tokenCache.expires && tokenCache.clientId === clientId) {
     return tokenCache.token;
   }
 
@@ -39,29 +24,39 @@ async function getAccessToken(clientId, clientSecret) {
     body: "grant_type=client_credentials",
   });
 
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Spotify auth failed: ${resp.status} - ${err}`);
+  const text = await resp.text();
+  
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Spotify respondió con error ${resp.status}. Verificá que tu Client ID y Client Secret sean correctos.`);
   }
 
-  const data = await resp.json();
+  if (!resp.ok) {
+    const msg = data.error_description || data.error || `Error ${resp.status}`;
+    throw new Error(msg);
+  }
+
+  if (!data.access_token) {
+    throw new Error("No se recibió token de acceso. Verificá tus credenciales.");
+  }
+
   tokenCache = {
     token: data.access_token,
-    expires: Date.now() + (data.expires_in - 60) * 1000, // 60s buffer
+    expires: Date.now() + (data.expires_in - 60) * 1000,
+    clientId: clientId,
   };
   return data.access_token;
 }
 
 function getCredentials(req) {
-  // Try env vars first, then query params
   let clientId = process.env.SPOTIFY_CLIENT_ID || "";
   let clientSecret = process.env.SPOTIFY_CLIENT_SECRET || "";
-
   if (!clientId || !clientSecret) {
     clientId = req.nextUrl.searchParams.get("client_id") || "";
     clientSecret = req.nextUrl.searchParams.get("client_secret") || "";
   }
-
   return { clientId, clientSecret };
 }
 
@@ -70,9 +65,8 @@ export async function GET(req) {
 
   if (!clientId || !clientSecret) {
     return NextResponse.json({
-      error: "Faltan credenciales de Spotify",
+      error: "Faltan credenciales. Necesitás crear una app en developer.spotify.com",
       setup: true,
-      message: "Necesitás crear una app en developer.spotify.com y agregar tu Client ID y Client Secret",
     }, { status: 400 });
   }
 
@@ -86,72 +80,53 @@ export async function GET(req) {
     const token = await getAccessToken(clientId, clientSecret);
     const headers = { "Authorization": `Bearer ${token}` };
 
+    let apiUrl = "";
+
     switch (action) {
-      case "search": {
-        if (!query) return NextResponse.json({ error: "Falta parámetro ?q=" }, { status: 400 });
+      case "search":
+        if (!query) return NextResponse.json({ error: "Falta ?q=" }, { status: 400 });
         const type = req.nextUrl.searchParams.get("type") || "album,artist";
-        const resp = await fetch(`${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}&offset=${offset}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "album": {
-        if (!id) return NextResponse.json({ error: "Falta parámetro ?id=" }, { status: 400 });
-        const resp = await fetch(`${SPOTIFY_API_BASE}/albums/${id}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "artist": {
-        if (!id) return NextResponse.json({ error: "Falta parámetro ?id=" }, { status: 400 });
-        const resp = await fetch(`${SPOTIFY_API_BASE}/artists/${id}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "artist-albums": {
-        if (!id) return NextResponse.json({ error: "Falta parámetro ?id=" }, { status: 400 });
-        const resp = await fetch(`${SPOTIFY_API_BASE}/artists/${id}/albums?limit=${limit}&offset=${offset}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "new-releases": {
-        const resp = await fetch(`${SPOTIFY_API_BASE}/browse/new-releases?limit=${limit}&offset=${offset}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "categories": {
-        const resp = await fetch(`${SPOTIFY_API_BASE}/browse/categories?limit=${limit}&offset=${offset}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "category-playlists": {
-        if (!id) return NextResponse.json({ error: "Falta parámetro ?id=" }, { status: 400 });
-        const resp = await fetch(`${SPOTIFY_API_BASE}/browse/categories/${id}/playlists?limit=${limit}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "playlist": {
-        if (!id) return NextResponse.json({ error: "Falta parámetro ?id=" }, { status: 400 });
-        const resp = await fetch(`${SPOTIFY_API_BASE}/playlists/${id}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
-      case "track": {
-        if (!id) return NextResponse.json({ error: "Falta parámetro ?id=" }, { status: 400 });
-        const resp = await fetch(`${SPOTIFY_API_BASE}/tracks/${id}`, { headers });
-        const data = await resp.json();
-        return NextResponse.json(data);
-      }
-
+        apiUrl = `${SPOTIFY_API_BASE}/search?q=${encodeURIComponent(query)}&type=${type}&limit=${limit}&offset=${offset}`;
+        break;
+      case "album":
+        if (!id) return NextResponse.json({ error: "Falta ?id=" }, { status: 400 });
+        apiUrl = `${SPOTIFY_API_BASE}/albums/${id}`;
+        break;
+      case "artist":
+        if (!id) return NextResponse.json({ error: "Falta ?id=" }, { status: 400 });
+        apiUrl = `${SPOTIFY_API_BASE}/artists/${id}`;
+        break;
+      case "artist-albums":
+        if (!id) return NextResponse.json({ error: "Falta ?id=" }, { status: 400 });
+        apiUrl = `${SPOTIFY_API_BASE}/artists/${id}/albums?limit=${limit}&offset=${offset}`;
+        break;
+      case "new-releases":
+        apiUrl = `${SPOTIFY_API_BASE}/browse/new-releases?limit=${limit}&offset=${offset}`;
+        break;
+      case "playlist":
+        if (!id) return NextResponse.json({ error: "Falta ?id=" }, { status: 400 });
+        apiUrl = `${SPOTIFY_API_BASE}/playlists/${id}`;
+        break;
       default:
         return NextResponse.json({ error: `Acción "${action}" no válida` }, { status: 400 });
     }
+
+    const resp = await fetch(apiUrl, { headers });
+    const text = await resp.text();
+    
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return NextResponse.json({ error: `Spotify API respondió con error ${resp.status}. Intentá de nuevo.` }, { status: resp.status });
+    }
+
+    if (!resp.ok) {
+      const msg = data.error?.message || data.message || `Spotify error ${resp.status}`;
+      return NextResponse.json({ error: msg }, { status: resp.status });
+    }
+
+    return NextResponse.json(data);
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
