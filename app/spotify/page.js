@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 import AddToPlaylistModal from "../components/AddToPlaylistModal";
+import { useDownloads } from "../components/DownloadManager";
 
 // Iconos SVG (mismo trazo de línea que el resto de la app)
 function Ico({ d, size = 16, fill = "none", stroke = "currentColor", sw = 2 }) {
@@ -11,6 +12,7 @@ function Ico({ d, size = 16, fill = "none", stroke = "currentColor", sw = 2 }) {
 
 export default function SpotifyPage() {
   const { user, favorites, isFavorite, toggleFavorite, checkSession } = useUser();
+  const { enqueueAlbum } = useDownloads();
   const [playlistModal, setPlaylistModal] = useState(null);
   const [tab, setTab] = useState("discover"); // discover, search, url, itunes
   const [query, setQuery] = useState("");
@@ -414,99 +416,20 @@ export default function SpotifyPage() {
         } catch {}
       }
       addSavedOfflineId(itemId);
-      // Descargar MP3 completo en background (no bloquea la UI)
+      // Cola en segundo plano con notificaciones.
       if (itemType === "album" && album?.tracks) {
-        for (let i = 0; i < album.tracks.length; i++) {
-          const t = album.tracks[i];
-          const tKey = String(t.id || `${itemId}-${i}`);
-          downloadFullMP3InBackground(t.name, t.artist || artistName, t.source_url || album.source_url, tKey);
-        }
-      } else if (itemType === "track") {
-        downloadFullMP3InBackground(name, artistName, extraData?.source_url || album?.source_url, String(itemId));
-      }
-      const msg = itemType === "album" ? "❤️ Álbum guardado — buscando MP3s..." : "❤️ Guardada — buscando MP3...";
-      toast.download(msg, 4000);
-    }
-  }
-
-  // Download full MP3 in background and save offline
-  async function downloadFullMP3InBackground(trackName, artistName, sourceUrl, trackId) {
-    const searchQuery = (artistName + " " + trackName).trim();
-    try {
-      const params = new URLSearchParams();
-      params.set("q", searchQuery);
-      if (sourceUrl && sourceUrl.includes("apple.com")) params.set("itunes_url", sourceUrl);
-      else if (sourceUrl) params.set("spotify_url", sourceUrl);
-      const res = await fetch("/api/download-mp3?" + params.toString());
-      const data = await res.json();
-      
-      if (data.method === "aaplmusicdownloader" && !data.audio_url) {
-        /* Apple Music sin archivo descargable: sólo queda el iframe de
-           YouTube, que necesita internet. Si SÍ vino audio_url seguimos
-           de largo al bloque de abajo, que lo guarda en la caché. */
-        try {
-          const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          const entry = {
-            video_id: data.video_id || "",
-            apple_url: data.apple_url || "",
-            method: "aaplmusicdownloader",
-            title: trackName,
-            saved_at: Date.now(),
-          };
-          saved[searchQuery] = entry;
-          if (trackId) saved[String(trackId)] = entry;
-          localStorage.setItem("ml_mp3", JSON.stringify(saved));
-        } catch {}
-        toast.success(data.video_id ? "✅ Guardada — " + trackName : "🎵 Apple Music disponible — " + trackName, 5000);
-        return;
-      }
-      
-      if (data.video_id || data.audio_url) {
-        /* Si el servidor pudo sacar el audio directo (audio_url), lo
-           guardamos en la caché: eso SÍ suena sin internet, igual que el
-           preview. Si no, guardamos el video_id y se reproduce por el
-           iframe de YouTube (necesita conexión). */
-        let guardadoOffline = false;
-        if (data.audio_url && "caches" in window) {
-          try {
-            const c = await caches.open("ml-saved-v1");
-            /* Ojo: usamos fetch + put en vez de cache.add().
-               add() puede disparar una petición con Range y el Cache API
-               se niega a guardar respuestas 206. Pidiéndolo nosotros nos
-               aseguramos de guardar el archivo ENTERO (200), que es lo
-               que después el service worker recorta para el iPhone. */
-            const resp = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" } });
-            if (resp.ok && resp.status === 200) {
-              await c.put(data.audio_url, resp.clone());
-              guardadoOffline = true;
-            }
-          } catch { /* si falla, seguimos con el iframe */ }
-        }
-        try {
-          const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-          const entry = {
-            video_id: data.video_id || "",
-            audio_url: guardadoOffline ? data.audio_url : "",
-            apple_url: data.apple_url || "",
-            method: guardadoOffline ? "audio" : "youtube",
-            title: data.title || data.video_title || trackName,
-            saved_at: Date.now(),
-          };
-          saved[searchQuery] = entry;
-          if (trackId) saved[String(trackId)] = entry;
-          localStorage.setItem("ml_mp3", JSON.stringify(saved));
-        } catch {}
-        toast.success(
-          guardadoOffline
-            ? "✅ Guardada sin internet: " + trackName
-            : "✅ Listo para reproducir: " + trackName,
-          5000
-        );
+        const tracksForQueue = album.tracks.map((t, i) => ({
+          key: String(t.id || `${itemId}-${i}`),
+          name: t.name,
+          artist: t.artist || artistName,
+          cover: coverUrl,
+        }));
+        enqueueAlbum(name, tracksForQueue);
       } else {
-        toast.warning("⚠️ No se encontró en YouTube: " + trackName, 5000);
+        enqueueAlbum(name, [{ key: String(itemId), name, artist: artistName, cover: coverUrl }]);
       }
-    } catch {
-      toast.error("⚠️ Error buscando MP3", 4000);
+      const msg = itemType === "album" ? "Álbum guardado — descargando en segundo plano" : "Guardada — descargando en segundo plano";
+      toast.info(msg, 4000);
     }
   }
 
@@ -713,8 +636,7 @@ export default function SpotifyPage() {
                   <h2 style={{ fontSize: "1.2em", marginBottom: 5 }}>{oembedResult.title}</h2>
                   <p style={{ color: "#1ed760", marginBottom: 10 }}>{oembedResult.provider}</p>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {oembedResult.thumbnail_large && <DlBtn onClick={() => downloadImage(oembedResult.thumbnail_large, "cover_large.jpg")} color="#22c55e" label="Grande" />}
-                    {oembedResult.thumbnail && <DlBtn onClick={() => downloadImage(oembedResult.thumbnail, "cover_thumb.jpg")} color="#3b82f6" label="Mini" />}
+              {/* Ítem 8: botones Grande/Mini del oembed ya no se muestran */}
                   </div>
                 </div>
               </div>
@@ -745,14 +667,7 @@ export default function SpotifyPage() {
               <p style={{ color: "#888", marginBottom: 2, fontSize: "0.9em" }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""} {album.track_count ? `— ${album.track_count} canciones` : ""}</p>
               {album.label && <p style={{ color: "#555", fontSize: "0.8em" }}>Sello: {album.label}</p>}
               {album.genre && <p style={{ color: "#555", fontSize: "0.8em" }}>Género: {album.genre}</p>}
-              {album.images?.length > 0 && (
-                <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {album.images.map((img, i) => (
-                    <DlBtn key={i} onClick={() => downloadImage(img.url, album.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_" + (img.label || img.size) + ".jpg")} color={i === 0 ? "#22c55e" : "#3b82f6"} label={img.label || img.size} />
-                  ))}
-                </div>
-              )}
-              {/* Ítem 8: se quitó el botón de descargar portada (ya no tiene caso) */}
+              {/* Ítem 8: ya no se descargan portadas (Grande/Mini) en el álbum */}
             </div>
           </div>
           {album.tracks?.length > 0 && (
@@ -807,13 +722,7 @@ export default function SpotifyPage() {
             <div style={{ flex: 1, minWidth: 180 }}>
               <h2 style={{ fontSize: "1.4em", marginBottom: 4 }}>{artist.name}</h2>
               {artist.nb_fans > 0 && <p style={{ color: "#888", marginBottom: 8 }}>{artist.nb_fans.toLocaleString()} fans</p>}
-              {artist.images?.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {artist.images.map((img, i) => (
-                    <DlBtn key={i} onClick={() => downloadImage(img.url, artist.name.replace(/[^\w\s-]/g, "").replace(/\s+/g, "_") + "_" + (img.label || img.size) + ".jpg")} color={i === 0 ? "#22c55e" : "#3b82f6"} label={img.label || img.size} />
-                  ))}
-                </div>
-              )}
+              {/* Ítem 8: botones de portada en artista quitados */}
             </div>
           </div>
           {artist.albums?.length > 0 && (

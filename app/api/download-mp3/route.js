@@ -135,16 +135,30 @@ async function buscarEnYouTube(searchQuery) {
   }
   if (!results.videos || results.videos.length === 0) return null;
 
-  let video = results.videos[0];
-  for (const v of results.videos.slice(0, 8)) {
+  // yt-search devuelve `duration` como texto "3:45" o número (segundos).
+  const toSec = (d) => {
+    if (d == null) return 9999;
+    if (typeof d === "number") return d;
+    const m = String(d).split(":");
+    if (m.length === 2) return (Number(m[0]) || 0) * 60 + (Number(m[1]) || 0);
+    if (m.length === 3) return (Number(m[0]) || 0) * 3600 + (Number(m[1]) || 0) * 60 + (Number(m[2]) || 0);
+    return 9999;
+  };
+
+  // Ordenamos los primeros 8 resultados: preferimos el audio más corto
+  // con keywords de "audio". Penalizamos >8 min (lives/mashups con silencios).
+  const candidatos = (results.videos || []).slice(0, 8);
+  const scored = candidatos.map((v) => {
     const t = (v.title || "").toLowerCase();
-    if (t.includes("official audio") || t.includes("audio") || t.includes("lyric")) {
-      video = v;
-      break;
-    }
-  }
-  return video;
+    const esAudio = t.includes("official audio") || t.includes("audio") || t.includes("lyric") || t.includes("letra");
+    const dur = toSec(v.duration);
+    const fueraDeRango = dur < 90 || dur > 480;
+    return { v, score: (esAudio ? 0 : 1000) + (fueraDeRango ? 100 : 0) + dur };
+  });
+  scored.sort((a, b) => a.score - b.score);
+  return scored[0]?.v || results.videos[0] || null;
 }
+
 
 export async function GET(req) {
   const p = req.nextUrl.searchParams;

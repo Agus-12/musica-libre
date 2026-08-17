@@ -1,8 +1,11 @@
 import { UserProvider } from "./components/UserContext";
 import { ToastProvider } from "./components/ToastContext";
+import { DownloadProvider } from "./components/DownloadManager";
 import AuthGate from "./components/AuthGate";
 import Navbar from "./components/Navbar";
-import PWASetup from "./components/PWASetup";
+import PWASetup from "./components/PWASetup";</parameter>
+</invoke>
+
 
 export const metadata = {
   title: "AURA — Tu música, siempre contigo",
@@ -35,13 +38,15 @@ export default function RootLayout({ children }) {
       </head>
       <body style={{ margin: 0, background: "#0a0a14", color: "#e0e0e0", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
         <UserProvider>
-          <ToastProvider>
-            <AuthGate>
-              <Navbar>
-                {children}
-              </Navbar>
-            </AuthGate>
-          </ToastProvider>
+          <DownloadProvider>
+            <ToastProvider>
+              <AuthGate>
+                <Navbar>
+                  {children}
+                </Navbar>
+              </AuthGate>
+            </ToastProvider>
+          </DownloadProvider>
         </UserProvider>
         <PWASetup />
       </body>
