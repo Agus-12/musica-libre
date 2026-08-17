@@ -3,6 +3,11 @@ import { useState, useEffect } from "react";
 import { useUser } from "./UserContext";
 import LogoAura from "./LogoAura";
 
+// Iconos SVG (mismo estilo de línea que el resto de la app)
+function Ico({ d, size = 16, fill = "none", stroke = "#7c5cfc", sw = 2 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>{d}</svg>;
+}
+
 // Rutas públicas que no requieren login
 const PUBLIC_PATHS = ["/share"];
 
@@ -79,24 +84,24 @@ export default function AuthGate({ children }) {
 
         <div style={{ maxWidth: 460, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
           {/* Logo */}
-          <div style={{ marginBottom: 8 }}>
+          <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}>
             <LogoAura height={40} />
           </div>
-          <p style={{ color: "#6a6a80", fontSize: "0.8em", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, marginTop: 14 }}>Tu música, siempre con vos</p>
+          <p style={{ color: "#6a6a80", fontSize: "0.8em", letterSpacing: 3, textTransform: "uppercase", marginBottom: 6, marginTop: 14 }}>Tu música, siempre contigo</p>
           <p style={{ color: "#888", fontSize: "clamp(0.9em, 2.5vw, 1.05em)", marginBottom: 35, lineHeight: 1.5, maxWidth: 380, margin: "0 auto 35px" }}>
-            Buscá álbumes, descargá portadas en alta calidad, guardá favoritos y creá tus playlists
+            Busca álbumes, descarga canciones y escucha sin conexión
           </p>
 
           {/* Features */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 35, textAlign: "left" }}>
             {[
-              { icon: "🔍", text: "Buscar álbumes y artistas" },
-              { icon: "⬇️", text: "Descargar portadas HD" },
-              { icon: "❤️", text: "Guardar favoritos" },
-              { icon: "🎵", text: "Crear playlists" },
+              { icon: <Ico d={<><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></>} size="18" stroke="#7c5cfc" />, text: "Buscar álbumes y artistas" },
+              { icon: <Ico d={<><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>} size="18" stroke="#22c55e" />, text: "Descargar música" },
+              { icon: <Ico d={<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />} size="18" stroke="#ef4444" fill="#ef4444" />, text: "Guardar favoritos" },
+              { icon: <Ico d={<><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><circle cx="3" cy="6" r="1" /><circle cx="3" cy="12" r="1" /><circle cx="3" cy="18" r="1" /></>} size="18" stroke="#7c5cfc" />, text: "Crear playlists" },
             ].map((f, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, background: "rgba(26,26,46,0.6)", border: "1px solid rgba(42,42,62,0.5)" }}>
-                <span style={{ fontSize: "1.2em" }}>{f.icon}</span>
+                {f.icon}
                 <span style={{ color: "#aaa", fontSize: "0.8em", lineHeight: 1.3 }}>{f.text}</span>
               </div>
             ))}
@@ -113,7 +118,7 @@ export default function AuthGate({ children }) {
           </div>
 
           <p style={{ color: "#444", fontSize: "0.75em", marginTop: 25 }}>
-            Sin cuenta Premium • Gratis • Sin Spotify
+            Gratis • Sin cuenta Premium
           </p>
         </div>
       </div>
@@ -132,7 +137,7 @@ export default function AuthGate({ children }) {
           ← Volver
         </button>
 
-        <div style={{ textAlign: "center", marginBottom: 25 }}>
+        <div style={{ textAlign: "center", marginBottom: 25, display: "flex", flexDirection: "column", alignItems: "center" }}>
           <LogoAura height={40} />
           <h2 style={{ fontSize: "1.6em", marginBottom: 4 }}>
             {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}

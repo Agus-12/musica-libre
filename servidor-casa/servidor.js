@@ -226,6 +226,10 @@ async function obtenerAudio({ videoId, query }) {
             "--no-warnings",
             "--quiet",
             "--no-part",
+            // Evita bajar versiones larguísimas (live/mashup) que dejan la
+            // canción con minutos de silencio al final: preferimos las de
+            // duración normal (~2–8 min).
+            "--match-filter", "duration > 120 & duration < 480",
             // Un navegador real; sin esto es más fácil que nos marquen.
             "--user-agent", UA,
             // Si nos limitan la tasa, reintenta en vez de morir.

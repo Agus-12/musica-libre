@@ -18,13 +18,8 @@ const ICON_USER = <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle
 const ICON_LOGOUT = <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>;
 
 export default function Navbar({ children }) {
-  const { user, profile, checkSession } = useUser();
+  const { user, profile, logout } = useUser();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  async function logout() {
-    await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
-    checkSession();
-  }
 
   const links = [
     { href: "/spotify", icon: ICON_MUSIC, label: "Música" },
@@ -111,13 +106,13 @@ export default function Navbar({ children }) {
                 <Ico d={l.icon} size={18} stroke="#7c5cfc" /> {l.label}
               </a>
             ))}
-            <button onClick={logout} style={{
-              padding: "12px 14px", borderRadius: 8, border: "none",
-              color: "#ef4444", fontSize: "0.95em", cursor: "pointer", textAlign: "left",
-              background: "rgba(239,68,68,0.05)", display: "flex", alignItems: "center", gap: 11,
-            }}>
-              <Ico d={ICON_LOGOUT} size={18} stroke="#ef4444" /> Cerrar sesión
-            </button>
+              <button onClick={() => { logout(); setMenuOpen(false); }} style={{
+                padding: "12px 14px", borderRadius: 8, border: "none",
+                color: "#ef4444", fontSize: "0.95em", cursor: "pointer", textAlign: "left",
+                background: "rgba(239,68,68,0.05)", display: "flex", alignItems: "center", gap: 11,
+              }}>
+                <Ico d={ICON_LOGOUT} size={18} stroke="#ef4444" /> Cerrar sesión
+              </button>
           </div>
         )}
       </nav>

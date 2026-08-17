@@ -207,6 +207,25 @@ export function UserProvider({ children }) {
     } catch { return false; }
   }
 
+  async function logout() {
+    try {
+      await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+    } catch {}
+    // Limpiar la caché offline para que la sesión no se restaure sola
+    try {
+      localStorage.removeItem("ml_offline_user");
+      localStorage.removeItem("ml_offline_profile");
+      localStorage.removeItem("ml_offline_favorites");
+      localStorage.removeItem("ml_offline_playlists");
+    } catch {}
+    setUser(null);
+    setProfile(null);
+  }
+
   return (
     <UserContext.Provider value={{
       user, profile, favorites, playlists, loading,
@@ -214,7 +233,7 @@ export function UserProvider({ children }) {
       createPlaylist, addToPlaylist,
       loadFavorites, loadPlaylists,
       setUser, setProfile,
-      checkSession,
+      checkSession, logout,
     }}>
       {children}
     </UserContext.Provider>

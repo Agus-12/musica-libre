@@ -5,8 +5,8 @@ import Navbar from "./components/Navbar";
 import PWASetup from "./components/PWASetup";
 
 export const metadata = {
-  title: "AURA — Tu música, siempre con vos",
-  description: "Buscá álbumes, descargá portadas en alta calidad, guardá favoritos y creá playlists — sin cuenta Premium",
+  title: "AURA — Tu música, siempre contigo",
+  description: "Busca álbumes, descarga canciones y escucha sin conexión — gratis",
   manifest: "/manifest.json",
   other: {
     "mobile-web-app-capable": "yes",

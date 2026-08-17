@@ -467,8 +467,14 @@ export default function ProfilePage() {
       });
     } catch {}
     navigator.mediaSession.playbackState = "playing";
-    navigator.mediaSession.setActionHandler("play", () => { playerRef.current?.playVideo(); setIsPlaying(true); });
-    navigator.mediaSession.setActionHandler("pause", () => { playerRef.current?.pauseVideo(); setIsPlaying(false); });
+    navigator.mediaSession.setActionHandler("play", () => {
+      if (usingAudioRef.current && audioRef.current) { const p = audioRef.current.play(); if (p && p.catch) p.catch(() => {}); setIsPlaying(true); }
+      else { playerRef.current?.playVideo(); setIsPlaying(true); }
+    });
+    navigator.mediaSession.setActionHandler("pause", () => {
+      if (usingAudioRef.current && audioRef.current) { audioRef.current.pause(); setIsPlaying(false); }
+      else { playerRef.current?.pauseVideo(); setIsPlaying(false); }
+    });
     try { navigator.mediaSession.setActionHandler("stop", () => stopPlayback()); } catch {}
     try { navigator.mediaSession.setActionHandler("seekto", (d) => { if (d.seekTime != null) seekTo(d.seekTime); }); } catch {}
     // Botones de anterior/siguiente en la pantalla de bloqueo del celular
@@ -725,13 +731,12 @@ export default function ProfilePage() {
             <>
             {/* Aviso de modo offline */}
             {!isOnline && (
-              <div style={{display:"flex",gap:10,alignItems:"flex-start",background:"rgba(234,179,8,0.08)",border:"1px solid rgba(234,179,8,0.25)",borderRadius:10,padding:"11px 13px",marginBottom:12}}>
-                <span style={{flexShrink:0,marginTop:1}}>
-                  <Ico d={<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={17} stroke="#eab308"/>
+              <div style={{display:"flex",gap:10,alignItems:"center",background:"rgba(34,197,94,0.10)",border:"1px solid rgba(34,197,94,0.30)",borderRadius:10,padding:"10px 13px",marginBottom:12}}>
+                <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:6,background:"rgba(34,197,94,0.18)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.45)",borderRadius:6,padding:"3px 8px",fontSize:"0.62em",fontWeight:800,letterSpacing:0.5}}>
+                  <Ico d={<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={11} stroke="#22c55e" sw={2.4}/> OFF
                 </span>
-                <div style={{fontSize:"0.8em",lineHeight:1.5,color:"#d4bc6a"}}>
-                  <strong style={{color:"#eab308"}}>Sin conexión.</strong> Solo podés escuchar los adelantos guardados.
-                  Las canciones completas se reproducen desde YouTube y necesitan internet.
+                <div style={{fontSize:"0.8em",lineHeight:1.5,color:"#9fd9b0"}}>
+                  Modo sin conexión activo. Sonando las canciones que descargaste.
                 </div>
               </div>
             )}

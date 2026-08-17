@@ -49,7 +49,7 @@ export default function MirrorPage() {
           <span style={{ fontSize: "2em" }}>🎵</span>
           <div>
             <div style={{ color: "#e8e8ef", fontWeight: 700, fontSize: "1.1em", letterSpacing: 2 }}>AURA</div>
-            <div style={{ color: "#888", fontSize: "0.85em" }}>Buscar álbumes, descargar portadas, guardar favoritos y crear playlists — sin cuenta Premium</div>
+            <div style={{ color: "#888", fontSize: "0.85em" }}>Busca álbumes, descarga canciones y escucha sin conexión</div>
           </div>
           <span style={{ marginLeft: "auto", color: "#1ed760", fontSize: "1.5em" }}>→</span>
         </div>

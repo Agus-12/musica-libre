@@ -4,6 +4,11 @@ import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 import AddToPlaylistModal from "../components/AddToPlaylistModal";
 
+// Iconos SVG (mismo trazo de línea que el resto de la app)
+function Ico({ d, size = 16, fill = "none", stroke = "currentColor", sw = 2 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0 }}>{d}</svg>;
+}
+
 export default function SpotifyPage() {
   const { user, favorites, isFavorite, toggleFavorite, checkSession } = useUser();
   const [playlistModal, setPlaylistModal] = useState(null);
@@ -603,9 +608,8 @@ export default function SpotifyPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={() => { setTab("discover"); setAlbum(null); setArtist(null); setResults(null); }} style={TabS(tab === "discover" && !album && !artist)}>🌟 Descubrir</button>
+        <button onClick={() => { setTab("discover"); setAlbum(null); setArtist(null); setResults(null); }} style={TabS(tab === "discover" && !album && !artist)}><Ico d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />} size={16} stroke="#7c5cfc" fill="#7c5cfc" /> Descubrir</button>
         <button onClick={() => { setTab("search"); setAlbum(null); setArtist(null); }} style={TabS(tab === "search" && !album && !artist)}>Buscar</button>
-        <button onClick={() => { setTab("url"); setAlbum(null); setArtist(null); }} style={TabS(tab === "url")}>URL Spotify</button>
       </div>
 
       {/* ── TAB: Discover ── */}
@@ -620,7 +624,7 @@ export default function SpotifyPage() {
           {/* For You - based on favorites */}
           {favorites.length > 0 && (
             <div style={{ marginBottom: 30 }}>
-              <SectionHeader icon="💜" title="Para ti" subtitle="Basado en tus favoritos" />
+                  <SectionHeader icon={<Ico d={<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />} size={18} stroke="#ec4899" fill="#ec4899" />} title="Para ti" subtitle="Basado en tus favoritos" />
               <RecommendationRow favorites={favorites} onSelect={(id, src) => loadAlbum(id, src)} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
             </div>
           )}
@@ -632,19 +636,19 @@ export default function SpotifyPage() {
             <>
               {charts.latin?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
-                  <SectionHeader icon="🔥" title="Latin Hits" subtitle="Lo más escuchado" />
+                  <SectionHeader icon={<Ico d={<path d="M12 2s4 4 4 9a4 4 0 0 1-8 0c0-1 .5-2 1-3-2 1-4 3-4 6a6 6 0 0 0 12 0c0-5-5-9-5-9z" />} size={18} stroke="#f97316" fill="#f97316" />} title="Latin Hits" subtitle="Lo más escuchado" />
                   <HorizontalAlbumRow albums={charts.latin.slice(0, 8)} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
               {charts.newReleases?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
-                  <SectionHeader icon="✨" title="Nuevos lanzamientos" subtitle="Lo más reciente" />
+                  <SectionHeader icon={<Ico d={<><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z" /><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z" /></>} size={18} stroke="#fbbf24" fill="#fbbf24" />} title="Nuevos lanzamientos" subtitle="Lo más reciente" />
                   <HorizontalAlbumRow albums={charts.newReleases.slice(0, 8)} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
               {charts.top?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
-                  <SectionHeader icon="🌍" title="Top Global" subtitle="Los más populares" />
+                  <SectionHeader icon={<Ico d={<><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20z" /></>} size={18} stroke="#38bdf8" />} title="Top Global" subtitle="Los más populares" />
                   <HorizontalAlbumRow albums={charts.top.slice(0, 8)} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
@@ -748,12 +752,7 @@ export default function SpotifyPage() {
                   ))}
                 </div>
               )}
-              {(album.cover_xl || album.cover_big) && !album.images?.length && (
-                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                <DlBtn onClick={() => downloadImage(album.cover_xl || album.cover_big, "cover.jpg")} color="#22c55e" label="Descargar portada" />
-                
-              </div>
-              )}
+              {/* Ítem 8: se quitó el botón de descargar portada (ya no tiene caso) */}
             </div>
           </div>
           {album.tracks?.length > 0 && (
