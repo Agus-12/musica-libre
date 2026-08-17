@@ -406,6 +406,31 @@ const servidor = http.createServer(async (req, res) => {
     catch (e) { return json(res, 500, { error: e.message }); }
   }
 
+  // ── /borrar: elimina de la Mac el audio de una canción ──
+  // La app lo llama cuando el usuario saca la canción de sus descargas:
+  // así la Mac no guarda copias que ya nadie quiere (ahorra espacio).
+  // Es inofensivo si el archivo no existe: responde ok con lista vacía.
+  if (ruta === "/borrar") {
+    const videoId = url.searchParams.get("v") || "";
+    const query = url.searchParams.get("q") || "";
+    if (!videoId && !query) return json(res, 400, { error: "falta v o q" });
+    const id = idSeguro(videoId || query);
+    const borrados = [];
+    for (const ext of [".m4a", ".webm", ".mp3", ".opus"]) {
+      const p = path.join(CARPETA, id + ext);
+      if (fs.existsSync(p)) {
+        try {
+          fs.unlinkSync(p);
+          borrados.push(path.basename(p));
+          log("borrado:", path.basename(p));
+        } catch (e) {
+          return json(res, 500, { error: e.message });
+        }
+      }
+    }
+    return json(res, 200, { ok: true, borrados });
+  }
+
   json(res, 404, { error: "ruta desconocida" });
 });
 

@@ -610,6 +610,12 @@ export default function ProfilePage() {
       if (item.audio_url && "caches" in window) {
         try { const c = await caches.open("ml-saved-v1"); await c.delete(item.audio_url); } catch {}
       }
+      // También pedirle a la Mac que borre su copia del audio, para no
+      // ocupar espacio de más. No frena la interfaz y no es crítico si
+      // la Mac está apagada (el límite de disco igual limpia lo viejo).
+      if (item.video_id) {
+        try { fetch("/api/borrar-cancion?video_id=" + encodeURIComponent(item.video_id)).catch(() => {}); } catch {}
+      }
       if (claves.includes(playingKey)) stopPlayback();
 
       // Quitar de favoritos la canción correspondiente

@@ -553,6 +553,7 @@ launchctl load ~/Library/LaunchAgents/com.aura.servidor.plist
 | `/salud` | Ver si está vivo | no |
 | `/resolver?v=ID` o `?q=texto` | Bajar y obtener la ruta | sí |
 | `/audio/<archivo>` | El MP3, con soporte de Range | sí |
+| `/borrar?v=ID` o `?q=texto` | Borra de la Mac el audio de una canción (lo llama la app al sacarla de Descargadas) | sí |
 
 ---
 
