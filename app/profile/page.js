@@ -150,15 +150,38 @@ export default function ProfilePage() {
   useEffect(() => { ensurePlayer(); }, []);
 
   useEffect(() => {
-    if (isPlaying && playerRef.current) {
-      progressRef.current = setInterval(() => {
-        // Mientras el dedo/mouse arrastra, no pisamos la posición manual
-        if (seeking) return;
-        try { const t = playerRef.current.getCurrentTime(); const d = playerRef.current.getDuration(); setCurrentTime(t||0); setDuration(d||0); setProgress(d>0?(t/d)*100:0); } catch {}
-      }, 250);
-    } else { if (progressRef.current) clearInterval(progressRef.current); }
-    return () => { if (progressRef.current) clearInterval(progressRef.current); };
-  }, [isPlaying, seeking]);
+    if (!isPlaying) return;
+    // Lee el progreso del reproductor real (audio guardado o YouTube).
+    // OJO: usamos `seekingRef.current` (no `seeking`) para no re-armar el
+    // setInterval cada vez que cambia el estado de "estoy arrastrando". Eso
+    // era lo que hacía oscilar la barra (race entre seeks y polls).
+    const tick = () => {
+      if (seekingRef.current) return;
+      try {
+        if (usingAudioRef.current && audioRef.current) {
+          const a = audioRef.current;
+          const d = a.duration;
+          if (!isNaN(d) && d > 0 && !isNaN(a.currentTime)) {
+            setCurrentTime(a.currentTime);
+            setDuration(d);
+            setProgress((a.currentTime / d) * 100);
+          }
+          return;
+        }
+        const p = playerRef.current;
+        if (!p || !playerReadyRef.current) return;
+        const t = p.getCurrentTime();
+        const d = p.getDuration();
+        if (typeof t === "number" && typeof d === "number" && d > 0) {
+          setCurrentTime(t);
+          setDuration(d);
+          setProgress((t / d) * 100);
+        }
+      } catch {}
+    };
+    progressRef.current = setInterval(tick, 200);
+    return () => clearInterval(progressRef.current);
+  }, [isPlaying]);
 
   // Con el reproductor desplegado, bloqueamos el scroll del fondo (como iTunes)
   useEffect(() => {
@@ -338,23 +361,7 @@ export default function ProfilePage() {
     // Si venía sonando YouTube, lo paramos
     try { if (playerRef.current && playerReadyRef.current) playerRef.current.stopVideo(); } catch {}
 
-    let a = audioRef.current;
-    if (!a) {
-      a = new Audio();
-      a.preload = "auto";
-      audioRef.current = a;
-      a.addEventListener("timeupdate", () => {
-        if (seekingRef.current) return;
-        const d = a.duration || 0;
-        setCurrentTime(a.currentTime || 0);
-        setDuration(d);
-        setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
-      });
-      a.addEventListener("ended", () => handleTrackEnd());
-      a.addEventListener("play", () => setIsPlaying(true));
-      a.addEventListener("pause", () => setIsPlaying(false));
-      a.addEventListener("error", () => {
-        // El archivo cacheado falló: probamos con YouTube si hay conexión
+mos con YouTube si hay conexión
         if (item.video_id && navigator.onLine) { usingAudioRef.current = false; startTrack(item); }
         else toast.error("No se pudo reproducir", 3000);
       });
@@ -467,13 +474,33 @@ export default function ProfilePage() {
       });
     } catch {}
     navigator.mediaSession.playbackState = "playing";
+    // Si el YouTube ya terminó (estado 0) y volvés a tocar Reanudar desde
+    // el dashboard, había que rebobinarlo al inicio para que arranque de
+    // verdad — antes llamaba playVideo() y "terminaba" otra vez al toque.
     navigator.mediaSession.setActionHandler("play", () => {
-      if (usingAudioRef.current && audioRef.current) { const p = audioRef.current.play(); if (p && p.catch) p.catch(() => {}); setIsPlaying(true); }
-      else { playerRef.current?.playVideo(); setIsPlaying(true); }
+      try {
+        const pl = playerRef.current;
+        if (pl && playerReadyRef.current && !usingAudioRef.current && pl.getPlayerState && pl.getPlayerState() === 0) {
+          pl.seekTo(0, true);
+        }
+      } catch {}
+      if (usingAudioRef.current && audioRef.current) {
+        const p = audioRef.current;
+        if (p.paused) { const pr = p.play(); if (pr && pr.catch) pr.catch(() => {}); }
+      } else {
+        try { playerRef.current?.playVideo(); } catch {}
+        kickPlay();
+      }
+      setIsPlaying(true);
     });
     navigator.mediaSession.setActionHandler("pause", () => {
-      if (usingAudioRef.current && audioRef.current) { audioRef.current.pause(); setIsPlaying(false); }
-      else { playerRef.current?.pauseVideo(); setIsPlaying(false); }
+      if (usingAudioRef.current && audioRef.current) {
+        try { audioRef.current.pause(); } catch {}
+        setIsPlaying(false);
+        return;
+      }
+      try { playerRef.current?.pauseVideo(); } catch {}
+      setIsPlaying(false);
     });
     try { navigator.mediaSession.setActionHandler("stop", () => stopPlayback()); } catch {}
     try { navigator.mediaSession.setActionHandler("seekto", (d) => { if (d.seekTime != null) seekTo(d.seekTime); }); } catch {}
@@ -1078,6 +1105,11 @@ export default function ProfilePage() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+    </>
       )}
     </div>
   );
