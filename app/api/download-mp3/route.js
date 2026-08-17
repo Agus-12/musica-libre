@@ -127,7 +127,7 @@ async function fetchJSON(url) {
   return await resp.json();
 }
 
-async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist) {
+async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist, expectedSong) {
   const ytSearch = await import("yt-search");
   let results = await ytSearch.default(searchQuery + " official audio");
   if (!results.videos || results.videos.length === 0) {
@@ -178,10 +178,27 @@ async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist) {
     //    cancion de 3:22 suele estar completa; una de 2:30 puede ser preview).
     if (tema) s -= Math.max(0, dur) / 12;
 
-    // 5) Bonus enorme si el canal del video coincide con el artista (de iTunes).
-    //    Esto soluciona el bug de "descarga una cancion que ni es": cuando
-    //    yt-search devuelve karaokes, tributes o covers de otros canales
-    //    con titulo parecido, los descartamos.
+    // 5) HARD REQUIREMENT del titulo: si nos pasaron el titulo esperado
+    //    (de iTunes), el video TIENE que contener 2 palabras significativas
+    //    del mismo, si no -> descartado con META. Esto resuelve DEFINITIVAMENTE
+    //    el bug de "descarga una cancion que ni es": yt-search puede devolver
+    //    otra cancion del mismo artista con titulo parecido, pero si no matchea
+    //    palabras del titulo esperado, no es la cancion que queremos.
+    if (expectedSong) {
+      const tlow = (v.title || "").toLowerCase();
+      const slow = expectedSong.toLowerCase();
+      const palabras = slow.split(/\s+/).filter(p => p.length > 3 && !["que", "con", "para", "por", "los", "las", "una", "del", "the"].includes(p));
+      let hits = 0;
+      for (const p of palabras) if (tlow.includes(p)) hits++;
+      // Necesitamos al menos la mitad de las palabras significativas o minimo 2.
+      const requerido = Math.max(2, Math.ceil(palabras.length / 2));
+      if (hits < requerido) {
+        s += META; // descartado: no matchea el titulo
+      }
+    }
+
+    // 6) Bonus enorme si el canal del video coincide con el artista (de iTunes).
+    //    Esto refuerza que sea el canal OFICIAL del artista, no un tribute.
     if (expectedArtist && v.channel && v.channel.name) {
       const ch = (v.channel.name || "").toLowerCase();
       const art = expectedArtist.toLowerCase();
@@ -215,7 +232,7 @@ export async function GET(req) {
     // ── Apple Music / iTunes ──
     const appleUrl = itunesUrl || "";
     if (appleUrl.includes("apple.com") || appleUrl.includes("itunes.apple.com")) {
-      const video = await buscarEnYouTube(query, null, null).catch(() => null);
+      const video = await buscarEnYouTube(query, null, null, null).catch(() => null);
 
       /* Mismo orden que en la búsqueda normal: primero la Mac de casa,
          que es la única que puede dar un archivo cacheable. Antes esta
@@ -271,7 +288,8 @@ export async function GET(req) {
     const video = await buscarEnYouTube(
       searchQuery,
       p.get("expected_duration") ? Number(p.get("expected_duration")) : null,
-      p.get("expected_artist") || null
+      p.get("expected_artist") || null,
+      p.get("expected_song") || null
     );
     if (!video) {
       return NextResponse.json(

@@ -113,6 +113,12 @@ async function processOne(track, currentQueue, setQueue) {
   if (track.artist) {
     params.set("expected_artist", track.artist);
   }
+  // Titulo esperado de iTunes para que el filtro descarte videos de 'otra
+  // cancion con nombre parecido'. Si mas de la mitad de las palabras
+  // significativas del titulo no aparecen en el titulo del video -> descartado.
+  if (track.name) {
+    params.set("expected_song", track.name);
+  }
   const res = await fetch("/api/download-mp3?" + params.toString());
   const data = await res.json().catch(() => ({}));
 
