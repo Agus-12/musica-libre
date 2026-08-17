@@ -19,7 +19,21 @@ export default function SpotifyPage() {
   const [charts, setCharts] = useState(null);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [playingTrack, setPlayingTrack] = useState(null);
-  const [copiedId, setCopiedId] = useState(null);
+  const [offlineMsg, setOfflineMsg] = useState("");
+
+  // Checar si una canción ya está guardada offline
+  function isSavedOffline(itemId) {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
+      return !!saved[String(itemId)];
+    } catch { return false; }
+  }
+
+  // Mostrar mensaje temporal
+  function showOfflineMsg(msg) {
+    setOfflineMsg(msg);
+    setTimeout(() => setOfflineMsg(""), 3000);
+  }
   const audioRef = useRef(null);
 
   // Load charts on mount
@@ -205,6 +219,11 @@ export default function SpotifyPage() {
 
   async function handleSaveOffline(e, itemType, itemId, name, artistName, source, sourceUrl, coverUrl) {
     e.stopPropagation();
+    // Si ya está guardado offline, solo mostrar mensaje
+    if (isSavedOffline(itemId)) {
+      showOfflineMsg("🎵 Esta canción ya está disponible offline");
+      return;
+    }
     // 1) Guardar en favoritos (perfil)
     if (!isFavorite(itemType, String(itemId))) {
       toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source);
@@ -212,15 +231,11 @@ export default function SpotifyPage() {
     // 2) Guardar portada en caché para ver sin internet
     if (coverUrl) {
       try {
-        // Guardar imagen en el Service Worker cache
         if ("caches" in window) {
           const cache = await caches.open("ml-saved-v1");
-          // Guardar la imagen original
           await cache.add(coverUrl);
-          // También guardar por proxy por si hay CORS
           try { await cache.add("/api/proxy?url=" + encodeURIComponent(coverUrl)); } catch {}
         }
-        // Guardar también el preview de audio si existe
         const track = album?.tracks?.find(t => String(t.number) === String(itemId) || t.name === name);
         if (track?.preview_url) {
           try {
@@ -230,14 +245,13 @@ export default function SpotifyPage() {
         }
       } catch {}
     }
-    // Guardar metadata en localStorage para acceso offline
+    // Guardar metadata en localStorage
     try {
       const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
       saved[String(itemId)] = { name, artist: artistName, cover_url: coverUrl, source, source_url: sourceUrl, saved_at: Date.now() };
       localStorage.setItem("ml_offline", JSON.stringify(saved));
     } catch {}
-    setCopiedId(String(itemId));
-    setTimeout(() => setCopiedId(null), 2500);
+    showOfflineMsg("✅ Guardada para ver sin internet");
   }
 
   // ── Styles ──
@@ -250,8 +264,15 @@ export default function SpotifyPage() {
   const src = results?.source || "";
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "15px 20px", minHeight: "100vh" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "15px 20px", minHeight: "100vh", position: "relative" }}>
       {playlistModal && <AddToPlaylistModal item={playlistModal} onClose={() => setPlaylistModal(null)} />}
+      {/* Mensaje offline flotante */}
+      {offlineMsg && (
+        <div style={{ position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)", background: "rgba(34,197,94,0.95)", color: "#fff", padding: "10px 20px", borderRadius: 12, fontSize: "0.9em", fontWeight: 600, boxShadow: "0 4px 20px rgba(34,197,94,0.4)", zIndex: 9999, whiteSpace: "nowrap", animation: "fadeInUp 0.3s ease" }}>
+          {offlineMsg}
+          <style>{"@keyframes fadeInUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}"}</style>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
@@ -382,7 +403,7 @@ export default function SpotifyPage() {
               <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4 }}>
                 <ActionBtn active={isFavorite("album", album.id)} onClick={e => handleFavorite(e, "album", album.id, album.name, album.artist, album.cover_xl || album.cover_big, album.source)} type="fav" size="lg" />
                 <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "album", album.id, album.name, album.artist, album.cover_xl || album.cover_big, album.source)} type="add" size="lg" />
-                <ShareBtn onClick={e => handleSaveOffline(e, "album", album.id, album.name, album.artist, album.source, album.source_url, album.cover_xl || album.cover_big || album.cover_medium)} copied={copiedId === String(album.id)} size="lg" />
+                <ShareBtn onClick={e => handleSaveOffline(e, "album", album.id, album.name, album.artist, album.source, album.source_url, album.cover_xl || album.cover_big || album.cover_medium)} saved={isSavedOffline(album.id)} size="lg" />
               </div>
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
@@ -422,7 +443,7 @@ export default function SpotifyPage() {
                       {track.duration && <span style={{ color: "#555", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
                       <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} type="fav" size="sm" />
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
-                      <ShareBtn onClick={e => handleSaveOffline(e, "track", trackKey, track.name, track.artist || album.artist, album.source, track.source_url || album.source_url, album.cover_xl || album.cover_big || album.cover_medium)} copied={copiedId === trackKey} size="sm" />
+                      <ShareBtn onClick={e => handleSaveOffline(e, "track", trackKey, track.name, track.artist || album.artist, album.source, track.source_url || album.source_url, album.cover_xl || album.cover_big || album.cover_medium)} saved={isSavedOffline(trackKey)} size="sm" />
                       {track.preview_url && (
                         <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : "#7c5cfc"}>
@@ -499,12 +520,12 @@ function ActionBtn({ active, onClick, type, size = "md", pos }) {
 }
 
 
-function ShareBtn({ onClick, copied, size = "md" }) {
+function ShareBtn({ onClick, saved, size = "md" }) {
   const sizes = { sm: 24, md: 28, lg: 34 };
   const s = sizes[size] || 28;
   return (
-    <button onClick={onClick} style={{ background: copied ? "rgba(34,197,94,0.9)" : "rgba(0,0,0,0.6)", border: copied ? "1px solid rgba(34,197,94,0.5)" : "1px solid rgba(255,255,255,0.15)", borderRadius: "50%", width: s, height: s, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s", boxShadow: copied ? "0 0 8px rgba(34,197,94,0.4)" : "none" }} title={copied ? "¡Guardado para offline!" : "Guardar para ver sin internet"}>
-      {copied ? (
+    <button onClick={onClick} style={{ background: saved ? "rgba(34,197,94,0.9)" : "rgba(0,0,0,0.6)", border: saved ? "1px solid rgba(34,197,94,0.5)" : "1px solid rgba(255,255,255,0.15)", borderRadius: "50%", width: s, height: s, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.2s", boxShadow: saved ? "0 0 8px rgba(34,197,94,0.4)" : "none" }} title={saved ? "Ya disponible offline" : "Guardar para ver sin internet"}>
+      {saved ? (
         <svg width={s * 0.45} height={s * 0.45} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
       ) : (
         <svg width={s * 0.45} height={s * 0.45} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -589,7 +610,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
           <div style={{ position: "absolute", top: 5, right: 5, display: "flex", gap: 3 }}>
             <ActionBtn active={isFavorite("album", a.id)} onClick={e => onFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="fav" size="sm" />
             <ActionBtn active={false} onClick={e => onPlaylist(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="add" size="sm" />
-            <ShareBtn onClick={e => { e.stopPropagation(); if(!isFavorite("album", String(a.id))){ toggleFavorite("album", String(a.id), a.name, a.artist, a.cover_big || a.cover_xl || a.cover_medium, a.source || source); } const imgUrl = a.cover_big || a.cover_xl || a.cover_medium; if(imgUrl && "caches" in window){ caches.open("ml-saved-v1").then(c => { c.add(imgUrl).catch(()=>{}); try{ c.add("/api/proxy?url=" + encodeURIComponent(imgUrl)).catch(()=>{}); }catch{} }); } try{ const saved = JSON.parse(localStorage.getItem("ml_offline")||"{}"); saved[String(a.id)] = { name: a.name, artist: a.artist, cover_url: imgUrl, source: a.source||source, saved_at: Date.now() }; localStorage.setItem("ml_offline", JSON.stringify(saved)); }catch{} setCopiedId(String(a.id)); setTimeout(()=>setCopiedId(null),2500); }} copied={copiedId === String(a.id)} size="sm" />
+            <ShareBtn onClick={e => { e.stopPropagation(); if(isSavedOffline(a.id)){ showOfflineMsg("🎵 Esta canción ya está disponible offline"); return; } if(!isFavorite("album", String(a.id))){ toggleFavorite("album", String(a.id), a.name, a.artist, a.cover_big || a.cover_xl || a.cover_medium, a.source || source); } const imgUrl = a.cover_big || a.cover_xl || a.cover_medium; if(imgUrl && "caches" in window){ caches.open("ml-saved-v1").then(c => { c.add(imgUrl).catch(()=>{}); try{ c.add("/api/proxy?url=" + encodeURIComponent(imgUrl)).catch(()=>{}); }catch{} }); } try{ const saved = JSON.parse(localStorage.getItem("ml_offline")||"{}"); saved[String(a.id)] = { name: a.name, artist: a.artist, cover_url: imgUrl, source: a.source||source, saved_at: Date.now() }; localStorage.setItem("ml_offline", JSON.stringify(saved)); }catch{} showOfflineMsg("✅ Guardada para ver sin internet"); }} saved={isSavedOffline(a.id)} size="sm" />
           </div>
           <div style={{ padding: "7px 9px" }}>
             <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
