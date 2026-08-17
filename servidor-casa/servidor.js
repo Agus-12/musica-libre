@@ -105,6 +105,56 @@ const MIME = { ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".webm": "audio/webm",
 
 // ── Descarga con yt-dlp ────────────────────────────────────────
 
+/* Busca en YouTube y devuelve varios ids ordenados por conveniencia.
+
+   Por qué varios y no uno: el primer resultado de una canción popular
+   suele ser el video oficial, y esos vienen con DRM (imposibles de
+   bajar). Los lyric videos, los "Audio" y los covers no. Además
+   descartamos lo que dure menos de 60s (recortes) o más de 15 min
+   (álbumes enteros, mixes). */
+async function buscarCandidatos(query, cuantos = 5) {
+  try {
+    const salida = await correr("yt-dlp", [
+      "--flat-playlist",
+      "--no-warnings",
+      "--quiet",
+      "--print", "%(id)s\t%(duration)s\t%(title)s",
+      `ytsearch${cuantos}:${query}`,
+    ], 45000);
+
+    const filas = salida.split("\n")
+      .map((l) => l.split("\t"))
+      .filter((c) => c.length >= 2 && /^[\w-]{11}$/.test(c[0]))
+      .map(([id, dur, titulo]) => ({
+        id,
+        dur: Number(dur) || 0,
+        titulo: (titulo || "").toLowerCase(),
+      }))
+      .filter((c) => c.dur === 0 || (c.dur >= 60 && c.dur <= 900));
+
+    /* Los que se anuncian como audio o letra primero: son los que
+       más chances tienen de no estar protegidos. */
+    const bueno = /audio|lyric|letra|full song|hq/;
+    const malo = /official video|video oficial|live|en vivo|remix|cover|reaction/;
+    filas.sort((a, b) => {
+      const pa = (bueno.test(a.titulo) ? -2 : 0) + (malo.test(a.titulo) ? 2 : 0);
+      const pb = (bueno.test(b.titulo) ? -2 : 0) + (malo.test(b.titulo) ? 2 : 0);
+      return pa - pb;
+    });
+
+    return filas.map((c) => c.id);
+  } catch (e) {
+    log("búsqueda falló:", String(e.message || "").slice(0, 100));
+    return [];
+  }
+}
+
+// Errores que significan "este video no sirve, probá con otro".
+const VIDEO_INSERVIBLE = /DRM|requested format is not available|members-only|premium|age.?restricted|sign in to confirm your age/i;
+
+// Errores que significan "no insistas con ningún cliente".
+const NO_INSISTIR = /unavailable|private|removed|copyright|no video/i;
+
 // Evita bajar dos veces lo mismo si llegan pedidos simultáneos.
 const enProceso = new Map();
 
@@ -119,8 +169,26 @@ async function obtenerAudio({ videoId, query }) {
 
   const tarea = (async () => {
     const destino = path.join(CARPETA, id + ".%(ext)s");
-    // ytsearch1: si no hay videoId, busca por texto y agarra el primero.
-    const fuente = videoId ? `https://www.youtube.com/watch?v=${videoId}` : `ytsearch1:${query}`;
+
+    /* Candidatos a descargar.
+       Si nos dieron un videoId, ese y nada más. Si es una búsqueda,
+       pedimos varios: el primer resultado suele ser el video oficial,
+       que casi siempre está protegido con DRM (los "Art Track" de
+       YouTube Music). Los lyric videos y los audios sí se bajan. */
+    let candidatos;
+    if (videoId) {
+      /* Empezamos por el id que nos pidieron. Si además vino el
+         nombre de la canción, guardamos alternativas por si ese
+         video tiene DRM (pasa mucho con los oficiales). */
+      candidatos = [videoId];
+      if (query) {
+        const extra = await buscarCandidatos(query);
+        for (const c of extra) if (c !== videoId) candidatos.push(c);
+      }
+    } else {
+      candidatos = await buscarCandidatos(query);
+      if (!candidatos.length) throw new Error("la búsqueda no devolvió resultados");
+    }
 
     /* Estrategias de descarga, de menos a más invasiva.
        YouTube a veces rechaza un cliente pero acepta otro, así que
@@ -141,43 +209,67 @@ async function obtenerAudio({ videoId, query }) {
     await esperarTurno();   // no bombardeamos YouTube
 
     let ultimoError = null;
-    for (const est of estrategias) {
-      try {
-        log(`bajando (${est.nombre}):`, clave);
-        await correr("yt-dlp", [
-          "-f", "bestaudio[ext=m4a]/bestaudio",
-          "-o", destino,
-          "--no-playlist",
-          "--no-warnings",
-          "--quiet",
-          "--no-part",
-          // Un navegador real; sin esto es más fácil que nos marquen.
-          "--user-agent", UA,
-          // Si nos limitan la tasa, reintenta en vez de morir.
-          "--retries", "3",
-          "--fragment-retries", "3",
-          ...est.args,
-          fuente,
-        ], 180000);
 
-        const archivo = buscarExistente(id);
-        if (archivo) {
-          log("listo:", path.basename(archivo),
-              (fs.statSync(archivo).size / 1048576).toFixed(1) + " MB",
-              `(via ${est.nombre})`);
-          fallosSeguidos = 0;
-          limpiarSiHaceFalta();
-          return { archivo, id };
+    /* Probamos candidato por candidato, y a cada uno todos los
+       clientes. En cuanto uno baja, listo. */
+    for (const vid of candidatos) {
+      const url = `https://www.youtube.com/watch?v=${vid}`;
+      let saltarVideo = false;
+
+      for (const est of estrategias) {
+        try {
+          log(`bajando (${est.nombre}) ${vid}:`, clave);
+          await correr("yt-dlp", [
+            "-f", "bestaudio[ext=m4a]/bestaudio",
+            "-o", destino,
+            "--no-playlist",
+            "--no-warnings",
+            "--quiet",
+            "--no-part",
+            // Un navegador real; sin esto es más fácil que nos marquen.
+            "--user-agent", UA,
+            // Si nos limitan la tasa, reintenta en vez de morir.
+            "--retries", "3",
+            "--fragment-retries", "3",
+            ...est.args,
+            url,
+          ], 180000);
+
+          const archivo = buscarExistente(id);
+          if (archivo) {
+            log("listo:", path.basename(archivo),
+                (fs.statSync(archivo).size / 1048576).toFixed(1) + " MB",
+                `(${vid} via ${est.nombre})`);
+            fallosSeguidos = 0;
+            limpiarSiHaceFalta();
+            return { archivo, id };
+          }
+          ultimoError = new Error("yt-dlp no dejó ningún archivo");
+        } catch (e) {
+          ultimoError = e;
+          const msg = String(e.message || "");
+          log(`  falló (${est.nombre}):`, msg.slice(0, 120));
+
+          /* DRM o formato inexistente = este video no sirve con ningún
+             cliente. Pasamos al siguiente candidato en vez de gastar
+             tres intentos más en el mismo. */
+          if (VIDEO_INSERVIBLE.test(msg)) {
+            log(`  ${vid} no se puede bajar (DRM o sin audio), pruebo otro`);
+            saltarVideo = true;
+            break;
+          }
+          // "no disponible" con un videoId explícito: no hay plan B.
+          if (NO_INSISTIR.test(msg)) { saltarVideo = true; break; }
+
+          await dormir(1500);
         }
-        ultimoError = new Error("yt-dlp no dejó ningún archivo");
-      } catch (e) {
-        ultimoError = e;
-        const msg = String(e.message || "");
-        log(`  falló (${est.nombre}):`, msg.slice(0, 120));
-        // Si es un bloqueo de bot, probamos el siguiente cliente.
-        // Si es "video no disponible", no tiene sentido insistir.
-        if (/unavailable|private|removed|copyright|no video/i.test(msg)) break;
-        await dormir(1500);
+      }
+
+      // Limpiamos restos parciales antes de pasar al próximo candidato.
+      if (saltarVideo) {
+        const resto = buscarExistente(id);
+        if (resto) { try { fs.unlinkSync(resto); } catch {} }
+        await dormir(1000);
       }
     }
 

@@ -81,7 +81,11 @@ async function pedirAlServidorCasero({ videoId, query }) {
 
   const token = process.env.MUSICA_TOKEN || "";
   const p = new URLSearchParams();
-  if (videoId) p.set("v", videoId); else p.set("q", query || "");
+  // Mandamos los dos: el id es lo que queremos, y el texto le sirve al
+  // servidor para buscar otra versión si ese video tiene DRM.
+  if (videoId) p.set("v", videoId);
+  if (query) p.set("q", query);
+  if (!videoId && !query) return null;
   if (token) p.set("token", token);
 
   try {
