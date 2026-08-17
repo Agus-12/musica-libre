@@ -20,13 +20,27 @@ export default function SpotifyPage() {
   const [chartsLoading, setChartsLoading] = useState(true);
   const [playingTrack, setPlayingTrack] = useState(null);
   const [offlineMsg, setOfflineMsg] = useState("");
+  const [savedOfflineIds, setSavedOfflineIds] = useState(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
+      return new Set(Object.keys(saved));
+    } catch { return new Set(); }
+  });
 
   // Checar si una canción ya está guardada offline
   function isSavedOffline(itemId) {
-    try {
-      const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
-      return !!saved[String(itemId)];
-    } catch { return false; }
+    return savedOfflineIds.has(String(itemId));
+  }
+
+  // Agregar ID a la lista de guardados offline
+  function addSavedOfflineId(itemId) {
+    setSavedOfflineIds(prev => new Set([...prev, String(itemId)]));
+  }
+
+  // Quitar ID de la lista de guardados offline
+  function removeSavedOfflineId(itemId) {
+    setSavedOfflineIds(prev => { const n = new Set(prev); n.delete(String(itemId)); return n; });
   }
 
   // Mostrar mensaje temporal
@@ -34,6 +48,26 @@ export default function SpotifyPage() {
     setOfflineMsg(msg);
     setTimeout(() => setOfflineMsg(""), 3000);
   }
+
+  // Sincronizar offline con favoritos — si se elimina un favorito, quitarlo de offline también
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
+      const favIds = new Set(favorites.map(f => f.item_id));
+      let changed = false;
+      for (const id of Object.keys(saved)) {
+        if (!favIds.has(id)) {
+          delete saved[id];
+          changed = true;
+        }
+      }
+      if (changed) {
+        localStorage.setItem("ml_offline", JSON.stringify(saved));
+        setSavedOfflineIds(new Set(Object.keys(saved)));
+      }
+    } catch {}
+  }, [favorites]);
   const audioRef = useRef(null);
 
   // Load charts on mount
@@ -252,6 +286,7 @@ export default function SpotifyPage() {
       localStorage.setItem("ml_offline", JSON.stringify(saved));
     } catch {}
     showOfflineMsg("✅ Guardada para ver sin internet");
+    addSavedOfflineId(itemId);
   }
 
   // ── Styles ──
@@ -610,7 +645,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
           <div style={{ position: "absolute", top: 5, right: 5, display: "flex", gap: 3 }}>
             <ActionBtn active={isFavorite("album", a.id)} onClick={e => onFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="fav" size="sm" />
             <ActionBtn active={false} onClick={e => onPlaylist(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="add" size="sm" />
-            <ShareBtn onClick={e => { e.stopPropagation(); if(isSavedOffline(a.id)){ showOfflineMsg("🎵 Esta canción ya está disponible offline"); return; } if(!isFavorite("album", String(a.id))){ toggleFavorite("album", String(a.id), a.name, a.artist, a.cover_big || a.cover_xl || a.cover_medium, a.source || source); } const imgUrl = a.cover_big || a.cover_xl || a.cover_medium; if(imgUrl && "caches" in window){ caches.open("ml-saved-v1").then(c => { c.add(imgUrl).catch(()=>{}); try{ c.add("/api/proxy?url=" + encodeURIComponent(imgUrl)).catch(()=>{}); }catch{} }); } try{ const saved = JSON.parse(localStorage.getItem("ml_offline")||"{}"); saved[String(a.id)] = { name: a.name, artist: a.artist, cover_url: imgUrl, source: a.source||source, saved_at: Date.now() }; localStorage.setItem("ml_offline", JSON.stringify(saved)); }catch{} showOfflineMsg("✅ Guardada para ver sin internet"); }} saved={isSavedOffline(a.id)} size="sm" />
+            <ShareBtn onClick={e => { e.stopPropagation(); if(isSavedOffline(a.id)){ showOfflineMsg("🎵 Esta canción ya está disponible offline"); return; } if(!isFavorite("album", String(a.id))){ toggleFavorite("album", String(a.id), a.name, a.artist, a.cover_big || a.cover_xl || a.cover_medium, a.source || source); } const imgUrl = a.cover_big || a.cover_xl || a.cover_medium; if(imgUrl && "caches" in window){ caches.open("ml-saved-v1").then(c => { c.add(imgUrl).catch(()=>{}); try{ c.add("/api/proxy?url=" + encodeURIComponent(imgUrl)).catch(()=>{}); }catch{} }); } try{ const saved = JSON.parse(localStorage.getItem("ml_offline")||"{}"); saved[String(a.id)] = { name: a.name, artist: a.artist, cover_url: imgUrl, source: a.source||source, saved_at: Date.now() }; localStorage.setItem("ml_offline", JSON.stringify(saved)); }catch{} showOfflineMsg("✅ Guardada para ver sin internet"); addSavedOfflineId(a.id); }} saved={isSavedOffline(a.id)} size="sm" />
           </div>
           <div style={{ padding: "7px 9px" }}>
             <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>

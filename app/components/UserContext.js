@@ -88,6 +88,14 @@ export function UserProvider({ children }) {
     // Optimistic update (works offline)
     if (isFav) {
       setFavorites(prev => prev.filter(f => !(f.item_type === itemType && f.item_id === String(itemId))));
+      // También eliminar del offline cache
+      try {
+        const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
+        if (saved[String(itemId)]) {
+          delete saved[String(itemId)];
+          localStorage.setItem("ml_offline", JSON.stringify(saved));
+        }
+      } catch {}
     } else {
       const newFav = {
         id: "temp-" + Date.now(),
