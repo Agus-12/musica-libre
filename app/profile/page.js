@@ -84,7 +84,7 @@ export default function ProfilePage() {
                     {f.cover_url ? (
                       <img src={f.cover_url} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} />
                     ) : (
-                      <div style={{ width: "100%", aspectRatio: 1, background: "#2a2a3e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2em" }}>?</div>
+                      <div style={{ width: "100%", aspectRatio: 1, background: "linear-gradient(135deg, #1a1a2e, #2a2a3e)", display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
                     )}
                   </a>
                   <div style={{ padding: "7px 9px" }}>

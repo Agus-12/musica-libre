@@ -350,8 +350,8 @@ export default function SpotifyPage() {
                         {track.artist && track.artist !== album.artist && <div style={{ color: "#666", fontSize: "0.75em" }}>{track.artist}</div>}
                       </div>
                       {track.duration && <span style={{ color: "#555", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
-                      <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, "", album.source)} type="fav" size="sm" />
-                      <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, "", album.source)} type="add" size="sm" />
+                      <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="fav" size="sm" />
+                      <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
                       <ShareBtn onClick={e => handleShare(e, "track", trackKey, track.name, track.artist || album.artist, album.source)} copied={copiedId === trackKey} size="sm" />
                       {track.preview_url && (
                         <button onClick={() => playPreview(track.preview_url, trackKey)} style={{ background: isPlaying ? "#7c5cfc" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
