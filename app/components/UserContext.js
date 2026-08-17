@@ -88,10 +88,15 @@ export function UserProvider({ children }) {
     // Optimistic update (works offline)
     if (isFav) {
       setFavorites(prev => prev.filter(f => !(f.item_type === itemType && f.item_id === String(itemId))));
-      // También eliminar del offline cache
+      // También eliminar del offline cache (y todas las canciones si es álbum)
       try {
         const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
         if (saved[String(itemId)]) {
+          // Si es álbum, eliminar todas las canciones también
+          const trackIds = saved[String(itemId)].track_ids || [];
+          for (const tid of trackIds) {
+            delete saved[tid];
+          }
           delete saved[String(itemId)];
           localStorage.setItem("ml_offline", JSON.stringify(saved));
         }

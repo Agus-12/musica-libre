@@ -49,7 +49,7 @@ export default function SpotifyPage() {
     setTimeout(() => setOfflineMsg(""), 3000);
   }
 
-  // Sincronizar offline con favoritos — si se elimina un favorito, quitarlo de offline también
+  // Sincronizar offline con favoritos — si se elimina un álbum favorito, quitarlo y sus canciones de offline
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -57,7 +57,16 @@ export default function SpotifyPage() {
       const favIds = new Set(favorites.map(f => f.item_id));
       let changed = false;
       for (const id of Object.keys(saved)) {
-        if (!favIds.has(id)) {
+        const entry = saved[id];
+        // Si es un álbum que ya no es favorito, eliminarlo + sus canciones
+        if (!entry.album_id && !favIds.has(id)) {
+          const trackIds = entry.track_ids || [];
+          for (const tid of trackIds) { delete saved[tid]; }
+          delete saved[id];
+          changed = true;
+        }
+        // Si es una canción cuyo álbum ya no está en offline, eliminarla
+        if (entry.album_id && !saved[entry.album_id]) {
           delete saved[id];
           changed = true;
         }
@@ -255,7 +264,7 @@ export default function SpotifyPage() {
     e.stopPropagation();
     // Si ya está guardado offline, solo mostrar mensaje
     if (isSavedOffline(itemId)) {
-      showOfflineMsg("🎵 Esta canción ya está disponible offline");
+      showOfflineMsg("🎵 Ya está disponible offline");
       return;
     }
     // 1) Guardar en favoritos (perfil)
@@ -270,22 +279,58 @@ export default function SpotifyPage() {
           await cache.add(coverUrl);
           try { await cache.add("/api/proxy?url=" + encodeURIComponent(coverUrl)); } catch {}
         }
-        const track = album?.tracks?.find(t => String(t.number) === String(itemId) || t.name === name);
-        if (track?.preview_url) {
-          try {
-            const cache = await caches.open("ml-saved-v1");
-            await cache.add(track.preview_url);
-          } catch {}
-        }
       } catch {}
     }
-    // Guardar metadata en localStorage
+    // 3) Si es álbum, guardar TODAS las canciones también
+    if (itemType === "album" && album?.tracks) {
+      const trackIds = [];
+      for (let i = 0; i < album.tracks.length; i++) {
+        const t = album.tracks[i];
+        const tKey = String(t.id || `${itemId}-${i}`);
+        // Guardar preview de audio en caché
+        if (t.preview_url) {
+          try {
+            if ("caches" in window) {
+              const cache = await caches.open("ml-saved-v1");
+              await cache.add(t.preview_url);
+            }
+          } catch {}
+        }
+        // Guardar metadata de cada canción
+        try {
+          const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
+          saved[tKey] = { name: t.name, artist: t.artist || artistName, cover_url: coverUrl, source, album_id: String(itemId), saved_at: Date.now() };
+          localStorage.setItem("ml_offline", JSON.stringify(saved));
+        } catch {}
+        trackIds.push(tKey);
+      }
+      // Actualizar palomitas de todas las canciones
+      for (const tid of trackIds) addSavedOfflineId(tid);
+    } else {
+      // Canción individual: guardar preview de audio
+      const track = album?.tracks?.find(t => String(t.id) === String(itemId) || t.name === name);
+      if (track?.preview_url) {
+        try {
+          if ("caches" in window) {
+            const cache = await caches.open("ml-saved-v1");
+            await cache.add(track.preview_url);
+          }
+        } catch {}
+      }
+    }
+    // Guardar metadata del item principal en localStorage
     try {
       const saved = JSON.parse(localStorage.getItem("ml_offline") || "{}");
-      saved[String(itemId)] = { name, artist: artistName, cover_url: coverUrl, source, source_url: sourceUrl, saved_at: Date.now() };
+      const entry = { name, artist: artistName, cover_url: coverUrl, source, source_url: sourceUrl, saved_at: Date.now() };
+      // Si es álbum, guardar los IDs de las canciones para poder eliminarlas después
+      if (itemType === "album" && album?.tracks) {
+        entry.track_ids = album.tracks.map((t, i) => String(t.id || `${itemId}-${i}`));
+      }
+      saved[String(itemId)] = entry;
       localStorage.setItem("ml_offline", JSON.stringify(saved));
     } catch {}
-    showOfflineMsg("✅ Guardada para ver sin internet");
+    const msg = itemType === "album" ? "✅ Álbum guardado offline con todas sus canciones" : "✅ Guardada para ver sin internet";
+    showOfflineMsg(msg);
     addSavedOfflineId(itemId);
   }
 
