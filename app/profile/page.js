@@ -66,12 +66,24 @@ export default function ProfilePage() {
   const progressRef = useRef(null);
   const playerReadyRef = useRef(false);   // el iframe de YouTube ya está listo
   const playerInitRef = useRef(null);     // promesa de creación (evita duplicados)
+  const pendingRef = useRef(null);        // canción a tocar apenas el player esté listo
+  const kickRef = useRef(null);           // reintentos de play
   const [downloadedMusic, setDownloadedMusic] = useState([]);
 
   // Arrastre de la barra de progreso estilo iTunes
   const [seeking, setSeeking] = useState(false);
   const [seekPct, setSeekPct] = useState(0);
   const barRef = useRef(null);
+
+  // Buscador, orden aleatorio, repetición y vista ampliada (celular)
+  const [search, setSearch] = useState("");
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState("off");   // off | all | one
+  const [expanded, setExpanded] = useState(false);
+
+  // Espejo del estado para los callbacks del player (que se registran una vez
+  // y si no, verían valores viejos).
+  const liveRef = useRef({ list: [], playingKey: null, shuffle: false, repeat: "off" });
 
   function refreshDownloads() {
     try {
@@ -122,7 +134,14 @@ export default function ProfilePage() {
   }
 
   useEffect(() => { refreshDownloads(); }, [favorites]);
-  useEffect(() => { loadYTAPI(); }, []);
+
+  /* CLAVE PARA EL AUTOPLAY: creamos el reproductor apenas carga la página,
+     NO cuando tocás una canción. Antes el iframe nacía dentro del click y
+     tardaba en estar listo; para cuando respondía, el navegador ya había
+     descartado el "gesto del usuario" y bloqueaba el sonido — por eso había
+     que darle play una segunda vez. Ahora, al tocar, el player ya existe y
+     playVideo() se ejecuta dentro del mismo gesto. */
+  useEffect(() => { ensurePlayer(); }, []);
 
   useEffect(() => {
     if (isPlaying && playerRef.current) {
@@ -134,6 +153,21 @@ export default function ProfilePage() {
     } else { if (progressRef.current) clearInterval(progressRef.current); }
     return () => { if (progressRef.current) clearInterval(progressRef.current); };
   }, [isPlaying, seeking]);
+
+  // Con el reproductor desplegado, bloqueamos el scroll del fondo (como iTunes)
+  useEffect(() => {
+    if (expanded) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [expanded]);
+
+  // Si se cierra la reproducción, replegamos la pantalla completa
+  useEffect(() => { if (playingKey === null) setExpanded(false); }, [playingKey]);
+
+  // Limpieza de los reintentos de play al desmontar
+  useEffect(() => () => { if (kickRef.current) clearInterval(kickRef.current); }, []);
 
   // ── Arrastre de la barra (mouse + touch), estilo iTunes ──
   function pctFromEvent(e) {
@@ -185,12 +219,20 @@ export default function ProfilePage() {
             height: "1", width: "1",
             playerVars: { controls:0, disablekb:1, fs:0, modestbranding:1, rel:0, showinfo:0, iv_load_policy:3, playsinline:1 },
             events: {
-              onReady: () => { playerReadyRef.current = true; resolve(playerRef.current); },
+              onReady: () => {
+                playerReadyRef.current = true;
+                // Si tocaste una canción mientras el player todavía se creaba,
+                // la arrancamos ahora en lugar de perderla.
+                const p = pendingRef.current;
+                if (p) { pendingRef.current = null; startTrack(p); }
+                resolve(playerRef.current);
+              },
               onStateChange: (e) => {
-                if (e.data === 0) {           // terminó
-                  setIsPlaying(false);
-                  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+                if (e.data === 0) {           // terminó → siguiente
+                  if (kickRef.current) { clearInterval(kickRef.current); kickRef.current = null; }
+                  handleTrackEnd();
                 } else if (e.data === 1) {    // reproduciendo
+                  if (kickRef.current) { clearInterval(kickRef.current); kickRef.current = null; }
                   setIsPlaying(true);
                   try { setDuration(playerRef.current.getDuration() || 0); } catch {}
                   if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
@@ -210,6 +252,89 @@ export default function ProfilePage() {
     return playerInitRef.current;
   }
 
+  /* Red de seguridad: algunos navegadores (sobre todo Safari/Chrome en
+     celular) ignoran el primer playVideo() si el video todavía se está
+     cargando. Reintentamos unas cuantas veces hasta que suene de verdad. */
+  function kickPlay() {
+    if (kickRef.current) clearInterval(kickRef.current);
+    let intentos = 0;
+    kickRef.current = setInterval(() => {
+      intentos++;
+      const p = playerRef.current;
+      if (!p) { clearInterval(kickRef.current); kickRef.current = null; return; }
+      let estado = -1;
+      try { estado = p.getPlayerState(); } catch {}
+      if (estado === 1) { clearInterval(kickRef.current); kickRef.current = null; return; }
+      try { p.playVideo(); } catch {}
+      if (intentos >= 12) { clearInterval(kickRef.current); kickRef.current = null; }
+    }, 350);
+  }
+
+  function startTrack(item) {
+    const p = playerRef.current;
+    if (!p) return;
+    setPlayingKey(item.key); setPlayingTitle(item.title);
+    setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
+    setProgress(0); setCurrentTime(0); setDuration(0);
+    try {
+      p.loadVideoById(item.video_id);   // loadVideoById ya arranca solo
+      try { p.playVideo(); } catch {}   // y por las dudas lo empujamos
+      setIsPlaying(true);
+      kickPlay();
+      setupMediaSession(item);
+    } catch {
+      toast.error("No se pudo reproducir", 3000);
+      setPlayingKey(null); setIsPlaying(false);
+    }
+  }
+
+  // Lista en el orden en que se ve (respeta el buscador)
+  function visibleList() {
+    return liveRef.current.list || [];
+  }
+
+  function pickNext(dir = 1) {
+    const lista = visibleList();
+    if (!lista.length) return null;
+    const actual = liveRef.current.playingKey;
+    const i = lista.findIndex(x => x.key === actual);
+
+    if (liveRef.current.shuffle) {
+      if (lista.length === 1) return lista[0];
+      let r = i;
+      while (r === i) r = Math.floor(Math.random() * lista.length);
+      return lista[r];
+    }
+    if (i === -1) return lista[0];
+    const sig = i + dir;
+    if (sig < 0) return lista[lista.length - 1];
+    if (sig >= lista.length) {
+      return liveRef.current.repeat === "all" ? lista[0] : null;
+    }
+    return lista[sig];
+  }
+
+  function handleTrackEnd() {
+    if (liveRef.current.repeat === "one") {
+      const lista = visibleList();
+      const act = lista.find(x => x.key === liveRef.current.playingKey);
+      if (act) { startTrack(act); return; }
+    }
+    const sig = pickNext(1);
+    if (sig) startTrack(sig);
+    else {
+      setIsPlaying(false);
+      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+    }
+  }
+
+  function playNext() { const s = pickNext(1); if (s) startTrack(s); }
+  function playPrev() {
+    // Como en iTunes: si ya pasaron 3s, primero vuelve al inicio del tema
+    if (currentTime > 3) { seekTo(0); return; }
+    const s = pickNext(-1); if (s) startTrack(s);
+  }
+
   function setupMediaSession(item) {
     if (!("mediaSession" in navigator)) return;
     const as = item.cover_url ? "/api/proxy?url=" + encodeURIComponent(item.cover_url) : "";
@@ -224,6 +349,9 @@ export default function ProfilePage() {
     navigator.mediaSession.setActionHandler("pause", () => { playerRef.current?.pauseVideo(); setIsPlaying(false); });
     try { navigator.mediaSession.setActionHandler("stop", () => stopPlayback()); } catch {}
     try { navigator.mediaSession.setActionHandler("seekto", (d) => { if (d.seekTime != null) seekTo(d.seekTime); }); } catch {}
+    // Botones de anterior/siguiente en la pantalla de bloqueo del celular
+    try { navigator.mediaSession.setActionHandler("nexttrack", () => playNext()); } catch {}
+    try { navigator.mediaSession.setActionHandler("previoustrack", () => playPrev()); } catch {}
   }
 
   async function playDownloaded(item) {
@@ -249,18 +377,20 @@ export default function ProfilePage() {
         } else { toast.error("No se encontro en YouTube", 3000); return; }
       } catch { toast.error("Error buscando", 3000); return; }
     }
-    setPlayingKey(item.key); setPlayingTitle(item.title); setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
-    setProgress(0); setCurrentTime(0); setDuration(0);
+    // Si el player ya está listo (caso normal, se creó al abrir la página),
+    // arrancamos EN EL MISMO gesto del toque → suena a la primera.
+    if (playerReadyRef.current && playerRef.current) { startTrack(item); return; }
 
+    // Caso raro: todavía se está creando. Lo dejamos agendado y onReady lo toca.
+    pendingRef.current = item;
+    setPlayingKey(item.key); setPlayingTitle(item.title);
+    setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
     const player = await ensurePlayer();
-    if (!player) { toast.error("No se pudo iniciar el reproductor", 3000); setPlayingKey(null); return; }
-
-    try {
-      // loadVideoById arranca solo — no hace falta destruir ni recrear nada.
-      player.loadVideoById(item.video_id);
-      setIsPlaying(true);
-      setupMediaSession(item);
-    } catch { toast.error("No se pudo reproducir", 3000); setPlayingKey(null); setIsPlaying(false); }
+    if (!player) {
+      pendingRef.current = null;
+      toast.error("No se pudo iniciar el reproductor", 3000);
+      setPlayingKey(null);
+    }
   }
 
   function seekTo(seconds) {
@@ -344,6 +474,17 @@ export default function ProfilePage() {
     } catch {}
   }
 
+  // Lista filtrada por el buscador (lo que realmente se ve en pantalla)
+  const q = search.trim().toLowerCase();
+  const listaVisible = q
+    ? downloadedMusic.filter(x =>
+        (x.title || "").toLowerCase().includes(q) ||
+        (x.artist || "").toLowerCase().includes(q))
+    : downloadedMusic;
+
+  // Mantenemos el espejo al día para los callbacks del player
+  liveRef.current = { list: listaVisible, playingKey, shuffle, repeat };
+
   if(loading) return <div style={{textAlign:"center",padding:60,color:"#7c5cfc"}}>Cargando...</div>;
 
   const filteredFavs = favorites.filter(f=>f.item_type===favType);
@@ -367,7 +508,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:20,paddingBottom:hp?90:20}}>
+    <div style={{maxWidth:900,margin:"0 auto",padding:20,paddingBottom:hp?86:20}}>
       <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
 
       {/* Header */}
@@ -409,8 +550,60 @@ export default function ProfilePage() {
               <p style={{fontSize:"0.85em"}}>Anda a <a href="/spotify" style={{color:"#7c5cfc",fontWeight:600}}>Musica</a> y dale corazn a una cancion</p>
             </div>
           ) : (
+            <>
+            {/* Buscador + controles */}
+            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+              <div style={{position:"relative",flex:1,minWidth:190}}>
+                <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",display:"flex",pointerEvents:"none"}}>
+                  <Ico d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} size={15} stroke="#666"/>
+                </span>
+                <input
+                  value={search}
+                  onChange={e=>setSearch(e.target.value)}
+                  placeholder="Buscar en tus descargas..."
+                  style={{width:"100%",padding:"11px 34px 11px 36px",borderRadius:10,border:"1px solid #2a2a3e",background:"#12121f",color:"#e0e0e0",fontSize:"0.9em",outline:"none"}}
+                />
+                {search && (
+                  <button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}>
+                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="#666"/>
+                  </button>
+                )}
+              </div>
+
+              {/* Reproducir todo */}
+              <button
+                onClick={()=>{ const l=listaVisible; if(!l.length)return; startTrack(shuffle ? l[Math.floor(Math.random()*l.length)] : l[0]); }}
+                title="Reproducir todo"
+                style={{display:"flex",alignItems:"center",gap:7,padding:"11px 16px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",fontWeight:700,fontSize:"0.85em",boxShadow:"0 3px 12px rgba(34,197,94,0.3)"}}>
+                <IcoPlay size={14}/> Reproducir
+              </button>
+
+              {/* Aleatorio */}
+              <button
+                onClick={()=>{ setShuffle(s=>!s); toast.info(!shuffle?"Aleatorio activado":"Aleatorio desactivado",2000); }}
+                title="Reproducción aleatoria"
+                style={{display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,borderRadius:10,cursor:"pointer",background:shuffle?"rgba(34,197,94,0.16)":"#12121f",border:shuffle?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
+                <Ico d={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>} size={17} stroke={shuffle?"#22c55e":"#777"}/>
+              </button>
+
+              {/* Repetir */}
+              <button
+                onClick={()=>{ const o=repeat==="off"?"all":repeat==="all"?"one":"off"; setRepeat(o); toast.info(o==="off"?"Repetir desactivado":o==="all"?"Repetir todo":"Repetir esta canción",2000); }}
+                title="Repetir"
+                style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,borderRadius:10,cursor:"pointer",background:repeat!=="off"?"rgba(34,197,94,0.16)":"#12121f",border:repeat!=="off"?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
+                <Ico d={<><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></>} size={17} stroke={repeat!=="off"?"#22c55e":"#777"}/>
+                {repeat==="one" && <span style={{position:"absolute",bottom:4,right:5,fontSize:"0.55em",fontWeight:800,color:"#22c55e"}}>1</span>}
+              </button>
+            </div>
+
+            {listaVisible.length===0 ? (
+              <div style={{textAlign:"center",padding:34,color:"#666",background:"#1a1a2e",borderRadius:12,border:"1px solid #2a2a3e"}}>
+                <Ico d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} size={30} stroke="#444"/>
+                <p style={{marginTop:10,fontSize:"0.9em"}}>Sin resultados para “{search}”</p>
+              </div>
+            ) : (
             <div style={{background:"#1a1a2e",borderRadius:12,border:"1px solid #2a2a3e",overflow:"hidden"}}>
-              {downloadedMusic.map(item => {
+              {listaVisible.map(item => {
                 const cp = playingKey===item.key;
                 const dl = downloadingItems[item.key];
                 return (
@@ -439,6 +632,8 @@ export default function ProfilePage() {
                 );
               })}
             </div>
+            )}
+            </>
           )}
         </div>
       )}
@@ -532,73 +727,143 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Now Playing Bar */}
+      {/* ═══ REPRODUCTOR ═══
+          Mini-barra abajo. Al tocarla (o deslizar hacia arriba) se despliega
+          a pantalla completa estilo iTunes/Apple Music del celular. */}
       {hp && (
-        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(180deg, rgba(22,22,38,0.98) 0%, rgba(12,12,22,0.99) 100%)",borderTop:"1px solid rgba(124,92,252,0.18)",zIndex:9999,backdropFilter:"blur(20px)",boxShadow:"0 -8px 32px rgba(0,0,0,0.45)"}}>
-          <div style={{maxWidth:900,margin:"0 auto",padding:"12px 16px 14px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:14}}>
-              {/* Portada */}
+        <>
+          {/* ── Mini-barra ── */}
+          <div
+            onClick={()=>setExpanded(true)}
+            style={{position:"fixed",bottom:0,left:0,right:0,background:"linear-gradient(180deg,rgba(24,24,40,0.98),rgba(12,12,22,0.99))",borderTop:"1px solid rgba(124,92,252,0.18)",zIndex:9998,backdropFilter:"blur(20px)",boxShadow:"0 -8px 32px rgba(0,0,0,0.5)",cursor:"pointer",transform:expanded?"translateY(100%)":"translateY(0)",transition:"transform 0.32s cubic-bezier(0.32,0.72,0,1)"}}>
+            {/* Progreso finito arriba */}
+            <div style={{height:2.5,background:"rgba(255,255,255,0.07)"}}>
+              <div style={{height:"100%",width:progress+"%",background:"linear-gradient(90deg,#22c55e,#4ade80)",transition:"width 0.25s linear"}}/>
+            </div>
+            <div style={{maxWidth:900,margin:"0 auto",padding:"9px 14px",display:"flex",alignItems:"center",gap:12}}>
               {playingCover
-                ? <img src={playingCover} alt="" style={{width:52,height:52,borderRadius:10,objectFit:"cover",flexShrink:0,boxShadow:"0 4px 16px rgba(0,0,0,0.5)"}}/>
-                : <div style={{width:52,height:52,borderRadius:10,flexShrink:0,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={22} stroke="#555" sw={1.5}/>
+                ? <img src={playingCover} alt="" style={{width:46,height:46,borderRadius:8,objectFit:"cover",flexShrink:0,boxShadow:"0 3px 12px rgba(0,0,0,0.5)"}}/>
+                : <div style={{width:46,height:46,borderRadius:8,flexShrink:0,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={20} stroke="#555" sw={1.5}/>
                   </div>}
-
-              {/* Título + barra estilo iTunes */}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{color:"#f0f0f0",fontSize:"0.92em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
-                <div style={{color:"#8a8a9a",fontSize:"0.76em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:7}}>{playingArtist}</div>
+                <div style={{color:"#f0f0f0",fontSize:"0.88em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
+                <div style={{color:"#8a8a9a",fontSize:"0.74em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingArtist}</div>
+              </div>
+              <button
+                onClick={e=>{e.stopPropagation();if(!playerRef.current||!playerReadyRef.current)return;if(isPlaying){playerRef.current.pauseVideo();setIsPlaying(false);}else{playerRef.current.playVideo();setIsPlaying(true);kickPlay();}}}
+                title={isPlaying?"Pausar":"Reproducir"}
+                style={{background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:"50%",width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 3px 12px rgba(34,197,94,0.4)"}}>
+                {isPlaying ? <IcoPause size={17}/> : <IcoPlay size={17}/>}
+              </button>
+              <button onClick={e=>{e.stopPropagation();playNext();}} title="Siguiente"
+                style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex",flexShrink:0}}>
+                <Ico d={<><polygon points="5 4 15 12 5 20 5 4" fill="#9a9aaa" stroke="none"/><line x1="19" y1="5" x2="19" y2="19"/></>} size={19} stroke="#9a9aaa" sw={2.2}/>
+              </button>
+            </div>
+          </div>
 
-                <div style={{display:"flex",alignItems:"center",gap:9}}>
-                  <span style={{color:"#7a7a8a",fontSize:"0.68em",fontVariantNumeric:"tabular-nums",flexShrink:0,minWidth:32,textAlign:"right"}}>
-                    {fmt(seeking ? (seekPct/100)*duration : currentTime)}
-                  </span>
+          {/* ── Pantalla completa (desplegada) ── */}
+          <div
+            style={{position:"fixed",inset:0,zIndex:9999,background:"linear-gradient(180deg,#1a1a2e 0%,#12121f 45%,#0a0a14 100%)",display:"flex",flexDirection:"column",transform:expanded?"translateY(0)":"translateY(100%)",transition:"transform 0.38s cubic-bezier(0.32,0.72,0,1)",overflow:"hidden"}}>
 
-                  {/* Barra arrastrable: click o deslizar para adelantar/retroceder */}
-                  <div
-                    ref={barRef}
-                    onMouseDown={startSeek}
-                    onTouchStart={startSeek}
-                    style={{flex:1,padding:"9px 0",cursor:"pointer",touchAction:"none"}}
-                  >
-                    <div style={{position:"relative",height:5,borderRadius:3,background:"rgba(255,255,255,0.11)"}}>
-                      <div style={{position:"absolute",top:0,left:0,height:"100%",borderRadius:3,width:(seeking?seekPct:progress)+"%",background:"linear-gradient(90deg,#22c55e,#4ade80)",transition:seeking?"none":"width 0.25s linear"}}/>
-                      {/* Perilla */}
-                      <div style={{position:"absolute",top:"50%",left:(seeking?seekPct:progress)+"%",transform:"translate(-50%,-50%)",width:seeking?15:12,height:seeking?15:12,borderRadius:"50%",background:"#fff",boxShadow:seeking?"0 0 0 5px rgba(34,197,94,0.28), 0 2px 8px rgba(0,0,0,0.5)":"0 2px 6px rgba(0,0,0,0.5)",transition:seeking?"width 0.12s, height 0.12s":"left 0.25s linear, width 0.12s, height 0.12s",pointerEvents:"none"}}/>
-                    </div>
+            {/* Fondo difuminado con la portada */}
+            {playingCover && (
+              <div style={{position:"absolute",inset:0,backgroundImage:`url(${playingCover})`,backgroundSize:"cover",backgroundPosition:"center",filter:"blur(70px) saturate(1.5)",opacity:0.32,transform:"scale(1.3)",pointerEvents:"none"}}/>
+            )}
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(10,10,20,0.35),rgba(10,10,20,0.85))",pointerEvents:"none"}}/>
+
+            <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column",padding:"10px 24px 30px",maxWidth:520,width:"100%",margin:"0 auto",overflowY:"auto"}}>
+
+              {/* Barra superior: bajar / cerrar */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+                <button onClick={()=>setExpanded(false)} title="Minimizar"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:10,display:"flex",marginLeft:-10}}>
+                  <Ico d={<polyline points="6 9 12 15 18 9"/>} size={26} stroke="#c8c8d8" sw={2.2}/>
+                </button>
+                <div style={{color:"#9a9aaa",fontSize:"0.68em",fontWeight:700,letterSpacing:1.4,textTransform:"uppercase"}}>Reproduciendo</div>
+                <button onClick={()=>{stopPlayback();setExpanded(false);}} title="Cerrar"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:10,display:"flex",marginRight:-10}}>
+                  <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={22} stroke="#8a8a9a" sw={2.2}/>
+                </button>
+              </div>
+
+              {/* Portada grande */}
+              <div style={{flex:"0 1 auto",display:"flex",alignItems:"center",justifyContent:"center",margin:"14px 0 22px"}}>
+                {playingCover
+                  ? <img src={playingCover} alt="" style={{width:"100%",maxWidth:330,aspectRatio:"1",borderRadius:16,objectFit:"cover",boxShadow:isPlaying?"0 22px 60px rgba(0,0,0,0.65)":"0 12px 34px rgba(0,0,0,0.5)",transform:isPlaying?"scale(1)":"scale(0.9)",transition:"transform 0.4s cubic-bezier(0.32,0.72,0,1), box-shadow 0.4s"}}/>
+                  : <div style={{width:"100%",maxWidth:330,aspectRatio:"1",borderRadius:16,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 18px 50px rgba(0,0,0,0.55)"}}>
+                      <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={76} stroke="#3a3a4e" sw={1.2}/>
+                    </div>}
+              </div>
+
+              {/* Título + artista */}
+              <div style={{marginBottom:18,flexShrink:0}}>
+                <div style={{color:"#fff",fontSize:"1.3em",fontWeight:700,lineHeight:1.25,marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{playingTitle}</div>
+                <div style={{color:"#a0a0b5",fontSize:"0.98em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingArtist}</div>
+              </div>
+
+              {/* Barra de progreso grande y arrastrable */}
+              <div style={{flexShrink:0,marginBottom:6}}>
+                <div ref={barRef} onMouseDown={startSeek} onTouchStart={startSeek}
+                  style={{padding:"12px 0",cursor:"pointer",touchAction:"none"}}>
+                  <div style={{position:"relative",height:6,borderRadius:3,background:"rgba(255,255,255,0.14)"}}>
+                    <div style={{position:"absolute",top:0,left:0,height:"100%",borderRadius:3,width:(seeking?seekPct:progress)+"%",background:"linear-gradient(90deg,#22c55e,#4ade80)",transition:seeking?"none":"width 0.25s linear"}}/>
+                    <div style={{position:"absolute",top:"50%",left:(seeking?seekPct:progress)+"%",transform:"translate(-50%,-50%)",width:seeking?20:15,height:seeking?20:15,borderRadius:"50%",background:"#fff",boxShadow:seeking?"0 0 0 7px rgba(34,197,94,0.24),0 3px 10px rgba(0,0,0,0.55)":"0 2px 8px rgba(0,0,0,0.55)",transition:seeking?"width 0.13s,height 0.13s":"left 0.25s linear,width 0.13s,height 0.13s",pointerEvents:"none"}}/>
                   </div>
-
-                  <span style={{color:"#7a7a8a",fontSize:"0.68em",fontVariantNumeric:"tabular-nums",flexShrink:0,minWidth:32}}>{fmt(duration)}</span>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:-2}}>
+                  <span style={{color:"#8a8a9a",fontSize:"0.74em",fontVariantNumeric:"tabular-nums"}}>{fmt(seeking?(seekPct/100)*duration:currentTime)}</span>
+                  <span style={{color:"#8a8a9a",fontSize:"0.74em",fontVariantNumeric:"tabular-nums"}}>-{fmt(Math.max(0,duration-(seeking?(seekPct/100)*duration:currentTime)))}</span>
                 </div>
               </div>
 
-              {/* Controles */}
-              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                <button onClick={()=>seekTo(Math.max(0,currentTime-15))} title="Retroceder 15s"
-                  style={{background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",alignItems:"center",justifyContent:"center",color:"#9a9aaa"}}>
-                  <Ico d={<><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></>} size={19} stroke="#9a9aaa" sw={2.2}/>
+              {/* Controles principales */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:24,margin:"14px 0 20px",flexShrink:0}}>
+                <button onClick={playPrev} title="Anterior"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:8,display:"flex"}}>
+                  <Ico d={<><polygon points="19 20 9 12 19 4 19 20" fill="#e0e0ea" stroke="none"/><line x1="5" y1="5" x2="5" y2="19"/></>} size={30} stroke="#e0e0ea" sw={2.4}/>
                 </button>
 
                 <button
-                  onClick={()=>{if(!playerRef.current||!playerReadyRef.current)return;if(isPlaying){playerRef.current.pauseVideo();setIsPlaying(false);}else{playerRef.current.playVideo();setIsPlaying(true);}}}
+                  onClick={()=>{if(!playerRef.current||!playerReadyRef.current)return;if(isPlaying){playerRef.current.pauseVideo();setIsPlaying(false);}else{playerRef.current.playVideo();setIsPlaying(true);kickPlay();}}}
                   title={isPlaying?"Pausar":"Reproducir"}
-                  style={{background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:"50%",width:44,height:44,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 4px 14px rgba(34,197,94,0.4)"}}>
-                  {isPlaying ? <IcoPause size={19}/> : <IcoPlay size={19}/>}
+                  style={{background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:"50%",width:70,height:70,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 8px 28px rgba(34,197,94,0.45)"}}>
+                  {isPlaying ? <IcoPause size={30}/> : <IcoPlay size={30}/>}
+                </button>
+
+                <button onClick={playNext} title="Siguiente"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:8,display:"flex"}}>
+                  <Ico d={<><polygon points="5 4 15 12 5 20 5 4" fill="#e0e0ea" stroke="none"/><line x1="19" y1="5" x2="19" y2="19"/></>} size={30} stroke="#e0e0ea" sw={2.4}/>
+                </button>
+              </div>
+
+              {/* Fila secundaria: -15s, aleatorio, repetir, +15s */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:26,flexShrink:0,paddingBottom:6}}>
+                <button onClick={()=>seekTo(Math.max(0,currentTime-15))} title="Retroceder 15s"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
+                  <Ico d={<><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></>} size={21} stroke="#8a8a9a" sw={2.2}/>
+                </button>
+
+                <button onClick={()=>{setShuffle(s=>!s);toast.info(!shuffle?"Aleatorio activado":"Aleatorio desactivado",2000);}} title="Aleatorio"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
+                  <Ico d={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>} size={21} stroke={shuffle?"#22c55e":"#8a8a9a"} sw={2.1}/>
+                </button>
+
+                <button onClick={()=>{const o=repeat==="off"?"all":repeat==="all"?"one":"off";setRepeat(o);toast.info(o==="off"?"Repetir desactivado":o==="all"?"Repetir todo":"Repetir esta canción",2000);}} title="Repetir"
+                  style={{position:"relative",background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
+                  <Ico d={<><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></>} size={21} stroke={repeat!=="off"?"#22c55e":"#8a8a9a"} sw={2.1}/>
+                  {repeat==="one" && <span style={{position:"absolute",bottom:2,right:3,fontSize:"0.6em",fontWeight:800,color:"#22c55e"}}>1</span>}
                 </button>
 
                 <button onClick={()=>seekTo(Math.min(duration,currentTime+15))} title="Adelantar 15s"
-                  style={{background:"none",border:"none",cursor:"pointer",padding:5,display:"flex",alignItems:"center",justifyContent:"center",color:"#9a9aaa"}}>
-                  <Ico d={<><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></>} size={19} stroke="#9a9aaa" sw={2.2}/>
-                </button>
-
-                <button onClick={stopPlayback} title="Cerrar"
-                  style={{background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.28)",borderRadius:"50%",width:32,height:32,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <IcoStop size={12} color="#ef4444"/>
+                  style={{background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
+                  <Ico d={<><path d="M13 17l5-5-5-5"/><path d="M6 17l5-5-5-5"/></>} size={21} stroke="#8a8a9a" sw={2.2}/>
                 </button>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
