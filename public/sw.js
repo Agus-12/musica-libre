@@ -1,10 +1,11 @@
 // Música Libre - Service Worker
 // Handles offline caching for PWA
 
-const CACHE_NAME = 'musica-libre-v3';
-const STATIC_CACHE = 'ml-static-v3';
-const DATA_CACHE = 'ml-data-v2';
-const IMAGE_CACHE = 'ml-images-v2';
+const CACHE_NAME = 'musica-libre-v4';
+const STATIC_CACHE = 'ml-static-v4';
+const DATA_CACHE = 'ml-data-v3';
+const IMAGE_CACHE = 'ml-images-v3';
+const SAVED_CACHE = 'ml-saved-v1';
 
 // Static assets to cache immediately
 const STATIC_ASSETS = [
@@ -30,7 +31,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== STATIC_CACHE && key !== DATA_CACHE && key !== IMAGE_CACHE)
+        keys.filter((key) => key !== STATIC_CACHE && key !== DATA_CACHE && key !== IMAGE_CACHE && key !== SAVED_CACHE)
             .map((key) => caches.delete(key))
       );
     }).then(() => self.clients.claim())
