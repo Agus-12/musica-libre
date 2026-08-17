@@ -71,15 +71,17 @@ export default function ProfilePage() {
 
     if ("mediaSession" in navigator) {
       const coverUrl = fav.cover_url || "";
+      // Proxy artwork to avoid CORS issues with Media Session
+      const artworkSrc = coverUrl ? "/api/proxy?url=" + encodeURIComponent(coverUrl) : "";
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: fav.name || "Cancion",
           artist: fav.artist || "",
           album: "",
-          artwork: coverUrl ? [
-            { src: coverUrl, sizes: "96x96", type: "image/jpeg" },
-            { src: coverUrl, sizes: "256x256", type: "image/jpeg" },
-            { src: coverUrl, sizes: "512x512", type: "image/jpeg" },
+          artwork: artworkSrc ? [
+            { src: artworkSrc, sizes: "96x96", type: "image/jpeg" },
+            { src: artworkSrc, sizes: "256x256", type: "image/jpeg" },
+            { src: artworkSrc, sizes: "512x512", type: "image/jpeg" },
           ] : [],
         });
       } catch {}

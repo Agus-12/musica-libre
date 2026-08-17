@@ -62,9 +62,8 @@ export default function SpotifyPage() {
     // Set media session BEFORE playing
     if ("mediaSession" in navigator) {
       const coverUrl = trackCover || album?.cover_xl || album?.cover_big || album?.cover_medium || "";
-      // Use direct URL for artwork - most browsers can handle it for media session
-      // Proxy as fallback for CORS-restricted images
-      const artworkSrc = coverUrl || "";
+      // Proxy the artwork image so Media Session can use it (avoids CORS issues)
+      const artworkSrc = coverUrl ? "/api/proxy?url=" + encodeURIComponent(coverUrl) : "";
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: trackName || "Cancion",
@@ -97,8 +96,13 @@ export default function SpotifyPage() {
       try { navigator.mediaSession.setActionHandler("previoustrack", null); } catch {}
     }
 
-    // Play audio - metadata shows once audio actually plays
-    audio.play().catch(() => {});
+    // Play audio first - then set metadata once it starts playing
+    audio.play().then(() => {
+      // Re-set metadata after play succeeds (some browsers need this)
+      if ("mediaSession" in navigator && navigator.mediaSession.metadata) {
+        navigator.mediaSession.playbackState = "playing";
+      }
+    }).catch(() => {});
   }
 
   async function loadCharts() {
