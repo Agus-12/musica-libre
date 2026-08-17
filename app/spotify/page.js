@@ -435,8 +435,10 @@ export default function SpotifyPage() {
       const res = await fetch("/api/download-mp3?" + params.toString());
       const data = await res.json();
       
-      if (data.method === "aaplmusicdownloader") {
-        // iTunes: guardar apple_url + video_id para YouTube playback
+      if (data.method === "aaplmusicdownloader" && !data.audio_url) {
+        /* Apple Music sin archivo descargable: sólo queda el iframe de
+           YouTube, que necesita internet. Si SÍ vino audio_url seguimos
+           de largo al bloque de abajo, que lo guarda en la caché. */
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
           const entry = {
@@ -480,8 +482,9 @@ export default function SpotifyPage() {
           const entry = {
             video_id: data.video_id || "",
             audio_url: guardadoOffline ? data.audio_url : "",
+            apple_url: data.apple_url || "",
             method: guardadoOffline ? "audio" : "youtube",
-            title: data.title || trackName,
+            title: data.title || data.video_title || trackName,
             saved_at: Date.now(),
           };
           saved[searchQuery] = entry;

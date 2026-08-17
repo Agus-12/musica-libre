@@ -161,8 +161,24 @@ export async function GET(req) {
     const appleUrl = itunesUrl || "";
     if (appleUrl.includes("apple.com") || appleUrl.includes("itunes.apple.com")) {
       const video = await buscarEnYouTube(query).catch(() => null);
+
+      /* Mismo orden que en la búsqueda normal: primero la Mac de casa,
+         que es la única que puede dar un archivo cacheable. Antes esta
+         rama se saltaba el servidor casero y por eso las canciones que
+         venían de Apple Music nunca quedaban disponibles sin internet. */
       let audioUrl = null;
-      if (video) audioUrl = await obtenerAudioUrl(video.url);
+      let fuente = null;
+
+      const casero = await pedirAlServidorCasero({
+        videoId: video?.videoId,
+        query,
+      });
+      if (casero) { audioUrl = casero.url; fuente = "casa"; }
+
+      if (!audioUrl && video) {
+        audioUrl = await obtenerAudioUrl(video.url);
+        if (audioUrl) fuente = "local";
+      }
 
       return NextResponse.json({
         success: true,
@@ -173,6 +189,12 @@ export async function GET(req) {
         video_title: video?.title || null,
         audio_url: audioUrl,                 // null si no se pudo
         offline: Boolean(audioUrl),          // ¿se puede guardar de verdad?
+        fuente,                              // "casa" | "local" | null
+        config: {
+          servidor: process.env.MUSICA_SERVER ? "configurado" : "FALTA",
+          token: process.env.MUSICA_TOKEN ? "configurado" : "FALTA",
+          motivo: fuente === "casa" ? null : ultimoMotivoCasa,
+        },
         quality: "256K M4A (original Apple) + YouTube para reproducir",
         note: audioUrl
           ? "Audio descargable: se puede guardar para escuchar sin internet"
