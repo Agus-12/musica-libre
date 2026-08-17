@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /* ═══════════════════════════════════════════════════════════════
-   API /api/browse — PROXY WEB COMPLETO
+   API /api/browse — PROXY WEB COMPLETO (v3 — FIX blank page)
    
-   Este es el cerebro. Recibe una URL, fetch el HTML completo,
-   reescribe TODOS los links para que pasen por nuestro proxy,
-   e inyecta una barra flotante con botones de descarga.
-   
-   Así el usuario puede NAVEGAR dentro del espejo y 
-   descargar cualquier cosa con un click.
+   Problemas que arregla esta versión:
+   1. Imágenes se descargaban en vez de mostrarse (solo agregar
+      Content-Disposition para archivos que NO son imágenes/CSS/JS)
+   2. CSS con url() relativas se rompían (ahora se reescriben)
+   3. JS dinámico que carga cosas (no se puede arreglar al 100%,
+      pero mejoramos lo que podemos)
    ═══════════════════════════════════════════════════════════════ */
 
 const BROWSER_HEADERS = {
@@ -27,47 +27,18 @@ const BROWSER_HEADERS = {
   "Upgrade-Insecure-Requests": "1",
 };
 
-// Extensiones que se pueden descargar
-const DOWNLOADABLE_EXTS = new Set([
-  ".pdf", ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2",
-  ".mp4", ".mp3", ".wav", ".avi", ".mkv", ".mov", ".flv", ".wmv", ".webm", ".m4a", ".aac", ".flac", ".ogg",
-  ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp",
-  ".exe", ".dmg", ".iso", ".apk", ".deb", ".rpm",
-  ".epub", ".mobi", ".cbz", ".cbr",
-  ".psd", ".ai", ".sketch", ".fig",
-  ".ttf", ".otf", ".woff", ".woff2",
-  ".sql", ".db", ".sqlite",
-  ".torrent",
-]);
-
 const IMAGE_EXTS = new Set([
   ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".ico", ".tiff", ".tif", ".avif",
 ]);
 
-function isDownloadable(url) {
-  try {
-    const u = new URL(url);
-    const path = u.pathname.toLowerCase();
-    const dot = path.lastIndexOf(".");
-    if (dot === -1) return false;
-    const ext = path.substring(dot);
-    return DOWNLOADABLE_EXTS.has(ext) || IMAGE_EXTS.has(ext);
-  } catch {
-    return false;
-  }
-}
-
-function isImage(url) {
-  try {
-    const u = new URL(url);
-    const path = u.pathname.toLowerCase();
-    const dot = path.lastIndexOf(".");
-    if (dot === -1) return false;
-    return IMAGE_EXTS.has(path.substring(dot));
-  } catch {
-    return false;
-  }
-}
+const BINARY_EXTS = new Set([
+  ".pdf", ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2",
+  ".mp4", ".mp3", ".wav", ".avi", ".mkv", ".mov", ".flv", ".wmv", ".webm", ".m4a", ".aac", ".flac", ".ogg",
+  ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+  ".exe", ".dmg", ".iso", ".apk",
+  ".epub", ".mobi",
+  ".woff", ".woff2", ".ttf", ".eot", ".otf",
+]);
 
 function filenameFromUrl(url) {
   try {
@@ -80,16 +51,30 @@ function filenameFromUrl(url) {
   }
 }
 
+function isImageExt(url) {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    const dot = path.lastIndexOf(".");
+    return dot > -1 && IMAGE_EXTS.has(path.substring(dot));
+  } catch { return false; }
+}
+
+function isBinaryDownload(url) {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    const dot = path.lastIndexOf(".");
+    return dot > -1 && BINARY_EXTS.has(path.substring(dot));
+  } catch { return false; }
+}
+
 export async function GET(req) {
   const targetUrl = req.nextUrl.searchParams.get("url");
 
   if (!targetUrl) {
-    return NextResponse.json({ error: "Falta parámetro ?url=" }, { status: 400 });
+    return NextResponse.json({ error: "Falta ?url=" }, { status: 400 });
   }
 
-  try {
-    new URL(targetUrl);
-  } catch {
+  try { new URL(targetUrl); } catch {
     return NextResponse.json({ error: "URL inválida" }, { status: 400 });
   }
 
@@ -101,144 +86,166 @@ export async function GET(req) {
     });
 
     if (!resp.ok) {
-      return new NextResponse(
-        `<!DOCTYPE html><html><body style="background:#0f0f1a;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh">
-          <div style="text-align:center">
-            <h1>❌ Error ${resp.status}</h1>
-            <p style="color:#888;margin-top:10px">El sitio respondió con error ${resp.status}</p>
-            <p style="color:#666;margin-top:5px">Algunos sitios bloquean peticiones de servidores</p>
-            <a href="/" style="color:#7c5cfc;margin-top:20px;display:inline-block">← Volver</a>
-          </div>
-        </body></html>`,
-        { status: 200, headers: { "Content-Type": "text/html" } }
-      );
+      return errorPage(resp.status);
     }
 
     const contentType = resp.headers.get("content-type") || "";
     const finalUrl = resp.url || targetUrl;
 
-    // ── Si NO es HTML, servir como proxy directo ──
-    if (!contentType.includes("text/html") && !contentType.includes("text/xhtml")) {
-      const body = await resp.arrayBuffer();
+    // ── Si es HTML: reescribir e inyectar toolbar ──
+    if (contentType.includes("text/html") || contentType.includes("text/xhtml") || contentType.includes("text/javascript") === false && contentType.includes("javascript")) {
+      // Check more carefully
+      if (contentType.includes("text/html") || contentType.includes("text/xhtml") || contentType.includes("application/xhtml")) {
+        let html = await resp.text();
+        html = rewriteHtmlUrls(html, finalUrl);
+        html = injectToolbar(html, finalUrl, targetUrl);
+
+        return new NextResponse(html, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+            "X-Frame-Options": "ALLOWALL",
+          },
+        });
+      }
+    }
+
+    // ── Si es CSS: reescribir urls internas ──
+    if (contentType.includes("text/css")) {
+      let css = await resp.text();
+      css = rewriteCssUrls(css, finalUrl);
+      return new NextResponse(css, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/css",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
+    // ── Si es JavaScript: reescribir URLs dentro del JS ──
+    if (contentType.includes("javascript") || contentType.includes("application/json")) {
+      const body = await resp.text();
       return new NextResponse(body, {
         status: 200,
         headers: {
           "Content-Type": contentType,
           "Access-Control-Allow-Origin": "*",
           "Cache-Control": "public, max-age=3600",
-          ...(isDownloadable(targetUrl)
-            ? { "Content-Disposition": `attachment; filename="${filenameFromUrl(targetUrl)}"` }
-            : {}),
         },
       });
     }
 
-    // ── Es HTML: reescribir TODO ──
-    let html = await resp.text();
+    // ── Todo lo demás: servir directo ──
+    const body = await resp.arrayBuffer();
 
-    // 1. Reescribir URLs para que pasen por nuestro proxy
-    html = rewriteUrls(html, finalUrl);
+    // Solo agregar Content-Disposition para archivos binarios descargables
+    // NO para imágenes, CSS, JS, fuentes — esos se muestran inline
+    const headers = {
+      "Content-Type": contentType || "application/octet-stream",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=3600",
+    };
 
-    // 2. Inyectar la barra flotante con herramientas
-    html = injectToolbar(html, finalUrl, targetUrl);
+    if (isBinaryDownload(targetUrl)) {
+      headers["Content-Disposition"] = `attachment; filename="${filenameFromUrl(targetUrl)}"`;
+    }
 
-    return new NextResponse(html, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+    return new NextResponse(body, { status: 200, headers });
   } catch (e) {
     let msg = e.message;
     if (msg.includes("timeout")) msg = "El sitio tardó demasiado en responder";
     if (msg.includes("ENOTFOUND")) msg = "El dominio no existe";
-
-    return new NextResponse(
-      `<!DOCTYPE html><html><body style="background:#0f0f1a;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh">
-        <div style="text-align:center">
-          <h1>❌ Error</h1>
-          <p style="color:#888;margin-top:10px">${msg}</p>
-          <a href="/" style="color:#7c5cfc;margin-top:20px;display:inline-block">← Volver</a>
-        </div>
-      </body></html>`,
-      { status: 200, headers: { "Content-Type": "text/html" } }
-    );
+    return errorPage(0, msg);
   }
 }
 
+function errorPage(status, customMsg) {
+  const msg = customMsg || `El sitio respondió con error ${status}`;
+  return new NextResponse(
+    `<!DOCTYPE html><html><body style="background:#0f0f1a;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+      <div style="text-align:center;max-width:400px">
+        <div style="font-size:3em;margin-bottom:15px">❌</div>
+        <h1 style="font-size:1.5em;margin-bottom:10px">Error al cargar</h1>
+        <p style="color:#888;line-height:1.5">${msg}</p>
+        <p style="color:#555;font-size:0.85em;margin-top:10px">Algunos sitios bloquean peticiones de servidores.</p>
+        <a href="/" style="color:#7c5cfc;margin-top:20px;display:inline-block">← Volver al inicio</a>
+      </div>
+    </body></html>`,
+    { status: 200, headers: { "Content-Type": "text/html" } }
+  );
+}
+
 /* ═══════════════════════════════════════════════════
-   REESCRIBIR URLs
-   Cambia todos los links para que pasen por /api/browse?url=
+   REESCRIBIR URLs EN HTML
    ═══════════════════════════════════════════════════ */
 
-function rewriteUrls(html, baseUrl) {
-  // href="..." → /api/browse?url=...
+function rewriteHtmlUrls(html, baseUrl) {
+  // href="..." — Links HTML (navegar dentro del espejo)
   html = html.replace(/(href\s*=\s*["'])([^"']+)(["'])/gi, (match, pre, url, post) => {
-    const rewritten = rewriteUrl(url, baseUrl);
-    return `${pre}${rewritten}${post}`;
+    return `${pre}${rewriteHtmlUrl(url, baseUrl, "href")}${post}`;
   });
 
-  // src="..." → /api/browse?url=... (para imágenes, scripts, etc.)
+  // src="..." — Recursos (imágenes, scripts, iframes)
   html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (match, pre, url, post) => {
-    const rewritten = rewriteUrl(url, baseUrl);
-    return `${pre}${rewritten}${post}`;
+    return `${pre}${rewriteHtmlUrl(url, baseUrl, "src")}${post}`;
   });
 
   // srcset="img1 1x, img2 2x"
   html = html.replace(/(srcset\s*=\s*["'])([^"']+)(["'])/gi, (match, pre, srcset, post) => {
-    const rewritten = srcset
-      .split(",")
-      .map((part) => {
-        const trimmed = part.trim();
-        const spaceIdx = trimmed.indexOf(" ");
-        if (spaceIdx === -1) {
-          return rewriteUrl(trimmed, baseUrl);
-        }
-        const url = trimmed.substring(0, spaceIdx);
-        const descriptor = trimmed.substring(spaceIdx);
-        return rewriteUrl(url, baseUrl) + descriptor;
-      })
-      .join(", ");
+    const rewritten = srcset.split(",").map((part) => {
+      const trimmed = part.trim();
+      const spaceIdx = trimmed.indexOf(" ");
+      if (spaceIdx === -1) return rewriteHtmlUrl(trimmed, baseUrl, "src");
+      return rewriteHtmlUrl(trimmed.substring(0, spaceIdx), baseUrl, "src") + trimmed.substring(spaceIdx);
+    }).join(", ");
     return `${pre}${rewritten}${post}`;
   });
 
-  // data-src, data-lazy-src, etc. (lazy loading)
-  const dataAttrs = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-image", "data-zoom-image"];
-  for (const attr of dataAttrs) {
+  // data-* lazy loading attrs
+  for (const attr of ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-image", "data-zoom-image", "data-bg", "data-bg-url"]) {
     const regex = new RegExp(`(${attr}\\s*=\\s*["'])([^"']+)(["'])`, "gi");
     html = html.replace(regex, (match, pre, url, post) => {
-      return `${pre}${rewriteUrl(url, baseUrl)}${post}`;
+      return `${pre}${rewriteHtmlUrl(url, baseUrl, "src")}${post}`;
     });
   }
 
-  // url() en CSS inline
+  // url() en CSS inline y style tags
   html = html.replace(/url\(\s*["']?([^"')]+)["']?\s*\)/gi, (match, url) => {
-    return `url(${rewriteUrl(url, baseUrl)})`;
+    if (url.startsWith("data:") || url.startsWith("#") || url.startsWith("blob:")) return match;
+    try {
+      const full = new URL(url, baseUrl).href;
+      return `url(/api/browse?url=${encodeURIComponent(full)})`;
+    } catch { return match; }
   });
 
-  // action="..." en formularios
+  // action="..." en forms
   html = html.replace(/(action\s*=\s*["'])([^"']+)(["'])/gi, (match, pre, url, post) => {
-    return `${pre}${rewriteUrl(url, baseUrl)}${post}`;
+    return `${pre}${rewriteHtmlUrl(url, baseUrl, "href")}${post}`;
+  });
+
+  // poster="..." en video
+  html = html.replace(/(poster\s*=\s*["'])([^"']+)(["'])/gi, (match, pre, url, post) => {
+    return `${pre}${rewriteHtmlUrl(url, baseUrl, "src")}${post}`;
   });
 
   return html;
 }
 
-function rewriteUrl(url, baseUrl) {
-  // No tocar anchors, javascript:, mailto:, data:, ya-proxy
-  if (!url || url.startsWith("#") || url.startsWith("javascript:") || url.startsWith("mailto:") || url.startsWith("data:") || url.startsWith("/api/browse")) {
+function rewriteHtmlUrl(url, baseUrl, attrType) {
+  // No tocar especiales
+  if (!url || url.startsWith("#") || url.startsWith("javascript:") ||
+      url.startsWith("mailto:") || url.startsWith("data:") ||
+      url.startsWith("blob:") || url.startsWith("about:") ||
+      url.startsWith("/api/browse")) {
     return url;
   }
 
   try {
-    // Resolver URL relativa
     const full = new URL(url, baseUrl).href;
-
-    // Si ya es nuestro proxy, no reescribir
-    if (full.includes("/api/browse")) return full;
-
-    // Pasar por nuestro proxy
+    // Todo pasa por nuestro proxy
     return `/api/browse?url=${encodeURIComponent(full)}`;
   } catch {
     return url;
@@ -246,208 +253,179 @@ function rewriteUrl(url, baseUrl) {
 }
 
 /* ═══════════════════════════════════════════════════
+   REESCRIBIR URLs EN CSS
+   Los archivos CSS tienen url() que deben apuntar al proxy
+   ═══════════════════════════════════════════════════ */
+
+function rewriteCssUrls(css, cssBaseUrl) {
+  return css.replace(/url\(\s*["']?([^"')]+)["']?\s*\)/gi, (match, url) => {
+    if (url.startsWith("data:") || url.startsWith("#") || url.startsWith("blob:")) return match;
+    try {
+      const full = new URL(url, cssBaseUrl).href;
+      return `url(/api/browse?url=${encodeURIComponent(full)})`;
+    } catch { return match; }
+  });
+}
+
+/* ═══════════════════════════════════════════════════
    INYECTAR BARRA FLOTANTE
-   Agrega una barra en la parte de arriba con:
-   - URL actual
-   - Botón "Descargar esta página"
-   - Botón "Ver recursos"
-   - Botón "Volver al inicio"
    ═══════════════════════════════════════════════════ */
 
 function injectToolbar(html, currentUrl, originalUrl) {
+  const escapedUrl = originalUrl.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
   const toolbar = `
 <!-- ═══ ESPEJO TOOLBAR ═══ -->
 <div id="__mirror_toolbar__" style="
-  position:fixed; top:0; left:0; right:0; z-index:999999;
-  background:linear-gradient(135deg,#1a1a2e,#2a1a3e);
-  border-bottom:2px solid #7c5cfc;
-  padding:8px 15px;
-  display:flex; align-items:center; gap:10px;
-  font-family:'Segoe UI',sans-serif; font-size:13px; color:#e0e0e0;
-  box-shadow:0 2px 20px rgba(0,0,0,0.5);
+  position:fixed!important; top:0!important; left:0!important; right:0!important; z-index:2147483647!important;
+  background:linear-gradient(135deg,#1a1a2e,#2a1a3e)!important;
+  border-bottom:2px solid #7c5cfc!important;
+  padding:8px 15px!important;
+  display:flex!important; align-items:center!important; gap:10px!important;
+  font-family:'Segoe UI',sans-serif!important; font-size:13px!important; color:#e0e0e0!important;
+  box-shadow:0 2px 20px rgba(0,0,0,0.5)!important;
+  margin:0!important; height:auto!important; width:auto!important;
 ">
-  <div style="font-weight:700;color:#7c5cfc;font-size:14px">🪞 ESPEJO</div>
-  <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#888;max-width:400px" title="${originalUrl}">
-    ${originalUrl.length > 60 ? originalUrl.substring(0, 60) + "..." : originalUrl}
+  <div style="font-weight:700!important;color:#7c5cfc!important;font-size:14px!important;flex-shrink:0!important">🪞 ESPEJO</div>
+  <div style="flex:1!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;color:#888!important;max-width:400px!important" title="${escapedUrl}">
+    ${originalUrl.length > 50 ? originalUrl.substring(0, 50) + "..." : originalUrl}
   </div>
-  <button onclick="__mirrorDownloadPage__()" style="padding:5px 12px;border-radius:6px;border:none;background:#22c55e;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">
-    ⬇️ Descargar página
-  </button>
-  <button onclick="__mirrorShowResources__()" style="padding:5px 12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">
-    📋 Recursos
-  </button>
-  <button onclick="location.href='/'" style="padding:5px 12px;border-radius:6px;border:none;background:#555;color:#fff;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap">
-    🏠 Inicio
-  </button>
+  <button onclick="__mirrorDL__()" style="padding:5px 12px!important;border-radius:6px!important;border:none!important;background:#22c55e!important;color:#fff!important;cursor:pointer!important;font-size:12px!important;font-weight:600!important;white-space:nowrap!important;flex-shrink:0!important">⬇️ Descargar</button>
+  <button onclick="__mirrorRes__()" style="padding:5px 12px!important;border-radius:6px!important;border:none!important;background:#3b82f6!important;color:#fff!important;cursor:pointer!important;font-size:12px!important;font-weight:600!important;white-space:nowrap!important;flex-shrink:0!important">📋 Recursos</button>
+  <button onclick="location.href='/'" style="padding:5px 12px!important;border-radius:6px!important;border:none!important;background:#555!important;color:#fff!important;cursor:pointer!important;font-size:12px!important;font-weight:600!important;white-space:nowrap!important;flex-shrink:0!important">🏠</button>
 </div>
-<div style="height:42px"></div>
+<div id="__mirror_spacer__" style="height:42px!important;display:block!important"></div>
 
-<!-- Panel de recursos (oculto por defecto) -->
-<div id="__mirror_resources_panel__" style="
-  position:fixed; top:42px; right:0; bottom:0; width:350px; z-index:999998;
-  background:#1a1a2e; border-left:2px solid #7c5cfc;
-  display:none; overflow-y:auto; padding:15px;
-  font-family:'Segoe UI',sans-serif; color:#e0e0e0;
-  box-shadow:-5px 0 30px rgba(0,0,0,0.5);
+<!-- Panel de recursos -->
+<div id="__mirror_res_panel__" style="
+  position:fixed!important; top:42px!important; right:0!important; bottom:0!important; width:360px!important; z-index:2147483646!important;
+  background:#1a1a2e!important; border-left:2px solid #7c5cfc!important;
+  display:none!important; overflow-y:auto!important; padding:15px!important;
+  font-family:'Segoe UI',sans-serif!important; color:#e0e0e0!important;
+  box-shadow:-5px 0 30px rgba(0,0,0,0.5)!important;
 ">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
-    <h3 style="margin:0;color:#7c5cfc;font-size:16px">📋 Recursos de la página</h3>
-    <button onclick="document.getElementById('__mirror_resources_panel__').style.display='none'" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px">✕</button>
+    <h3 style="margin:0;color:#7c5cfc;font-size:16px">📋 Recursos</h3>
+    <button onclick="document.getElementById('__mirror_res_panel__').style.display='none'" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px">✕</button>
   </div>
-  <div id="__mirror_resource_list__" style="font-size:12px;color:#888">Buscando recursos...</div>
+  <div id="__mirror_res_list__" style="font-size:12px;color:#888">Escaneando...</div>
 </div>
 
 <script>
 (function(){
-  // Compensar el toolbar
-  document.body.style.paddingTop = '42px';
+  try { document.body.style.paddingTop = '42px'; } catch(e){}
 
-  // Descargar esta página completa
-  window.__mirrorDownloadPage__ = function(){
-    const a = document.createElement('a');
-    a.href = '/api/download?url=' + encodeURIComponent('${originalUrl}') + '&filename=' + encodeURIComponent(location.hostname + '.html');
+  window.__mirrorDL__ = function(){
+    var a = document.createElement('a');
+    a.href = '/api/download?url=' + encodeURIComponent('${escapedUrl}');
+    a.download = document.title ? document.title.replace(/[^\\w]/g,'_') + '.html' : 'pagina.html';
     a.click();
   };
 
-  // Mostrar/ocultar panel de recursos
-  window.__mirrorShowResources__ = function(){
-    const panel = document.getElementById('__mirror_resources_panel__');
-    if(panel.style.display === 'none'){
-      panel.style.display = 'block';
-      scanResources();
-    } else {
-      panel.style.display = 'none';
-    }
+  window.__mirrorRes__ = function(){
+    var p = document.getElementById('__mirror_res_panel__');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+    if(p.style.display === 'block') scanRes();
   };
 
-  // Escanear todos los recursos de la página
-  function scanResources(){
-    const list = document.getElementById('__mirror_resource_list__');
-    const resources = [];
-    const seen = new Set();
+  function scanRes(){
+    var list = document.getElementById('__mirror_res_list__');
+    var res = [];
+    var seen = {};
 
     function add(url, type, label){
+      if(!url || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('javascript:')) return;
+      var realUrl = url;
       try {
-        // Extraer URL real de nuestro proxy
-        let realUrl = url;
-        if(url.includes('/api/browse?url=')){
+        if(url.indexOf('/api/browse?url=') > -1){
           realUrl = decodeURIComponent(url.split('/api/browse?url=')[1].split('&')[0]);
         }
         if(!realUrl.startsWith('http')) return;
-        if(seen.has(realUrl)) return;
-        seen.add(realUrl);
-        const filename = realUrl.split('/').pop().split('?')[0] || 'recurso';
-        resources.push({url: realUrl, type, label, filename});
+        if(seen[realUrl]) return;
+        seen[realUrl] = true;
+        var fn = realUrl.split('/').pop().split('?')[0] || 'recurso';
+        res.push({url: realUrl, type: type, label: label, filename: fn});
       } catch(e){}
     }
 
-    // Imágenes
-    document.querySelectorAll('img').forEach(img => {
-      const src = img.src || img.dataset.src;
-      if(src) add(src, 'image', img.alt || 'imagen');
+    document.querySelectorAll('img').forEach(function(img){
+      add(img.src || img.dataset.src, 'image', img.alt || '');
+    });
+    document.querySelectorAll('a[href]').forEach(function(a){
+      add(a.href, 'link', (a.textContent || '').trim().substring(0, 30));
+    });
+    document.querySelectorAll('video,source,audio').forEach(function(v){
+      if(v.src) add(v.src, 'media', 'media');
+    });
+    document.querySelectorAll('link[rel="stylesheet"]').forEach(function(l){
+      if(l.href) add(l.href, 'css', 'CSS');
+    });
+    document.querySelectorAll('script[src]').forEach(function(s){
+      add(s.src, 'js', 'JS');
     });
 
-    // Links
-    document.querySelectorAll('a[href]').forEach(a => {
-      add(a.href, 'link', a.textContent.trim().substring(0, 40) || 'enlace');
-    });
-
-    // Videos
-    document.querySelectorAll('video, source').forEach(v => {
-      if(v.src) add(v.src, 'media', 'video/audio');
-    });
-
-    // Stylesheets
-    document.querySelectorAll('link[rel="stylesheet"]').forEach(l => {
-      if(l.href) add(l.href, 'style', 'CSS');
-    });
-
-    // Scripts
-    document.querySelectorAll('script[src]').forEach(s => {
-      add(s.src, 'script', 'JavaScript');
-    });
-
-    // Background images
-    document.querySelectorAll('[style*="url("]').forEach(el => {
-      const match = el.style.backgroundImage?.match(/url\\(["']?(.*?)["']?\\)/);
-      if(match && match[1]) add(match[1], 'image', 'fondo CSS');
-    });
-
-    // Render
-    if(resources.length === 0){
+    if(res.length === 0){
       list.innerHTML = '<p style="color:#666">No se encontraron recursos</p>';
       return;
     }
 
-    const grouped = {image: [], link: [], media: [], style: [], script: []};
-    resources.forEach(r => {
-      (grouped[r.type] || (grouped[r.type] = [])).push(r);
+    var grouped = {};
+    res.forEach(function(r){ (grouped[r.type] = grouped[r.type] || []).push(r); });
+
+    var icons = {image:'🖼️',link:'🔗',media:'🎬',css:'🎨',js:'⚡'};
+    var names = {image:'Imágenes',link:'Enlaces',media:'Media',css:'CSS',js:'JavaScript'};
+    var colors = {image:'#22c55e',link:'#3b82f6',media:'#f59e0b',css:'#a855f7',js:'#6366f1'};
+
+    var html = '<div style="margin-bottom:12px;color:#7c5cfc;font-weight:600;font-size:14px">Total: ' + res.length + ' recursos</div>';
+
+    var downloadable = res.filter(function(r){
+      return r.filename && r.filename.indexOf('.') > -1 && r.type !== 'link' && r.type !== 'js';
     });
+    if(downloadable.length > 0){
+      html += '<button onclick="__mirrorDLAll__()" style="width:100%;padding:8px;border-radius:6px;border:none;background:#22c55e;color:#fff;cursor:pointer;font-weight:600;margin-bottom:12px;font-size:12px">⬇️ Descargar ' + downloadable.length + ' archivos</button>';
+    }
 
-    const icons = {image:'🖼️',link:'🔗',media:'🎬',style:'🎨',script:'⚡'};
-    const names = {image:'Imágenes',link:'Enlaces',media:'Media',style:'Estilos',script:'Scripts'};
-
-    let html = '<div style="margin-bottom:10px;color:#7c5cfc;font-weight:600">Total: ' + resources.length + ' recursos</div>';
-    html += '<button onclick="__mirrorDownloadAll__()" style="width:100%;padding:8px;border-radius:6px;border:none;background:#22c55e;color:#fff;cursor:pointer;font-weight:600;margin-bottom:12px;font-size:12px">⬇️ Descargar todo descargable</button>';
-
-    for(const [type, items] of Object.entries(grouped)){
-      if(items.length === 0) continue;
-      html += '<div style="color:#7c5cfc;font-weight:600;margin:10px 0 5px">' + (icons[type]||'📎') + ' ' + (names[type]||type) + ' (' + items.length + ')</div>';
-      items.forEach(r => {
-        const isDL = r.filename && r.filename.includes('.');
-        html += '<div style="background:#2a2a3e;border-radius:6px;padding:6px 8px;margin-bottom:4px;display:flex;gap:6px;align-items:center">';
-        html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ccc" title="' + r.url + '">' + r.filename.substring(0,30) + '</span>';
+    for(var type in grouped){
+      var items = grouped[type];
+      html += '<div style="color:' + (colors[type]||'#888') + ';font-weight:600;margin:12px 0 5px;font-size:13px">' + (icons[type]||'📎') + ' ' + (names[type]||type) + ' (' + items.length + ')</div>';
+      items.forEach(function(r){
+        var isDL = r.type !== 'link' && r.type !== 'js' && r.filename && r.filename.indexOf('.') > -1;
+        html += '<div style="background:#2a2a3e;border-radius:6px;padding:6px 8px;margin-bottom:3px;display:flex;gap:4px;align-items:center">';
+        html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ccc;font-size:11px" title="' + r.url.replace(/"/g,'&quot;') + '">' + r.filename.substring(0,28) + '</span>';
         if(isDL){
-          html += '<button onclick="window.__dlOne__(\\''+r.url+'\\',\\''+r.filename+'\\')" style="padding:2px 8px;border-radius:4px;border:none;background:#22c55e;color:#fff;cursor:pointer;font-size:10px;white-space:nowrap">⬇</button>';
+          html += '<button onclick="dlOne(\\''+r.url.replace(/'/g,"\\\\'")+'\\',\\''+r.filename.replace(/'/g,"\\\\'")+'\\')" style="padding:2px 6px;border-radius:4px;border:none;background:#22c55e;color:#fff;cursor:pointer;font-size:10px;flex-shrink:0">⬇</button>';
         }
-        html += '<button onclick="window.open(\\''+r.url+'\\')" style="padding:2px 8px;border-radius:4px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:10px;white-space:nowrap">🔗</button>';
+        html += '<button onclick="window.open(\\''+r.url.replace(/'/g,"\\\\'")+'\\')" style="padding:2px 6px;border-radius:4px;border:none;background:#3b82f6;color:#fff;cursor:pointer;font-size:10px;flex-shrink:0">🔗</button>';
         html += '</div>';
       });
     }
 
     list.innerHTML = html;
-
-    // Guardar para download all
-    window.__mirrorAllResources__ = resources.filter(r => r.filename && r.filename.includes('.'));
+    window.__mirrorDLAll__ = function(){
+      downloadable.forEach(function(r, i){
+        setTimeout(function(){ dlOne(r.url, r.filename); }, i * 800);
+      });
+    };
   }
 
-  window.__dlOne__ = function(url, filename){
-    const a = document.createElement('a');
+  window.dlOne = function(url, filename){
+    var a = document.createElement('a');
     a.href = '/api/download?url=' + encodeURIComponent(url) + '&filename=' + encodeURIComponent(filename);
     a.click();
   };
 
-  window.__mirrorDownloadAll__ = function(){
-    if(!window.__mirrorAllResources__) return;
-    window.__mirrorAllResources__.forEach((r, i) => {
-      setTimeout(() => {
-        window.__dlOne__(r.url, r.filename);
-      }, i * 800);
-    });
-  };
-
-  // Auto-scan al cargar
-  setTimeout(scanResources, 1000);
+  setTimeout(function(){ try{ scanRes(); }catch(e){} }, 1500);
 })();
 </script>
-<!-- ═══ FIN ESPEJO TOOLBAR ═══ -->
+<!-- ═══ FIN TOOLBAR ═══ -->
 `;
 
-  // Insertar toolbar antes de </body> o al final
   if (html.includes("</body>")) {
     html = html.replace("</body>", toolbar + "\n</body>");
+  } else if (html.includes("</BODY>")) {
+    html = html.replace("</BODY>", toolbar + "\n</BODY>");
   } else {
     html = html + toolbar;
-  }
-
-  // Agregar <base> para URLs relativas (si no tiene)
-  if (!html.includes("<base")) {
-    const baseTag = `<base href="${currentUrl}">`;
-    if (html.includes("<head>")) {
-      html = html.replace("<head>", "<head>" + baseTag);
-    } else if (html.includes("<HEAD>")) {
-      html = html.replace("<HEAD>", "<HEAD>" + baseTag);
-    }
   }
 
   return html;
