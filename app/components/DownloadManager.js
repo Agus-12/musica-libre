@@ -108,6 +108,11 @@ async function processOne(track, currentQueue, setQueue) {
   if (track.duration_ms) {
     params.set("expected_duration", Math.round(track.duration_ms / 1000));
   }
+  // Artista (de iTunes) para que el filtro EXIJA un canal del artista, no un
+  // karaoke/tribute de otro subiendo la misma cancion con titulo parecido.
+  if (track.artist) {
+    params.set("expected_artist", track.artist);
+  }
   const res = await fetch("/api/download-mp3?" + params.toString());
   const data = await res.json().catch(() => ({}));
 

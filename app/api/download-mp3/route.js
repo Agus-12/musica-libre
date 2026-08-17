@@ -127,7 +127,7 @@ async function fetchJSON(url) {
   return await resp.json();
 }
 
-async function buscarEnYouTube(searchQuery, expectedDuration) {
+async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist) {
   const ytSearch = await import("yt-search");
   let results = await ytSearch.default(searchQuery + " official audio");
   if (!results.videos || results.videos.length === 0) {
@@ -178,6 +178,20 @@ async function buscarEnYouTube(searchQuery, expectedDuration) {
     //    cancion de 3:22 suele estar completa; una de 2:30 puede ser preview).
     if (tema) s -= Math.max(0, dur) / 12;
 
+    // 5) Bonus enorme si el canal del video coincide con el artista (de iTunes).
+    //    Esto soluciona el bug de "descarga una cancion que ni es": cuando
+    //    yt-search devuelve karaokes, tributes o covers de otros canales
+    //    con titulo parecido, los descartamos.
+    if (expectedArtist && v.channel && v.channel.name) {
+      const ch = (v.channel.name || "").toLowerCase();
+      const art = expectedArtist.toLowerCase();
+      if (ch.includes(art) || art.includes(ch) ||
+          ch.split(/[\s\-|]/).some(w => w && w.length > 2 && art.includes(w)) ||
+          art.split(/\s+/).some(w => w.length > 2 && ch.includes(w))) {
+        s -= 3000;
+      }
+    }
+
     return { v, score: s };
   });
   scored.sort((a, b) => a.score - b.score);
@@ -201,7 +215,7 @@ export async function GET(req) {
     // ── Apple Music / iTunes ──
     const appleUrl = itunesUrl || "";
     if (appleUrl.includes("apple.com") || appleUrl.includes("itunes.apple.com")) {
-      const video = await buscarEnYouTube(query, null).catch(() => null);
+      const video = await buscarEnYouTube(query, null, null).catch(() => null);
 
       /* Mismo orden que en la búsqueda normal: primero la Mac de casa,
          que es la única que puede dar un archivo cacheable. Antes esta
@@ -254,7 +268,11 @@ export async function GET(req) {
       } catch {}
     }
 
-    const video = await buscarEnYouTube(searchQuery, p.get("expected_duration") ? Number(p.get("expected_duration")) : null);
+    const video = await buscarEnYouTube(
+      searchQuery,
+      p.get("expected_duration") ? Number(p.get("expected_duration")) : null,
+      p.get("expected_artist") || null
+    );
     if (!video) {
       return NextResponse.json(
         { error: "No se encontró la canción en YouTube" },
