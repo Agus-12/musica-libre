@@ -7,8 +7,10 @@ const nextConfig = {
       { protocol: "http", hostname: "**" },
     ],
   },
-  // Force these packages to be bundled in serverless functions (Vercel)
-  serverExternalPackages: ["cheerio", "yt-search"],
+  /* Estos paquetes se empaquetan aparte en las funciones de Vercel.
+     En Next 14 la clave va dentro de experimental; la de nivel raíz
+     (serverExternalPackages) recién existe en Next 15 y hacía que el
+     build tirara "Invalid next.config.js options detected". */
   experimental: {
     serverComponentsExternalPackages: ["cheerio", "yt-search"],
   },
