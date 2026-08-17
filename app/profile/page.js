@@ -70,6 +70,9 @@ export default function ProfilePage() {
   const kickRef = useRef(null);           // reintentos de play
   const mediaFixRef = useRef(null);       // reescritura de la portada en la pantalla de bloqueo
   const wakeRef = useRef(null);           // reanudar al volver a la app
+  const audioRef = useRef(null);          // <audio> para archivos guardados (offline)
+  const usingAudioRef = useRef(false);    // ¿estamos usando el archivo o YouTube?
+  const seekingRef = useRef(false);       // espejo de `seeking` para los eventos
   const [isOnline, setIsOnline] = useState(true);
   const [downloadedMusic, setDownloadedMusic] = useState([]);
 
@@ -237,6 +240,7 @@ export default function ProfilePage() {
 
   function startSeek(e) {
     if (!duration) return;
+    seekingRef.current = true;
     setSeeking(true);
     setSeekPct(pctFromEvent(e) * 100);
   }
@@ -245,6 +249,7 @@ export default function ProfilePage() {
     if (!seeking) return;
     const move = (e) => { setSeekPct(pctFromEvent(e) * 100); if (e.cancelable) e.preventDefault(); };
     const end = () => {
+      seekingRef.current = false;
       setSeeking(false);
       setSeekPct((p) => { seekTo((p / 100) * (duration || 0)); return p; });
     };
@@ -327,7 +332,59 @@ export default function ProfilePage() {
     }, 350);
   }
 
+  /* Reproduce un ARCHIVO de audio real (el que se guardó en caché).
+     A diferencia del iframe de YouTube, esto sí suena sin internet. */
+  function startAudioFile(item) {
+    // Si venía sonando YouTube, lo paramos
+    try { if (playerRef.current && playerReadyRef.current) playerRef.current.stopVideo(); } catch {}
+
+    let a = audioRef.current;
+    if (!a) {
+      a = new Audio();
+      a.preload = "auto";
+      audioRef.current = a;
+      a.addEventListener("timeupdate", () => {
+        if (seekingRef.current) return;
+        const d = a.duration || 0;
+        setCurrentTime(a.currentTime || 0);
+        setDuration(d);
+        setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
+      });
+      a.addEventListener("ended", () => handleTrackEnd());
+      a.addEventListener("play", () => setIsPlaying(true));
+      a.addEventListener("pause", () => setIsPlaying(false));
+      a.addEventListener("error", () => {
+        // El archivo cacheado falló: probamos con YouTube si hay conexión
+        if (item.video_id && navigator.onLine) { usingAudioRef.current = false; startTrack(item); }
+        else toast.error("No se pudo reproducir", 3000);
+      });
+    }
+
+    usingAudioRef.current = true;
+    setPlayingKey(item.key); setPlayingTitle(item.title);
+    setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
+    setProgress(0); setCurrentTime(0); setDuration(0);
+
+    try {
+      a.src = item.audio_url;
+      a.load();
+      const pr = a.play();
+      if (pr && pr.catch) pr.catch(() => {});
+      setIsPlaying(true);
+      setupMediaSession(item);
+    } catch {
+      toast.error("No se pudo reproducir", 3000);
+      setPlayingKey(null); setIsPlaying(false);
+    }
+  }
+
   function startTrack(item) {
+    // Si la canción tiene archivo guardado, preferimos ese (funciona offline)
+    if (item.audio_url) { startAudioFile(item); return; }
+    usingAudioRef.current = false;
+    // Si veníamos de un archivo, lo paramos
+    try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; } } catch {}
+
     const p = playerRef.current;
     if (!p) return;
     setPlayingKey(item.key); setPlayingTitle(item.title);
@@ -440,19 +497,19 @@ export default function ProfilePage() {
   }
 
   async function playDownloaded(item) {
+    // Si hay archivo de audio guardado, lo usamos: suena aunque no haya
+    // internet (viene de la caché del navegador).
+    if (item.audio_url) { startAudioFile(item); return; }
+
     // Sin internet el iframe de YouTube no puede cargar: avisamos claro en
     // vez de quedarnos en silencio como si estuviera roto.
-    if (!navigator.onLine && item.video_id && !item.audio_url) {
+    if (!navigator.onLine && item.video_id) {
       toast.warning("Sin conexión: esta canción se reproduce desde YouTube y necesita internet", 4000);
       return;
     }
     // Misma canción → alternar play/pausa
-    if (playingKey === item.key && playerRef.current && playerReadyRef.current) {
-      try {
-        const s = playerRef.current.getPlayerState();
-        if (s === 1) { playerRef.current.pauseVideo(); setIsPlaying(false); }
-        else { playerRef.current.playVideo(); setIsPlaying(true); }
-      } catch {}
+    if (playingKey === item.key && (playerReadyRef.current || usingAudioRef.current)) {
+      togglePlay();
       return;
     }
     if (!item.video_id) {
@@ -485,20 +542,38 @@ export default function ProfilePage() {
   }
 
   function seekTo(seconds) {
-    if (!playerRef.current || !playerReadyRef.current) return;
     const d = duration || 0;
     const t = Math.max(0, Math.min(seconds, d || seconds));
     try {
-      playerRef.current.seekTo(t, true);
+      if (usingAudioRef.current && audioRef.current) {
+        audioRef.current.currentTime = t;
+      } else if (playerRef.current && playerReadyRef.current) {
+        playerRef.current.seekTo(t, true);
+      } else return;
       setCurrentTime(t);
       if (d > 0) setProgress((t / d) * 100);
     } catch {}
+  }
+
+  // Play/pausa que sirve para los dos reproductores
+  function togglePlay() {
+    if (usingAudioRef.current && audioRef.current) {
+      const a = audioRef.current;
+      if (a.paused) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); setIsPlaying(true); }
+      else { a.pause(); setIsPlaying(false); }
+      return;
+    }
+    if (!playerRef.current || !playerReadyRef.current) return;
+    if (isPlaying) { playerRef.current.pauseVideo(); setIsPlaying(false); }
+    else { playerRef.current.playVideo(); setIsPlaying(true); kickPlay(); }
   }
 
   function stopPlayback() {
     // Ojo: NO destruimos el player, solo paramos. Así sigue listo para la
     // próxima canción y el play responde al primer toque.
     if (playerRef.current && playerReadyRef.current) { try { playerRef.current.stopVideo(); } catch {} }
+    if (audioRef.current) { try { audioRef.current.pause(); audioRef.current.currentTime = 0; } catch {} }
+    usingAudioRef.current = false;
     setPlayingKey(null);setIsPlaying(false);setPlayingTitle("");setPlayingArtist("");setPlayingCover("");
     setProgress(0);setCurrentTime(0);setDuration(0);
     if("mediaSession" in navigator){navigator.mediaSession.playbackState="none";navigator.mediaSession.metadata=null;}
@@ -871,7 +946,7 @@ export default function ProfilePage() {
                 <div style={{color:"#8a8a9a",fontSize:"0.74em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingArtist}</div>
               </div>
               <button
-                onClick={e=>{e.stopPropagation();if(!playerRef.current||!playerReadyRef.current)return;if(isPlaying){playerRef.current.pauseVideo();setIsPlaying(false);}else{playerRef.current.playVideo();setIsPlaying(true);kickPlay();}}}
+                onClick={e=>{e.stopPropagation();togglePlay();}}
                 title={isPlaying?"Pausar":"Reproducir"}
                 style={{background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:"50%",width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 3px 12px rgba(34,197,94,0.4)"}}>
                 {isPlaying ? <IcoPause size={17}/> : <IcoPlay size={17}/>}
@@ -946,7 +1021,7 @@ export default function ProfilePage() {
                 </button>
 
                 <button
-                  onClick={()=>{if(!playerRef.current||!playerReadyRef.current)return;if(isPlaying){playerRef.current.pauseVideo();setIsPlaying(false);}else{playerRef.current.playVideo();setIsPlaying(true);kickPlay();}}}
+                  onClick={togglePlay}
                   title={isPlaying?"Pausar":"Reproducir"}
                   style={{background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:"50%",width:70,height:70,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 8px 28px rgba(34,197,94,0.45)"}}>
                   {isPlaying ? <IcoPause size={30}/> : <IcoPlay size={30}/>}

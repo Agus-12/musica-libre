@@ -454,13 +454,25 @@ export default function SpotifyPage() {
         return;
       }
       
-      if (data.video_id) {
-        // YouTube: guardar video_id para reproducir vía YouTube IFrame
+      if (data.video_id || data.audio_url) {
+        /* Si el servidor pudo sacar el audio directo (audio_url), lo
+           guardamos en la caché: eso SÍ suena sin internet, igual que el
+           preview. Si no, guardamos el video_id y se reproduce por el
+           iframe de YouTube (necesita conexión). */
+        let guardadoOffline = false;
+        if (data.audio_url && "caches" in window) {
+          try {
+            const c = await caches.open("ml-saved-v1");
+            await c.add(data.audio_url);
+            guardadoOffline = true;
+          } catch { /* si falla, seguimos con el iframe */ }
+        }
         try {
           const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
           const entry = {
-            video_id: data.video_id,
-            method: "youtube",
+            video_id: data.video_id || "",
+            audio_url: guardadoOffline ? data.audio_url : "",
+            method: guardadoOffline ? "audio" : "youtube",
             title: data.title || trackName,
             saved_at: Date.now(),
           };
@@ -468,7 +480,12 @@ export default function SpotifyPage() {
           if (trackId) saved[String(trackId)] = entry;
           localStorage.setItem("ml_mp3", JSON.stringify(saved));
         } catch {}
-        toast.success("✅ Listo para reproducir: " + trackName, 5000);
+        toast.success(
+          guardadoOffline
+            ? "✅ Guardada sin internet: " + trackName
+            : "✅ Listo para reproducir: " + trackName,
+          5000
+        );
       } else {
         toast.warning("⚠️ No se encontró en YouTube: " + trackName, 5000);
       }

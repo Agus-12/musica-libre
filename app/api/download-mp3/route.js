@@ -1,9 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
-// Download full MP3 info:
-// - If iTunes/Apple Music link → use aaplmusicdownloader.com
-// - Otherwise → search YouTube with yt-search and return videoId for playback
-// No yt-dlp needed! Client plays via YouTube IFrame API.
+const execFileAsync = promisify(execFile);
+
+/* ═══════════════════════════════════════════════════════════════
+   /api/download-mp3
+
+   Devuelve cómo reproducir una canción. Intenta, en este orden:
+
+   1. yt-dlp  → audio_url (archivo real, se puede cachear y oír OFFLINE)
+   2. YouTube IFrame → video_id (streaming, NECESITA internet)
+
+   El paso 1 sólo funciona si:
+     · yt-dlp está instalado en el servidor  (Vercel NO lo permite), y
+     · YouTube no bloquea la IP del servidor (bloquea las de datacenter).
+
+   Por eso NUNCA damos por hecho que funciona: si falla, caemos al
+   iframe de siempre y la app sigue andando igual que hasta ahora.
+   ═══════════════════════════════════════════════════════════════ */
+
+// Cache del chequeo para no pagar el costo en cada request
+let ytdlpDisponible = null;
+
+async function tieneYtDlp() {
+  if (ytdlpDisponible !== null) return ytdlpDisponible;
+  // En Vercel ni lo intentamos: no hay binarios en serverless.
+  if (process.env.VERCEL || process.env.NEXT_RUNTIME === "edge") {
+    ytdlpDisponible = false;
+    return false;
+  }
+  try {
+    await execFileAsync("yt-dlp", ["--version"], { timeout: 5000 });
+    ytdlpDisponible = true;
+  } catch {
+    ytdlpDisponible = false;
+  }
+  return ytdlpDisponible;
+}
+
+/**
+ * Intenta obtener la URL directa del audio.
+ * Devuelve null si no se puede (y entonces usamos el iframe).
+ */
+async function obtenerAudioUrl(videoUrl) {
+  if (!(await tieneYtDlp())) return null;
+  try {
+    const { stdout } = await execFileAsync(
+      "yt-dlp",
+      [
+        "--get-url",
+        "-f", "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+        "--no-playlist",
+        "--no-warnings",
+        "--quiet",
+        videoUrl,
+      ],
+      { timeout: 20000, maxBuffer: 1024 * 1024 }
+    );
+    const url = (stdout || "").trim().split("\n")[0];
+    return url && url.startsWith("http") ? url : null;
+  } catch {
+    // YouTube bloquea IPs de servidor ("Sign in to confirm you're not a bot"),
+    // o yt-dlp falló. No es un error fatal: seguimos con el iframe.
+    return null;
+  }
+}
 
 async function fetchJSON(url) {
   const resp = await fetch(url, {
@@ -12,6 +74,25 @@ async function fetchJSON(url) {
   });
   if (!resp.ok) throw new Error("HTTP " + resp.status);
   return await resp.json();
+}
+
+async function buscarEnYouTube(searchQuery) {
+  const ytSearch = await import("yt-search");
+  let results = await ytSearch.default(searchQuery + " official audio");
+  if (!results.videos || results.videos.length === 0) {
+    results = await ytSearch.default(searchQuery + " audio");
+  }
+  if (!results.videos || results.videos.length === 0) return null;
+
+  let video = results.videos[0];
+  for (const v of results.videos.slice(0, 8)) {
+    const t = (v.title || "").toLowerCase();
+    if (t.includes("official audio") || t.includes("audio") || t.includes("lyric")) {
+      video = v;
+      break;
+    }
+  }
+  return video;
 }
 
 export async function GET(req) {
@@ -25,87 +106,69 @@ export async function GET(req) {
   }
 
   try {
-    // ── Method 1: iTunes/Apple Music URL → aaplmusicdownloader.com ──
+    // ── Apple Music / iTunes ──
     const appleUrl = itunesUrl || "";
     if (appleUrl.includes("apple.com") || appleUrl.includes("itunes.apple.com")) {
-      // Also search YouTube for a playable video
-      let ytVideoId = null;
-      let ytTitle = null;
-      try {
-        const ytSearch = await import("yt-search");
-        const results = await ytSearch.default(query + " official audio");
-        if (results.videos && results.videos.length > 0) {
-          // Prefer "audio" or "official" videos
-          let video = results.videos[0];
-          for (const v of results.videos.slice(0, 5)) {
-            const t = (v.title || "").toLowerCase();
-            if (t.includes("audio") || t.includes("official audio") || t.includes("lyric")) {
-              video = v;
-              break;
-            }
-          }
-          ytVideoId = video.videoId;
-          ytTitle = video.title;
-        }
-      } catch {}
+      const video = await buscarEnYouTube(query).catch(() => null);
+      let audioUrl = null;
+      if (video) audioUrl = await obtenerAudioUrl(video.url);
 
       return NextResponse.json({
         success: true,
         method: "aaplmusicdownloader",
         download_url: "https://aaplmusicdownloader.com/",
         apple_url: appleUrl,
-        video_id: ytVideoId,
-        video_title: ytTitle,
+        video_id: video?.videoId || null,
+        video_title: video?.title || null,
+        audio_url: audioUrl,                 // null si no se pudo
+        offline: Boolean(audioUrl),          // ¿se puede guardar de verdad?
         quality: "256K M4A (original Apple) + YouTube para reproducir",
-        note: "Reproducimos vía YouTube, y también podés descargar desde Apple Music",
+        note: audioUrl
+          ? "Audio descargable: se puede guardar para escuchar sin internet"
+          : "Reproducimos vía YouTube (necesita internet)",
       });
     }
 
-    // ── Method 2: YouTube search with yt-search (works on Vercel!) ──
+    // ── Búsqueda normal ──
     let searchQuery = query;
-
     if (spotifyUrl && spotifyUrl.includes("spotify.com")) {
       try {
-        const oembed = await fetchJSON("https://open.spotify.com/oembed?url=" + encodeURIComponent(spotifyUrl));
+        const oembed = await fetchJSON(
+          "https://open.spotify.com/oembed?url=" + encodeURIComponent(spotifyUrl)
+        );
         if (oembed.title) searchQuery = oembed.title;
       } catch {}
     }
 
-    // Search YouTube
-    const ytSearch = await import("yt-search");
-    const results = await ytSearch.default(searchQuery + " official audio");
-
-    if (!results.videos || results.videos.length === 0) {
-      // Try without "official audio"
-      const results2 = await ytSearch.default(searchQuery + " audio");
-      if (!results2.videos || results2.videos.length === 0) {
-        return NextResponse.json({ error: "No se encontró la canción en YouTube" }, { status: 404 });
-      }
-      results.videos = results2.videos;
+    const video = await buscarEnYouTube(searchQuery);
+    if (!video) {
+      return NextResponse.json(
+        { error: "No se encontró la canción en YouTube" },
+        { status: 404 }
+      );
     }
 
-    // Pick best result
-    let video = results.videos[0];
-    for (const v of results.videos.slice(0, 8)) {
-      const t = (v.title || "").toLowerCase();
-      if (t.includes("official audio") || t.includes("audio") || t.includes("lyric")) {
-        video = v;
-        break;
-      }
-    }
+    // Intento de audio descargable (offline real). Si no se puede, va null.
+    const audioUrl = await obtenerAudioUrl(video.url);
 
     return NextResponse.json({
       success: true,
-      method: "youtube",
+      method: audioUrl ? "audio" : "youtube",
+      audio_url: audioUrl,                 // null → la app usa el iframe
+      offline: Boolean(audioUrl),
       video_id: video.videoId,
       video_url: video.url,
       title: video.title,
       duration: video.duration?.seconds || 0,
       query: searchQuery,
-      note: "Reproducir vía YouTube IFrame (canción completa)",
+      note: audioUrl
+        ? "Audio directo: se puede guardar para escuchar sin internet"
+        : "Reproducir vía YouTube IFrame (necesita internet)",
     });
-
   } catch (e) {
-    return NextResponse.json({ error: "Error: " + (e.message || "desconocido") }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error: " + (e.message || "desconocido") },
+      { status: 500 }
+    );
   }
 }
