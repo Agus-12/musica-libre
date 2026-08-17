@@ -138,6 +138,7 @@ export async function GET(req) {
             nb_album: 0,
             source: "itunes",
             type: "artist",
+            source_url: a.artistLinkUrl || "",
           })),
           source: "itunes",
         });
@@ -168,7 +169,9 @@ export async function GET(req) {
               artist: s.artistName || main.artistName || "",
               duration: s.trackTimeMillis ? formatDurationMs(s.trackTimeMillis) : "",
               preview_url: s.previewUrl || "",
+              source_url: s.trackViewUrl || "",
             })),
+            source_url: main.collectionViewUrl || "",
             images: [
               { url: (main.artworkUrl100 || "").replace("100x100", "600x600"), size: "600x600", label: "Grande (600px)" },
               { url: main.artworkUrl100 || "", size: "100x100", label: "Chica (100px)" },
@@ -202,6 +205,7 @@ function normalizeDeezerAlbum(a) {
     year: a.release_date?.split("-")[0] || "",
     source: "deezer",
     type: "album",
+    source_url: a.link || "",
   };
 }
 
@@ -227,9 +231,11 @@ function normalizeDeezerAlbumDetail(a, tracks) {
       duration: t.duration ? formatDuration(t.duration) : "",
       duration_sec: t.duration || 0,
       preview_url: t.preview || "",
+      source_url: t.link || "",
     })),
     source: "deezer",
     type: "album",
+    source_url: a.link || "",
     images: [
       ...(a.cover_xl ? [{ url: a.cover_xl, size: "1400x1400", label: "XL (1400px)" }] : []),
       ...(a.cover_big ? [{ url: a.cover_big, size: "500x500", label: "Grande (500px)" }] : []),
@@ -250,6 +256,7 @@ function normalizeDeezerArtist(a) {
     nb_album: a.nb_album || 0,
     source: "deezer",
     type: "artist",
+    source_url: a.link || "",
   };
 }
 
@@ -266,6 +273,7 @@ function normalizeDeezerArtistDetail(a, albums) {
     albums: albums.map(normalizeDeezerAlbum),
     source: "deezer",
     type: "artist",
+    source_url: a.link || "",
     images: [
       ...(a.picture_xl ? [{ url: a.picture_xl, size: "1000x1000", label: "XL (1000px)" }] : []),
       ...(a.picture_big ? [{ url: a.picture_big, size: "500x500", label: "Grande (500px)" }] : []),
@@ -291,6 +299,7 @@ function normalizeITunesAlbum(a) {
     genre: a.primaryGenreName || "",
     source: "itunes",
     type: "album",
+    source_url: a.collectionViewUrl || a.artistViewUrl || "",
   };
 }
 
