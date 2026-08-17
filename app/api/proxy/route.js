@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /* ═══════════════════════════════════════════════════
-   API /api/proxy
+   API /api/proxy — Versión mejorada
    
-   Recibe: ?url=https://ejemplo.com/imagen.jpg
-   Hace:   Fetch la URL y devuelve el contenido tal cual
-   Para:   Que las imágenes del espejo se muestren (evita CORS)
+   Proxy para mostrar imágenes del espejo (evita CORS)
    ═══════════════════════════════════════════════════ */
 
 export async function GET(req) {
@@ -15,14 +13,25 @@ export async function GET(req) {
   try {
     const resp = await fetch(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Referer: url,
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Referer": new URL(url).origin + "/",
+        "Sec-Fetch-Dest": "image",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Site": "cross-site",
       },
       redirect: "follow",
+      signal: AbortSignal.timeout(15000),
     });
 
-    if (!resp.ok) return new NextResponse(`Error ${resp.status}`, { status: resp.status });
+    if (!resp.ok) {
+      // Devolver imagen placeholder en vez de error
+      const placeholder = createPlaceholderSvg(resp.status);
+      return new NextResponse(placeholder, {
+        status: 200,
+        headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache" },
+      });
+    }
 
     const contentType = resp.headers.get("content-type") || "application/octet-stream";
     const body = await resp.arrayBuffer();
@@ -31,11 +40,25 @@ export async function GET(req) {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=3600", // Cachear 1 hora
+        "Cache-Control": "public, max-age=3600",
         "Access-Control-Allow-Origin": "*",
       },
     });
   } catch (e) {
-    return new NextResponse(`Proxy error: ${e.message}`, { status: 500 });
+    // Devolver placeholder en vez de error
+    const placeholder = createPlaceholderSvg("?");
+    return new NextResponse(placeholder, {
+      status: 200,
+      headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-cache" },
+    });
   }
+}
+
+function createPlaceholderSvg(status) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180">
+    <rect fill="#1a1a2e" width="300" height="180"/>
+    <text fill="#555" font-family="sans-serif" font-size="14" x="150" y="80" text-anchor="middle">🚫 No se pudo cargar</text>
+    <text fill="#444" font-family="sans-serif" font-size="11" x="150" y="105" text-anchor="middle">Error ${status}</text>
+  </svg>`;
+  return svg;
 }

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /* ═══════════════════════════════════════════════════
-   API /api/download
+   API /api/download — Versión mejorada
    
-   Recibe: ?url=https://ejemplo.com/archivo.zip&filename=archivo.zip
-   Hace:   Fetch el archivo y lo devuelve como descarga al navegador
-   Para:   Botón "Descargar" — el navegador guarda el archivo
+   Descarga un archivo y lo devuelve al navegador
    ═══════════════════════════════════════════════════ */
 
 export async function GET(req) {
@@ -17,26 +15,39 @@ export async function GET(req) {
   try {
     const resp = await fetch(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Referer": new URL(url).origin + "/",
       },
       redirect: "follow",
+      signal: AbortSignal.timeout(30000),
     });
 
-    if (!resp.ok) return new NextResponse(`Error ${resp.status}`, { status: resp.status });
+    if (!resp.ok) {
+      return new NextResponse(
+        JSON.stringify({ error: `Error ${resp.status} al descargar` }),
+        { status: resp.status, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     const contentType = resp.headers.get("content-type") || "application/octet-stream";
     const body = await resp.arrayBuffer();
+
+    // Limpiar filename para header
+    const safeName = filename.replace(/[^\w.\-]/g, "_");
 
     return new NextResponse(body, {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="${safeName}"`,
         "Access-Control-Allow-Origin": "*",
       },
     });
   } catch (e) {
-    return new NextResponse(`Download error: ${e.message}`, { status: 500 });
+    return new NextResponse(
+      JSON.stringify({ error: e.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
