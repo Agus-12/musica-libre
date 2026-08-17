@@ -12,7 +12,13 @@ chk(){ if eval "$2" >/dev/null 2>&1; then echo "  ✅ $1"; ok=$((ok+1)); else ec
 
 chk "yt-dlp instalado"  "command -v yt-dlp"
 chk "node instalado"    "command -v node"
-chk "ffmpeg instalado"  "command -v ffmpeg"
+
+# ffmpeg NO es necesario: el servidor baja el m4a tal cual, sin convertir.
+if command -v ffmpeg >/dev/null 2>&1; then
+  echo "  ✅ ffmpeg instalado (opcional)"
+else
+  echo "  ·  ffmpeg no está — no hace falta, el servidor no lo usa"
+fi
 
 echo ""
 if command -v yt-dlp >/dev/null 2>&1; then
@@ -21,7 +27,8 @@ if command -v yt-dlp >/dev/null 2>&1; then
   v=$(yt-dlp --version 2>/dev/null | tr -d '.')
   hoy=$(date +%Y%m%d)
   if [ -n "$v" ] && [ "$v" -lt "$((hoy - 200))" ]; then
-    echo "  ⚠  Parece viejo. Actualizá:  brew upgrade yt-dlp"
+    echo "  ⚠  Parece viejo. Actualizá:  sudo yt-dlp -U"
+    echo "     (si lo instalaste con Homebrew:  brew upgrade yt-dlp)"
   fi
 fi
 

@@ -69,29 +69,48 @@ Tiene que decir `"name": "AURA"`. Si dice "Música Libre", todavía no salió.
 
 Abrí la **Terminal** (Cmd+Espacio → escribí "Terminal").
 
-### 3.1 Instalar Homebrew
+### 3.1 Instalar yt-dlp
 
-Si nunca lo usaste:
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
-Comprobá: `brew --version`
-
-### 3.2 Instalar lo necesario
+Es un archivo único, no necesita nada más:
 
 ```bash
-brew install yt-dlp ffmpeg node
+sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o /usr/local/bin/yt-dlp
+sudo chmod a+rx /usr/local/bin/yt-dlp
 ```
 
-Comprobá que los tres respondan:
+> **Mac con Apple Silicon (M1/M2/M3/M4):** el mismo comando sirve, pero si
+> preferís Homebrew, `brew install yt-dlp` también funciona.
+
+Si macOS lo bloquea con un aviso de seguridad:
+
+```bash
+sudo xattr -d com.apple.quarantine /usr/local/bin/yt-dlp
+```
+
+### 3.2 Instalar Node
+
+Bajá el instalador oficial y hacé doble clic:
+
+**https://nodejs.org/dist/v24.19.0/node-v24.19.0.pkg**
+
+Ese `.pkg` es para **Intel**. Si tu Mac es Apple Silicon, usá
+`node-v24.19.0-arm64.pkg` de la misma carpeta.
+
+Después abrí una Terminal **nueva** (importante) y comprobá que los dos
+respondan:
 
 ```bash
 yt-dlp --version    # ej: 2026.07.04
-node --version      # ej: v22.x
-ffmpeg -version     # una parrafada
+node --version      # ej: v24.19.0
 ```
+
+> **¿Y ffmpeg?** No hace falta. El servidor baja el audio ya listo (`.m4a`)
+> y no lo convierte, así que ffmpeg nunca se usa.
+
+> **¿Por qué no Homebrew?** En macOS 13 y anteriores con procesador Intel,
+> Homebrew ya no tiene paquetes precompilados: intenta compilar todo desde
+> cero (LLVM, Rust, Python…), tarda horas y suele fallar. Los binarios
+> oficiales de arriba tardan dos minutos.
 
 ### 3.3 Crear la carpeta y copiar el servidor
 
@@ -224,8 +243,15 @@ Vercel necesita poder llegar a tu Mac. **No abras puertos en el router** —
 usá un túnel de Cloudflare, que es gratis y más seguro.
 
 ```bash
-brew install cloudflared
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz -o /tmp/cf.tgz
+tar -xzf /tmp/cf.tgz -C /tmp
+sudo mv /tmp/cloudflared /usr/local/bin/
+sudo chmod +x /usr/local/bin/cloudflared
+cloudflared --version
 ```
+
+> Ese `.tgz` es para **Intel**. En Apple Silicon cambiá `amd64` por `arm64`,
+> o usá `brew install cloudflared`.
 
 ### Opción A — Rápida (para probar hoy)
 
@@ -359,7 +385,7 @@ Pegá esto (cambiá `TU_USUARIO` y `TU_CLAVE`):
   <key>Label</key><string>com.aura.servidor</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/opt/homebrew/bin/node</string>
+    <string>/usr/local/bin/node</string>
     <string>/Users/TU_USUARIO/aura-servidor/servidor.js</string>
   </array>
   <key>EnvironmentVariables</key>
@@ -386,8 +412,10 @@ launchctl load ~/Library/LaunchAgents/com.aura.servidor.plist
 
 `KeepAlive` hace que si el servidor se cae, macOS lo reviva solo.
 
-> **Mac con chip Intel:** cambiá `/opt/homebrew/bin/node` por
-> `/usr/local/bin/node`. Para saber cuál es: `which node`
+> **Comprobá la ruta de node antes de guardar:** corré `which node` y usá
+> exactamente lo que devuelva. Con el instalador `.pkg` o en Mac Intel es
+> `/usr/local/bin/node`; con Homebrew en Apple Silicon es
+> `/opt/homebrew/bin/node`.
 
 ### 8.2 Que el túnel arranque solo
 
@@ -408,11 +436,13 @@ de funcionar de golpe.
 crontab -e
 ```
 
-Agregá (Intel: `/usr/local/bin/brew`):
+Agregá:
 
 ```
-0 4 * * 1 /opt/homebrew/bin/brew upgrade yt-dlp >/dev/null 2>&1
+0 4 * * 1 /usr/local/bin/yt-dlp -U >/dev/null 2>&1
 ```
+
+(Si lo instalaste con Homebrew, usá `brew upgrade yt-dlp` en su lugar.)
 
 Se actualiza los lunes a las 4 AM.
 
@@ -445,7 +475,7 @@ resuelve con cookies en 5 minutos.
 Resumen por orden de efectividad:
 
 1. **Cookies** (paso 3.7) — funciona casi siempre
-2. **Actualizar yt-dlp**: `brew upgrade yt-dlp`
+2. **Actualizar yt-dlp**: `sudo yt-dlp -U`  (con Homebrew: `brew upgrade yt-dlp`)
 3. **Bajar el ritmo**: subí `MUSICA_PAUSA_MS` a `10000` (10 s entre
    descargas). Pedir muchas seguidas es lo que dispara el bloqueo.
 
