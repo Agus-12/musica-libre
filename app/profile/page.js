@@ -674,7 +674,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:20,paddingBottom:hp?86:20}}>
+    <div style={{maxWidth:900,margin:"0 auto",padding:20,boxSizing:"border-box",paddingBottom:hp?"calc(104px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
       <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
 
       {/* Header */}
@@ -731,8 +731,10 @@ export default function ProfilePage() {
             )}
 
             {/* Buscador + controles */}
-            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-              <div style={{position:"relative",flex:1,minWidth:190}}>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
+              {/* El buscador ocupa su propia fila: antes competia por el ancho
+                  con el boton verde y en celulares angostos se empalmaban. */}
+              <div style={{position:"relative",width:"100%"}}>
                 <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",display:"flex",pointerEvents:"none"}}>
                   <Ico d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} size={15} stroke="#666"/>
                 </span>
@@ -740,7 +742,7 @@ export default function ProfilePage() {
                   value={search}
                   onChange={e=>setSearch(e.target.value)}
                   placeholder="Buscar en tus descargas..."
-                  style={{width:"100%",padding:"11px 34px 11px 36px",borderRadius:10,border:"1px solid #2a2a3e",background:"#12121f",color:"#e0e0e0",fontSize:"0.9em",outline:"none"}}
+                  style={{width:"100%",boxSizing:"border-box",padding:"11px 34px 11px 36px",borderRadius:10,border:"1px solid #2a2a3e",background:"#12121f",color:"#e0e0e0",fontSize:"0.9em",outline:"none"}}
                 />
                 {search && (
                   <button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}>
@@ -749,11 +751,13 @@ export default function ProfilePage() {
                 )}
               </div>
 
+              {/* Fila de acciones, separada del buscador */}
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
               {/* Reproducir todo */}
               <button
                 onClick={()=>{ const l=listaVisible; if(!l.length)return; startTrack(shuffle ? l[Math.floor(Math.random()*l.length)] : l[0]); }}
                 title="Reproducir todo"
-                style={{display:"flex",alignItems:"center",gap:7,padding:"11px 16px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",fontWeight:700,fontSize:"0.85em",boxShadow:"0 3px 12px rgba(34,197,94,0.3)"}}>
+                style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 16px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",fontWeight:700,fontSize:"0.85em",boxShadow:"0 3px 12px rgba(34,197,94,0.3)"}}>
                 <IcoPlay size={14}/> Reproducir
               </button>
 
@@ -761,7 +765,7 @@ export default function ProfilePage() {
               <button
                 onClick={()=>{ setShuffle(s=>!s); toast.info(!shuffle?"Aleatorio activado":"Aleatorio desactivado",2000); }}
                 title="Reproducción aleatoria"
-                style={{display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,borderRadius:10,cursor:"pointer",background:shuffle?"rgba(34,197,94,0.16)":"#12121f",border:shuffle?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
+                style={{display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,flexShrink:0,borderRadius:10,cursor:"pointer",background:shuffle?"rgba(34,197,94,0.16)":"#12121f",border:shuffle?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
                 <Ico d={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>} size={17} stroke={shuffle?"#22c55e":"#777"}/>
               </button>
 
@@ -769,10 +773,11 @@ export default function ProfilePage() {
               <button
                 onClick={()=>{ const o=repeat==="off"?"all":repeat==="all"?"one":"off"; setRepeat(o); toast.info(o==="off"?"Repetir desactivado":o==="all"?"Repetir todo":"Repetir esta canción",2000); }}
                 title="Repetir"
-                style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,borderRadius:10,cursor:"pointer",background:repeat!=="off"?"rgba(34,197,94,0.16)":"#12121f",border:repeat!=="off"?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
+                style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,flexShrink:0,borderRadius:10,cursor:"pointer",background:repeat!=="off"?"rgba(34,197,94,0.16)":"#12121f",border:repeat!=="off"?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
                 <Ico d={<><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></>} size={17} stroke={repeat!=="off"?"#22c55e":"#777"}/>
                 {repeat==="one" && <span style={{position:"absolute",bottom:4,right:5,fontSize:"0.55em",fontWeight:800,color:"#22c55e"}}>1</span>}
               </button>
+              </div>
             </div>
 
             {listaVisible.length===0 ? (
@@ -935,7 +940,7 @@ export default function ProfilePage() {
             <div style={{height:2.5,background:"rgba(255,255,255,0.07)"}}>
               <div style={{height:"100%",width:progress+"%",background:"linear-gradient(90deg,#22c55e,#4ade80)",transition:"width 0.25s linear"}}/>
             </div>
-            <div style={{maxWidth:900,margin:"0 auto",padding:"9px 14px",display:"flex",alignItems:"center",gap:12}}>
+            <div style={{maxWidth:900,margin:"0 auto",padding:"9px 14px calc(9px + env(safe-area-inset-bottom))",display:"flex",alignItems:"center",gap:12}}>
               {playingCover
                 ? <img src={playingCover} alt="" style={{width:46,height:46,borderRadius:8,objectFit:"cover",flexShrink:0,boxShadow:"0 3px 12px rgba(0,0,0,0.5)"}}/>
                 : <div style={{width:46,height:46,borderRadius:8,flexShrink:0,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -960,7 +965,7 @@ export default function ProfilePage() {
 
           {/* ── Pantalla completa (desplegada) ── */}
           <div
-            style={{position:"fixed",inset:0,zIndex:9999,background:"linear-gradient(180deg,#1a1a2e 0%,#12121f 45%,#0a0a14 100%)",display:"flex",flexDirection:"column",transform:expanded?"translateY(0)":"translateY(100%)",transition:"transform 0.38s cubic-bezier(0.32,0.72,0,1)",overflow:"hidden"}}>
+            style={{position:"fixed",top:0,left:0,right:0,bottom:0,height:"100dvh",zIndex:9999,background:"linear-gradient(180deg,#1a1a2e 0%,#12121f 45%,#0a0a14 100%)",display:"flex",flexDirection:"column",transform:expanded?"translateY(0)":"translateY(100%)",transition:"transform 0.38s cubic-bezier(0.32,0.72,0,1)",overflow:"hidden"}}>
 
             {/* Fondo difuminado con la portada */}
             {playingCover && (
@@ -968,7 +973,7 @@ export default function ProfilePage() {
             )}
             <div style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(10,10,20,0.35),rgba(10,10,20,0.85))",pointerEvents:"none"}}/>
 
-            <div style={{position:"relative",flex:1,display:"flex",flexDirection:"column",padding:"10px 24px 30px",maxWidth:520,width:"100%",margin:"0 auto",overflowY:"auto"}}>
+            <div style={{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column",boxSizing:"border-box",padding:"max(8px,env(safe-area-inset-top)) 22px calc(14px + env(safe-area-inset-bottom))",maxWidth:520,width:"100%",margin:"0 auto",overflow:"hidden"}}>
 
               {/* Barra superior: bajar / cerrar */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -984,22 +989,25 @@ export default function ProfilePage() {
               </div>
 
               {/* Portada grande */}
-              <div style={{flex:"0 1 auto",display:"flex",alignItems:"center",justifyContent:"center",margin:"14px 0 22px"}}>
+              {/* La portada es lo único que cede espacio: `flex:1 1 auto` +
+                  `minHeight:0` la dejan encoger en pantallas bajas en vez de
+                  empujar los controles fuera de la pantalla. */}
+              <div style={{flex:"1 1 auto",minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",margin:"10px 0 14px"}}>
                 {playingCover
-                  ? <img src={playingCover} alt="" style={{width:"100%",maxWidth:330,aspectRatio:"1",borderRadius:16,objectFit:"cover",boxShadow:isPlaying?"0 22px 60px rgba(0,0,0,0.65)":"0 12px 34px rgba(0,0,0,0.5)",transform:isPlaying?"scale(1)":"scale(0.9)",transition:"transform 0.4s cubic-bezier(0.32,0.72,0,1), box-shadow 0.4s"}}/>
-                  : <div style={{width:"100%",maxWidth:330,aspectRatio:"1",borderRadius:16,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 18px 50px rgba(0,0,0,0.55)"}}>
+                  ? <img src={playingCover} alt="" style={{height:"100%",width:"auto",maxWidth:"100%",aspectRatio:"1",borderRadius:16,objectFit:"cover",boxShadow:isPlaying?"0 22px 60px rgba(0,0,0,0.65)":"0 12px 34px rgba(0,0,0,0.5)",transform:isPlaying?"scale(1)":"scale(0.92)",transition:"transform 0.4s cubic-bezier(0.32,0.72,0,1), box-shadow 0.4s"}}/>
+                  : <div style={{height:"100%",width:"auto",maxWidth:"100%",aspectRatio:"1",borderRadius:16,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 18px 50px rgba(0,0,0,0.55)"}}>
                       <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={76} stroke="#3a3a4e" sw={1.2}/>
                     </div>}
               </div>
 
               {/* Título + artista */}
-              <div style={{marginBottom:18,flexShrink:0}}>
+              <div style={{marginBottom:10,flexShrink:0,textAlign:"center"}}>
                 <div style={{color:"#fff",fontSize:"1.3em",fontWeight:700,lineHeight:1.25,marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{playingTitle}</div>
                 <div style={{color:"#a0a0b5",fontSize:"0.98em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingArtist}</div>
               </div>
 
               {/* Barra de progreso grande y arrastrable */}
-              <div style={{flexShrink:0,marginBottom:6}}>
+              <div style={{flexShrink:0,marginBottom:2}}>
                 <div ref={barRef} onMouseDown={startSeek} onTouchStart={startSeek}
                   style={{padding:"12px 0",cursor:"pointer",touchAction:"none"}}>
                   <div style={{position:"relative",height:6,borderRadius:3,background:"rgba(255,255,255,0.14)"}}>
@@ -1014,7 +1022,7 @@ export default function ProfilePage() {
               </div>
 
               {/* Controles principales */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:24,margin:"14px 0 20px",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"clamp(18px,7vw,30px)",margin:"10px 0 12px",flexShrink:0}}>
                 <button onClick={playPrev} title="Anterior"
                   style={{background:"none",border:"none",cursor:"pointer",padding:8,display:"flex"}}>
                   <Ico d={<><polygon points="19 20 9 12 19 4 19 20" fill="#e0e0ea" stroke="none"/><line x1="5" y1="5" x2="5" y2="19"/></>} size={30} stroke="#e0e0ea" sw={2.4}/>
@@ -1034,7 +1042,7 @@ export default function ProfilePage() {
               </div>
 
               {/* Fila secundaria: -15s, aleatorio, repetir, +15s */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:26,flexShrink:0,paddingBottom:6}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"clamp(20px,8vw,32px)",flexShrink:0,paddingBottom:2}}>
                 <button onClick={()=>seekTo(Math.max(0,currentTime-15))} title="Retroceder 15s"
                   style={{background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
                   <Ico d={<><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></>} size={21} stroke="#8a8a9a" sw={2.2}/>

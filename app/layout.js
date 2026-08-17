@@ -16,13 +16,21 @@ export const metadata = {
   },
 };
 
+/* Sin `viewportFit: "cover"` los env(safe-area-inset-*) valen 0 en el celu,
+   y la mini-barra queda tapada por la barra de gestos. */
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#7c5cfc",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
-        <meta name="theme-color" content="#7c5cfc" />
       </head>
       <body style={{ margin: 0, background: "#0f0f1a", color: "#e0e0e0", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
         <UserProvider>
