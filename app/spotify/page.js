@@ -370,7 +370,9 @@ export default function SpotifyPage() {
     setResaltada(resaltar ? String(resaltar).toLowerCase().trim() : null);
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try {
-      const endpoint = "/api/music?action=lookup&id=" + albumId + "&source=itunes";
+      const endpoint = source === "deezer"
+        ? "/api/music?action=album&id=" + albumId + "&source=deezer"
+        : "/api/music?action=lookup&id=" + albumId + "&source=itunes";
       const res = await fetch(endpoint);
       const data = await res.json();
       if (data.error) setError(data.error);
@@ -729,7 +731,7 @@ export default function SpotifyPage() {
                   <SectionHeader icon="" title="Canciones" subtitle="" />
                   <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                     {songResults.map(s => (
-                      <div key={s.id} onClick={() => loadAlbum(s.album_id, "itunes", s.name)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
+                      <div key={s.id} onClick={() => loadAlbum(s.album_id, s.source || "itunes", s.name)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
                         {s.cover ? <img src={s.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ color: "var(--text)", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
@@ -748,7 +750,7 @@ export default function SpotifyPage() {
               {albums.length > 0 && (
                 <div>
                   <SectionHeader icon="" title="Álbumes" subtitle="" />
-                  <AlbumGrid albums={albums} source={src} onSelect={(id) => loadAlbum(id, src)} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
+                  <AlbumGrid albums={albums} source={src} onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
                 </div>
               )}
               {!loading && results && albums.length === 0 && artists.length === 0 && <p style={{ textAlign: "center", color: "var(--text5)", padding: 40 }}>No se encontraron resultados</p>}
@@ -952,7 +954,7 @@ function HorizontalAlbumRow({ albums, onSelect, onFavorite, onPlaylist, isFavori
   return (
     <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
       {albums.map(a => (
-        <div key={a.id} onClick={() => onSelect(a.id)} style={{ flex: "0 0 140px", background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)", position: "relative" }}>
+        <div key={a.id} onClick={() => onSelect(a.id, a.source || source)} style={{ flex: "0 0 140px", background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)", position: "relative" }}>
           <img src={a.cover_big || a.cover_xl || a.cover_medium} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} loading="lazy" />
           <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 2 }}>
             <ActionBtn active={isFavorite("album", a.id)} onClick={e => onFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="fav" size="sm" />
@@ -990,7 +992,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(145px, 1fr))", gap: 10 }}>
       {albums.map(a => (
-        <div key={a.id} onClick={() => onSelect(a.id)} style={{ background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)", position: "relative", transition: "transform 0.15s" }}
+        <div key={a.id} onClick={() => onSelect(a.id, a.source || source)} style={{ background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)", position: "relative", transition: "transform 0.15s" }}
           onMouseOver={e => e.currentTarget.style.transform = "scale(1.03)"} onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
         >
           <img src={a.cover_big || a.cover_xl || a.cover_medium} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} loading="lazy" />

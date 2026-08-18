@@ -6,6 +6,18 @@ import { NextRequest, NextResponse } from "next/server";
 const DEEZER_BASE = "https://api.deezer.com";
 const ITUNES_BASE = "https://itunes.apple.com";
 
+/* Clave para detectar el MISMO tema/álbum en dos catálogos:
+   minúsculas, sin paréntesis/corchetes, sin "- single/ep", sin signos. */
+function claveDedupe(artista, titulo) {
+  return (String(artista || "") + "|" + String(titulo || ""))
+    .toLowerCase()
+    .replace(/\(.*?\)|\[.*?\]/g, "")
+    .replace(/-\s*(single|ep)\b.*$/g, "")
+    .replace(/[^a-z0-9\u00e1-\u00fa\u00f1|]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Helper: fetch JSON with error handling
 async function fetchJSON(url, headers = {}) {
   const resp = await fetch(url, {
@@ -117,8 +129,9 @@ async function manejarGET(req) {
       });
     }
 
-    // ── Always use iTunes (Apple Music) ──
-    let effectiveSource = "itunes";
+    /* iTunes es el catálogo principal; Deezer complementa (más variedad)
+       y atiende los detalles de SUS álbumes. */
+    let effectiveSource = source === "deezer" ? "deezer" : "itunes";
 
     // ── DEEZER ──
     if (effectiveSource === "deezer") {
@@ -184,13 +197,16 @@ async function manejarGET(req) {
              y la sección "Artistas" del buscador quedaba siempre vacía.
              Las fotos de artista no existen en iTunes: las tomamos de
              Deezer emparejando por nombre (si falla, sin foto y ya). */
-          const [data, artistData, dzData, songData] = await Promise.all([
+          const [data, artistData, dzData, songData, dzAlbums, dzTracks] = await Promise.all([
             fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=album&limit=" + limit),
             fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=musicArtist&limit=6").catch(() => ({ results: [] })),
             fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent(query) + "&limit=10").catch(() => ({ data: [] })),
             /* Canciones sueltas: sin esto, una canción cuyo nombre no
                titula su álbum era imposible de encontrar. */
             fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=song&limit=12").catch(() => ({ results: [] })),
+            /* Deezer complementa: lo que iTunes no tiene, entra de acá */
+            fetchJSON(DEEZER_BASE + "/search/album?q=" + encodeURIComponent(query) + "&limit=12").catch(() => ({ data: [] })),
+            fetchJSON(DEEZER_BASE + "/search?q=" + encodeURIComponent(query) + "&limit=12").catch(() => ({ data: [] })),
           ]);
           const fotos = new Map();
           for (const d of (dzData.data || [])) {
@@ -220,20 +236,53 @@ async function manejarGET(req) {
               }
             } catch {}
           }));
-          return NextResponse.json({
-            albums: (data.results || []).map(normalizeITunesAlbum),
-            artists: artistas,
-            songs: (songData.results || []).filter(s => s.wrapperType === "track").map(s => ({
-              id: String(s.trackId || ""),
-              name: s.trackName || "",
-              artist: s.artistName || "",
-              album: s.collectionName || "",
-              album_id: String(s.collectionId || ""),
-              cover: (s.artworkUrl100 || "").replace("100x100", "300x300"),
-              duration_ms: s.trackTimeMillis || 0,
-              preview_url: s.previewUrl || "",
-            })).filter(s => s.id && s.album_id),
+          /* Mezcla anti-duplicados: iTunes manda; Deezer agrega lo nuevo */
+          const albumsIt = (data.results || []).map(normalizeITunesAlbum);
+          const clavesAlb = new Set(albumsIt.map(a => claveDedupe(a.artist, a.name)));
+          const albumsDz = (dzAlbums.data || [])
+            .map(normalizeDeezerAlbum)
+            .filter(a => {
+              const k = claveDedupe(a.artist, a.name);
+              if (clavesAlb.has(k)) return false;
+              clavesAlb.add(k);
+              return true;
+            });
+
+          const cancionesIt = (songData.results || []).filter(s => s.wrapperType === "track").map(s => ({
+            id: String(s.trackId || ""),
+            name: s.trackName || "",
+            artist: s.artistName || "",
+            album: s.collectionName || "",
+            album_id: String(s.collectionId || ""),
+            cover: (s.artworkUrl100 || "").replace("100x100", "300x300"),
+            duration_ms: s.trackTimeMillis || 0,
+            preview_url: s.previewUrl || "",
             source: "itunes",
+          })).filter(s => s.id && s.album_id);
+          const clavesCan = new Set(cancionesIt.map(s => claveDedupe(s.artist, s.name)));
+          const cancionesDz = (dzTracks.data || []).filter(t => t.id && t.album).map(t => ({
+            id: String(t.id),
+            name: t.title || "",
+            artist: t.artist?.name || "",
+            album: t.album?.title || "",
+            album_id: String(t.album?.id || ""),
+            cover: t.album?.cover_medium || "",
+            duration_ms: (t.duration || 0) * 1000,
+            preview_url: t.preview || "",
+            source: "deezer",
+          })).filter(s => {
+            if (!s.album_id) return false;
+            const k = claveDedupe(s.artist, s.name);
+            if (clavesCan.has(k)) return false;
+            clavesCan.add(k);
+            return true;
+          });
+
+          return NextResponse.json({
+            albums: [...albumsIt, ...albumsDz],
+            artists: artistas,
+            songs: [...cancionesIt, ...cancionesDz],
+            source: "itunes+deezer",
           });
         }
         const data = await fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=" + entity + "&limit=" + limit);
@@ -353,12 +402,14 @@ function normalizeDeezerAlbumDetail(a, tracks) {
     total_tracks: a.nb_tracks || tracks.length,
     label: a.label || "",
     genres: (a.genres?.data || []).map(g => g.name),
+    genre: (a.genres?.data || [])[0]?.name || "",
     tracks: tracks.map((t, i) => ({
       number: i + 1,
       name: t.title || "",
       artist: t.artist?.name || a.artist?.name || "",
       duration: t.duration ? formatDuration(t.duration) : "",
       duration_sec: t.duration || 0,
+      duration_ms: (t.duration || 0) * 1000,
       preview_url: t.preview || "",
       source_url: t.link || "",
     })),
