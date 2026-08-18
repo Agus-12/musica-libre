@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import LogoAura from "./LogoAura";
 import { useUser } from "./UserContext";
 
@@ -20,6 +20,24 @@ const ICON_LOGOUT = <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyli
 export default function Navbar({ children }) {
   const { user, profile, logout } = useUser();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [temaClaro, setTemaClaro] = useState(false);
+
+  // Modo claro: se guarda la preferencia y se aplica una clase en <html>.
+  useEffect(() => {
+    try {
+      const claro = localStorage.getItem("aura_tema") === "claro";
+      setTemaClaro(claro);
+      document.documentElement.classList.toggle("tema-claro", claro);
+    } catch {}
+  }, []);
+  function toggleTema() {
+    const nuevo = !temaClaro;
+    setTemaClaro(nuevo);
+    try {
+      localStorage.setItem("aura_tema", nuevo ? "claro" : "oscuro");
+      document.documentElement.classList.toggle("tema-claro", nuevo);
+    } catch {}
+  }
 
   const links = [
     { href: "/spotify", icon: ICON_MUSIC, label: "Música" },
@@ -106,6 +124,17 @@ export default function Navbar({ children }) {
                 <Ico d={l.icon} size={18} stroke="#7c5cfc" /> {l.label}
               </a>
             ))}
+              <button onClick={toggleTema} style={{
+                padding: "12px 14px", borderRadius: 8, border: "none",
+                color: "#eab308", fontSize: "0.95em", cursor: "pointer", textAlign: "left",
+                background: "rgba(234,179,8,0.06)", display: "flex", alignItems: "center", gap: 11,
+              }}>
+                <Ico d={temaClaro
+                  ? <><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></>
+                  : <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>}
+                  size={18} stroke="#eab308" />
+                {temaClaro ? "Modo oscuro" : "Modo claro"}
+              </button>
               <button onClick={() => { logout(); setMenuOpen(false); }} style={{
                 padding: "12px 14px", borderRadius: 8, border: "none",
                 color: "#ef4444", fontSize: "0.95em", cursor: "pointer", textAlign: "left",

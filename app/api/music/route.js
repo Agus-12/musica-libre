@@ -130,10 +130,35 @@ async function manejarGET(req) {
       if (action === "search") {
         if (!query) return NextResponse.json({ error: "Falta busqueda (q)" }, { status: 400 });
         const entity = p.get("entity") || "album";
-        const data = await fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=" + entity + "&limit=" + limit);
         if (entity === "album") {
-          return NextResponse.json({ albums: (data.results || []).map(normalizeITunesAlbum), artists: [], source: "itunes" });
+          /* Álbumes + artistas EN PARALELO. Antes solo se pedían álbumes
+             y la sección "Artistas" del buscador quedaba siempre vacía.
+             Las fotos de artista no existen en iTunes: las tomamos de
+             Deezer emparejando por nombre (si falla, sin foto y ya). */
+          const [data, artistData, dzData] = await Promise.all([
+            fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=album&limit=" + limit),
+            fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=musicArtist&limit=6").catch(() => ({ results: [] })),
+            fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent(query) + "&limit=10").catch(() => ({ data: [] })),
+          ]);
+          const fotos = new Map();
+          for (const d of (dzData.data || [])) {
+            if (d.name) fotos.set(d.name.toLowerCase().trim(), d.picture_medium || d.picture || "");
+          }
+          return NextResponse.json({
+            albums: (data.results || []).map(normalizeITunesAlbum),
+            artists: (artistData.results || []).map(a => ({
+              id: String(a.artistId || ""),
+              name: a.artistName || "",
+              picture_medium: fotos.get((a.artistName || "").toLowerCase().trim()) || "",
+              nb_album: 0,
+              source: "itunes",
+              type: "artist",
+              source_url: a.artistLinkUrl || "",
+            })).filter(a => a.id),
+            source: "itunes",
+          });
         }
+        const data = await fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=" + entity + "&limit=" + limit);
         // Also search artists
         const artistData = await fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=musicArtist&limit=10");
         return NextResponse.json({

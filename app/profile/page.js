@@ -1008,6 +1008,32 @@ export default function ProfilePage() {
               <p>No tenes {favType==="album"?"albumes":favType==="artist"?"artistas":"canciones"} en favoritos</p>
               <p style={{fontSize:"0.85em",marginTop:8}}><a href="/spotify" style={{color:"#7c5cfc",fontWeight:600}}>Buscar musica</a></p>
             </div>
+          ) : favType==="track" ? (
+            /* Canciones favoritas en LISTA (como Descargadas), con badge
+               OFF verde cuando la canción ya está guardada sin internet. */
+            <div style={{background:"#12121f",border:"1px solid #2a2a3e",borderRadius:12,overflow:"hidden"}}>
+              {filteredFavs.map(f => {
+                let isDl=false;
+                try{const m=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=[String(f.item_id),(f.artist+" "+f.name).trim(),(f.name+" "+f.artist).trim(),f.name.trim()];for(const k of ks){if(m[k]?.audio_url){isDl=true;break;}}}catch{}
+                return (
+                  <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:"1px solid #1e1e30"}}>
+                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{flexShrink:0,display:"block"}}>
+                      <CoverImg url={f.cover_url} size={46} r={8}/>
+                    </a>
+                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
+                      <div style={{color:"#e0e0e0",fontSize:"0.9em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
+                      <div style={{color:"#666",fontSize:"0.76em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
+                    </a>
+                    {isDl && (
+                      <span style={{padding:"2px 7px",borderRadius:4,fontSize:"0.6em",fontWeight:800,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.35)"}}>OFF</span>
+                    )}
+                    <button onClick={()=>toggleFavorite(f.item_type,f.item_id)} style={{background:"none",border:"none",cursor:"pointer",padding:6,display:"flex",flexShrink:0}} title="Quitar de favoritos">
+                      <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={13} stroke="#ef4444"/>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(145px,1fr))",gap:10}}>
               {filteredFavs.map(f => {

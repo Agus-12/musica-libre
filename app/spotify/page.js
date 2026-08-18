@@ -17,6 +17,14 @@ export default function SpotifyPage() {
   const [tab, setTab] = useState("discover"); // discover, search, url, itunes
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
+  const [recentSearches, setRecentSearches] = useState([]);
+  useEffect(() => {
+    try { setRecentSearches(JSON.parse(localStorage.getItem("aura_busquedas") || "[]")); } catch {}
+  }, []);
+  function borrarRecientes() {
+    try { localStorage.removeItem("aura_busquedas"); } catch {}
+    setRecentSearches([]);
+  }
   const [album, setAlbum] = useState(null);
   const [artist, setArtist] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -292,14 +300,25 @@ export default function SpotifyPage() {
     return terms;
   }
 
-  async function search() {
-    if (!query.trim()) return;
+  async function search(qOverride) {
+    const q = (typeof qOverride === "string" ? qOverride : query).trim();
+    if (!q) return;
+    if (typeof qOverride === "string") setQuery(qOverride);
     setLoading(true); setError(""); setResults(null); setAlbum(null); setArtist(null);
     try {
-      const res = await fetch("/api/music?action=search&q=" + encodeURIComponent(query) + "&source=auto&limit=20");
+      const res = await fetch("/api/music?action=search&q=" + encodeURIComponent(q) + "&source=auto&limit=20");
       const data = await res.json();
       if (data.error) setError(data.error);
-      else setResults(data);
+      else {
+        setResults(data);
+        /* Búsquedas recientes (estilo Spotify): guardamos las últimas 8 */
+        try {
+          const prev = JSON.parse(localStorage.getItem("aura_busquedas") || "[]");
+          const nuevas = [q, ...prev.filter(x => x.toLowerCase() !== q.toLowerCase())].slice(0, 8);
+          localStorage.setItem("aura_busquedas", JSON.stringify(nuevas));
+          setRecentSearches(nuevas);
+        } catch {}
+      }
     } catch (e) { setError(e.message); }
     setLoading(false);
   }
@@ -613,6 +632,22 @@ export default function SpotifyPage() {
             <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Buscar álbumes, artistas... (ej: Bad Bunny, Rosalía)" style={{ ...IS, flex: 1, minWidth: 200 }} />
             <button onClick={search} disabled={loading} style={BS}>{loading ? "..." : "Buscar"}</button>
           </div>
+          {/* Búsquedas recientes (estilo Spotify) */}
+          {!loading && !results && recentSearches.length > 0 && (
+            <div style={{ marginBottom: 25 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ color: "#888", fontSize: "0.85em", fontWeight: 700 }}>Búsquedas recientes</span>
+                <button onClick={borrarRecientes} style={{ background: "none", border: "none", color: "#555", fontSize: "0.75em", cursor: "pointer", textDecoration: "underline" }}>Borrar</button>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {recentSearches.map(t => (
+                  <button key={t} onClick={() => search(t)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 20, border: "1px solid #2a2a3e", background: "#1a1a2e", color: "#ccc", fontSize: "0.85em", cursor: "pointer" }}>
+                    <Ico d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} size={13} stroke="#7c5cfc" /> {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {loading && <Spinner />}
           {error && <ErrorMsg error={error} />}
           {!loading && results && (

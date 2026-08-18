@@ -19,6 +19,16 @@ export function UserProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    /* ARRANQUE INSTANTÁNEO: si hay sesión guardada, la usamos YA y la
+       verificación con el servidor corre por detrás. Antes, cada
+       apertura mostraba "Cargando..." 1-3 segundos esperando a Supabase
+       aunque el usuario llevara semanas logueado. */
+    const cachedUser = loadOffline("user");
+    if (cachedUser) {
+      setUser(cachedUser);
+      setProfile(loadOffline("profile"));
+      setLoading(false);
+    }
     checkSession();
   }, []);
 

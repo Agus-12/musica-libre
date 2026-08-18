@@ -8,3 +8,18 @@ a:hover { text-decoration: underline; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
+
+/* ── MODO CLARO ─────────────────────────────────────────────────
+   La app entera usa colores oscuros en estilos inline, así que el
+   modo claro se logra invirtiendo los colores del documento raíz
+   (el filtro en <html> NO rompe los position:fixed, por spec) y
+   re-invirtiendo las imágenes/videos para que se vean normales. */
+html.tema-claro {
+  filter: invert(1) hue-rotate(180deg);
+  background: #ffffff;
+}
+html.tema-claro img,
+html.tema-claro video,
+html.tema-claro iframe {
+  filter: invert(1) hue-rotate(180deg);
+}
