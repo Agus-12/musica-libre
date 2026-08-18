@@ -224,6 +224,9 @@ async function audioConRange(event) {
         headers: new Headers({ Accept: 'audio/*,*/*' }),
         mode: request.mode === 'navigate' ? 'cors' : request.mode,
         credentials: request.credentials,
+        // Directo a la red: el caché HTTP de Safari podía revivir una
+        // copia vieja corrupta de esta misma URL (el ruido blanco).
+        cache: 'no-store',
       });
       const resp = await fetch(limpia);
       if (resp && resp.status === 200) {

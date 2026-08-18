@@ -73,6 +73,7 @@ export default function ProfilePage() {
   const mediaFixRef = useRef(null);       // reescritura de la portada en la pantalla de bloqueo
   const wakeRef = useRef(null);           // reanudar al volver a la app
   const audioRef = useRef(null);          // <audio> para archivos guardados (offline)
+  const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
   const usingAudioRef = useRef(false);    // ¿estamos usando el archivo o YouTube?
   const seekingRef = useRef(false);       // espejo de `seeking` para los eventos
   const [isOnline, setIsOnline] = useState(true);
@@ -384,7 +385,21 @@ export default function ProfilePage() {
       audioRef.current = a;
       a.addEventListener("timeupdate", () => {
         if (seekingRef.current) return;
-        const d = a.duration || 0;
+        let d = a.duration || 0;
+        const fin = finRealRef.current;
+        /* Si el archivo trae cola de más (versiones viejas corruptas:
+           canción + ruido), lo cortamos en la duración real de iTunes
+           y pasamos a la siguiente. Margen de 12 s por si el video
+           legítimo dura un poco más que la versión de álbum. */
+        if (fin > 0 && d > fin + 12) {
+          d = fin;
+          if (a.currentTime >= fin) {
+            finRealRef.current = 0;
+            try { a.pause(); } catch {}
+            handleTrackEnd();
+            return;
+          }
+        }
         setCurrentTime(a.currentTime || 0);
         setDuration(d);
         setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
@@ -400,6 +415,7 @@ export default function ProfilePage() {
     }
 
     usingAudioRef.current = true;
+    finRealRef.current = item.duration_ms ? item.duration_ms / 1000 : 0;
     setPlayingKey(item.key); setPlayingTitle(item.title);
     setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
     setProgress(0); setCurrentTime(0); setDuration(0);
@@ -676,7 +692,8 @@ export default function ProfilePage() {
       if (data.audio_url && "caches" in window) {
         try {
           const c = await caches.open("ml-saved-v1");
-          const r = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" } });
+          try { await c.delete(data.audio_url); } catch {}   // fuera la copia vieja
+          const r = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" }, cache: "no-store" });
           if (r.ok && r.status === 200) { await c.put(data.audio_url, r.clone()); guardado = true; }
         } catch {}
       }

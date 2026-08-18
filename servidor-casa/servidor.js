@@ -262,7 +262,10 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
             "--no-playlist",
             "--no-warnings",
             "--quiet",
-            "--no-part",
+            /* SIN --no-part: con .part, una descarga a medias jamás se
+               confunde con un archivo terminado, y un reintento con otro
+               cliente no "reanuda" pegando bytes de otro stream (eso
+               creaba archivos DOBLES con ruido blanco al final). */
             // Evita bajar versiones larguísimas (live/mashup) que dejan la
             // canción con minutos de silencio al final: preferimos las de
             // duración normal (~2–8 min).
@@ -334,7 +337,6 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
           "--no-playlist",
           "--no-warnings",
           "--quiet",
-          "--no-part",
           "--match-filter", "duration > 60 & duration < 900",
           "--user-agent", UA,
           "--retries", "2",
@@ -389,8 +391,10 @@ function servirArchivo(req, res, archivo) {
   const base = {
     "Content-Type": tipo,
     "Accept-Ranges": "bytes",
-    // Se puede cachear fuerte: el contenido de esa URL nunca cambia.
-    "Cache-Control": "public, max-age=31536000, immutable",
+    /* OJO: nada de "immutable, 1 año". Si el usuario borra y re-descarga,
+       el contenido de esta URL CAMBIA, y Safari resucitaba el archivo
+       viejo (corrupto) desde su caché de disco. */
+    "Cache-Control": "public, max-age=3600",
   };
 
   if (rango) {
@@ -454,7 +458,7 @@ const servidor = http.createServer(async (req, res) => {
       }
     } catch {}
     return json(res, 200, {
-      ok: true, ytdlp, version, carpeta: CARPETA,
+      ok: true, ytdlp, version, servidor: "2026-08-17e", carpeta: CARPETA,
       protegido: Boolean(TOKEN),
       cookies: Boolean(COOKIES),
       canciones_guardadas: guardadas,

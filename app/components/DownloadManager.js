@@ -265,7 +265,12 @@ async function processOne(track, currentQueue, setQueue) {
   if (data.audio_url && "caches" in window) {
     try {
       const c = await caches.open("ml-saved-v1");
-      const r = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" } });
+      /* CLAVE: primero borramos cualquier copia vieja de esa URL. Sin
+         esto, el service worker servía desde su caché el archivo
+         corrupto anterior (el del ruido blanco) en vez de bajar el
+         nuevo, y ni borrando y re-descargando se arreglaba. */
+      try { await c.delete(data.audio_url); } catch {}
+      const r = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" }, cache: "no-store" });
       if (r.ok && r.status === 200) {
         await c.put(data.audio_url, r.clone());
         guardadoOffline = true;
