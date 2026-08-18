@@ -1990,7 +1990,10 @@ export default function ProfilePage() {
               return (
                 <div onClick={e=>e.stopPropagation()} style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(10,10,20,0.97),rgba(10,10,20,0.99))",zIndex:5,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",flexShrink:0}}>
-                    <div style={{color:"#fff",fontWeight:800}}>⏭ A continuación</div>
+                    <div style={{display:"flex",alignItems:"center",gap:9,color:"#fff",fontWeight:800}}>
+                      <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={18} stroke="#22c55e" sw={2}/>
+                      A continuación
+                    </div>
                     <button onClick={()=>setShowCola(false)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",color:"#fff",fontSize:"1em",flexShrink:0}}>✕</button>
                   </div>
                   <div style={{flex:1,overflowY:"auto",padding:"0 18px calc(110px + env(safe-area-inset-bottom))"}}>
@@ -2002,7 +2005,7 @@ export default function ProfilePage() {
                     )}
                     <div style={{color:"#7a7a8c",fontSize:"0.68em",fontWeight:800,letterSpacing:0.5,margin:"14px 0 4px"}}>{shuffle ? "DESPUÉS · orden aleatorio" : "DESPUÉS"}</div>
                     {resto.length === 0 && manual.length === 0
-                      ? <p style={{color:"#7a7a8c",fontSize:"0.85em",textAlign:"center",padding:24}}>Nada en cola. Marcá canciones con el botón ⏭ en Descargadas.</p>
+                      ? <p style={{color:"#7a7a8c",fontSize:"0.85em",textAlign:"center",padding:24}}>Nada en cola. Marcá canciones con el botón de cola en Descargadas.</p>
                       : resto.map(it => filaCola(it, false))}
                   </div>
                 </div>
