@@ -431,7 +431,15 @@ async function manejarGET(req) {
               const q = ((main.artistName || "") + " " + tituloLimpio).trim();
               const b = await fetchJSON(DEEZER_BASE + "/search/album?q=" + encodeURIComponent(q) + "&limit=5");
               const kIt = claveDedupe(main.artistName, main.collectionName);
-              const cand = (b.data || []).find(x => claveDedupe(x.artist?.name, x.title) === kIt) || (b.data || [])[0];
+              /* Preferimos la versión LIMPIA: nada de demo/remix/live/
+                 acoustic salvo que el original también lo sea. */
+              const esVariante = (t) => /demo|remix|live|acoustic|ac\u00fastic|sped up|slowed/i.test(t || "");
+              const originalEsVariante = esVariante(main.collectionName);
+              const candidatos = (b.data || []).filter(x => claveDedupe(x.artist?.name, x.title) === kIt);
+              const cand = candidatos.find(x => originalEsVariante || !esVariante(x.title))
+                || candidatos[0]
+                || (b.data || []).find(x => !esVariante(x.title))
+                || (b.data || [])[0];
               if (cand) {
                 const [det, trs] = await Promise.all([
                   fetchJSON(DEEZER_BASE + "/album/" + cand.id),
