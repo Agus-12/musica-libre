@@ -67,6 +67,7 @@ export function DownloadProvider({ children }) {
       for (const [key, e] of Object.entries(saved)) {
         if (!e || e.audio_url) continue;                      // ya está offline
         if (!e.video_id && !e.title && !e.name) continue;     // entrada vacía
+        if ((e.intentos_repair || 0) >= 5) continue;           // imposible: no insistir
         /* Agrupamos por artista+nombre (no por video): la misma canción
            guardada bajo 2 claves con video_id distinto generaba DOS
            reparaciones duplicadas en la cola. */
@@ -322,6 +323,18 @@ async function processOne(track, currentQueue, setQueue) {
      Si SÍ conseguimos el archivo, también damos por terminados los
      items duplicados de la misma canción (adiós "esperando…" eternos). */
   const exito = guardadoOffline || !track.repair;
+  if (!exito) {
+    /* Contamos los intentos fallidos: tras 5, la auto-reparación deja
+       de insistir con esa canción (hay canciones que simplemente no
+       están en ningún lado). El botón ⟳ manual la reactiva. */
+    try {
+      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      for (const k of [String(track.key), sq]) {
+        if (k && s[k]) s[k] = { ...s[k], intentos_repair: (s[k].intentos_repair || 0) + 1 };
+      }
+      localStorage.setItem("ml_mp3", JSON.stringify(s));
+    } catch {}
+  }
   const nombreDe = (t) => ((t.name || "") + "|" + (t.artist || "")).toLowerCase();
   const esMismaCancion = (t) => t.id !== track.id && t.status !== "done" &&
     (String(t.key) === String(track.key) || (nombreDe(t) !== "|" && nombreDe(t) === nombreDe(track)));

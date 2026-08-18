@@ -380,6 +380,42 @@ export async function GET(req) {
           p.get("expected_song") || null
         );
     if (!video) {
+      /* La búsqueda estricta no encontró nada en YouTube. NO nos rendimos
+         todavía: la Mac busca por su cuenta (YouTube con sus propios
+         criterios y, si falla, SoundCloud). Canciones de artistas chicos
+         solo aparecen por este camino. */
+      const casero = await pedirAlServidorCasero({
+        query: searchQuery,
+        dur: p.get("expected_duration") ? Number(p.get("expected_duration")) : 0,
+      });
+      if (casero && casero.url) {
+        return NextResponse.json({
+          success: true,
+          method: "audio",
+          audio_url: casero.url,
+          offline: true,
+          pendiente: false,
+          fuente: "casa",
+          video_id: null,
+          title: searchQuery,
+          query: searchQuery,
+          note: "Conseguida por la Mac (búsqueda propia / SoundCloud)",
+        });
+      }
+      if (casero && casero.pendiente) {
+        return NextResponse.json({
+          success: true,
+          method: "youtube",
+          audio_url: null,
+          offline: false,
+          pendiente: true,
+          fuente: null,
+          video_id: null,
+          title: searchQuery,
+          query: searchQuery,
+          note: "La Mac la está buscando (YouTube propio + SoundCloud)",
+        });
+      }
       return NextResponse.json(
         { error: "No se encontró la canción en YouTube" },
         { status: 404 }

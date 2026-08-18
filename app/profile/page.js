@@ -1060,6 +1060,13 @@ export default function ProfilePage() {
      el video_id, así que la canción seguía sonando por YouTube y el modo
      offline nunca se arreglaba. */
   async function reDownload(item) {
+    // Reset del contador de reparaciones: el usuario pidió reintentar
+    try {
+      const s = JSON.parse(localStorage.getItem("ml_mp3")||"{}");
+      const ks = item.keys && item.keys.length ? item.keys : [item.key];
+      for (const k of ks) if (s[k]) s[k] = { ...s[k], intentos_repair: 0 };
+      localStorage.setItem("ml_mp3", JSON.stringify(s));
+    } catch {}
     setDownloadingItems(p=>({...p,[item.key]:true}));
     toast.info("Descargando: "+item.title,3000);
     try {
