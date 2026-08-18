@@ -67,7 +67,10 @@ export function DownloadProvider({ children }) {
       for (const [key, e] of Object.entries(saved)) {
         if (!e || e.audio_url) continue;                      // ya está offline
         if (!e.video_id && !e.title && !e.name) continue;     // entrada vacía
-        const grupo = e.video_id || ((e.artist || "") + "|" + (e.name || e.title || key)).toLowerCase();
+        /* Agrupamos por artista+nombre (no por video): la misma canción
+           guardada bajo 2 claves con video_id distinto generaba DOS
+           reparaciones duplicadas en la cola. */
+        const grupo = (((e.artist || "") + "|" + (e.name || e.title || "")).toLowerCase().trim()) || e.video_id || key;
         if (vistos.has(grupo)) continue;
         vistos.add(grupo);
         candidatos.push({ key, e });
@@ -271,6 +274,7 @@ async function processOne(track, currentQueue, setQueue) {
       name: (track.repair ? (previo.name || track.name) : (track.name || previo.name)) || "",
       artist: (track.repair ? (previo.artist || track.artist) : (track.artist || previo.artist)) || "",
       cover: (track.repair ? (previo.cover || track.cover) : (track.cover || previo.cover)) || "",
+      duration_ms: track.duration_ms || previo.duration_ms || null,
       saved_at: Date.now(),
     };
     saved[sq] = entry;

@@ -113,7 +113,7 @@ async function servidorCaseroVivo(base) {
   }
 }
 
-async function pedirAlServidorCasero({ videoId, query }) {
+async function pedirAlServidorCasero({ videoId, query, dur }) {
   const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
   if (!base) { ultimoMotivoCasa = "MUSICA_SERVER vacía"; return null; }
 
@@ -126,6 +126,10 @@ async function pedirAlServidorCasero({ videoId, query }) {
   // servidor para buscar otra versión si ese video tiene DRM.
   if (videoId) p.set("v", videoId);
   if (query) p.set("q", query);
+  /* La duración real de la canción (iTunes): la Mac la usa para NO bajar
+     videos del doble de largo (canción repetida, mixes) que dejaban
+     minutos de silencio al final. */
+  if (dur && dur > 0) p.set("dur", String(Math.round(dur)));
   if (!videoId && !query) return null;
   if (token) p.set("token", token);
   // La Mac espera como mucho 20 s con el request abierto; si la descarga
@@ -245,9 +249,12 @@ async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist, ex
       const palabras = slow.split(/\s+/).filter(p => p.length > 3 && !["que", "con", "para", "por", "los", "las", "una", "del", "the"].includes(p));
       let hits = 0;
       for (const p of palabras) if (tlow.includes(p)) hits++;
-      // Necesitamos al menos la mitad de las palabras significativas o minimo 2.
-      const requerido = Math.max(2, Math.ceil(palabras.length / 2));
-      if (hits < requerido) {
+      /* Necesitamos la mitad de las palabras significativas (mínimo 2),
+         PERO nunca más palabras de las que el título tiene: "kiss me"
+         solo aporta una ("kiss") y el mínimo fijo de 2 hacía que NINGÚN
+         video pasara el filtro → "No se encontró la canción" siempre. */
+      const requerido = Math.min(palabras.length, Math.max(2, Math.ceil(palabras.length / 2)));
+      if (palabras.length > 0 && hits < requerido) {
         s += META; // descartado: no matchea el titulo
       }
     }
@@ -387,7 +394,11 @@ export async function GET(req) {
     let audioUrl = null;
     let fuente = null;
 
-    const casero = await pedirAlServidorCasero({ videoId: video.videoId, query: searchQuery });
+    const casero = await pedirAlServidorCasero({
+      videoId: video.videoId,
+      query: searchQuery,
+      dur: p.get("expected_duration") ? Number(p.get("expected_duration")) : 0,
+    });
     const pendiente = Boolean(casero && casero.pendiente);
     if (casero && casero.url) { audioUrl = casero.url; fuente = "casa"; }
 

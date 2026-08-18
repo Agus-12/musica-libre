@@ -112,7 +112,7 @@ const MIME = { ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".webm": "audio/webm",
    bajar). Los lyric videos, los "Audio" y los covers no. Además
    descartamos lo que dure menos de 60s (recortes) o más de 15 min
    (álbumes enteros, mixes). */
-async function buscarCandidatos(query, cuantos = 5) {
+async function buscarCandidatos(query, cuantos = 5, durEsperada = 0) {
   try {
     const salida = await correr("yt-dlp", [
       "--flat-playlist",
@@ -130,17 +130,23 @@ async function buscarCandidatos(query, cuantos = 5) {
         dur: Number(dur) || 0,
         titulo: (titulo || "").toLowerCase(),
       }))
-      .filter((c) => c.dur === 0 || (c.dur >= 60 && c.dur <= 900));
+      .filter((c) => c.dur === 0 || (c.dur >= 60 && c.dur <= 900))
+      /* Si sabemos cuánto dura la canción de verdad (iTunes), descartamos
+         los videos que se alejen más del 35%: fuera mixes, versiones
+         dobles (canción 2 veces = silencio al final) y extendidas. */
+      .filter((c) => !durEsperada || c.dur === 0 || Math.abs(c.dur - durEsperada) <= durEsperada * 0.35);
 
     /* Los que se anuncian como audio o letra primero: son los que
-       más chances tienen de no estar protegidos. */
+       más chances tienen de no estar protegidos. Y entre ellos, los
+       de duración más parecida a la real. */
     const bueno = /audio|lyric|letra|full song|hq/;
     const malo = /official video|video oficial|live|en vivo|remix|cover|reaction/;
-    filas.sort((a, b) => {
-      const pa = (bueno.test(a.titulo) ? -2 : 0) + (malo.test(a.titulo) ? 2 : 0);
-      const pb = (bueno.test(b.titulo) ? -2 : 0) + (malo.test(b.titulo) ? 2 : 0);
-      return pa - pb;
-    });
+    const puntos = (c) => {
+      let s = (bueno.test(c.titulo) ? -2 : 0) + (malo.test(c.titulo) ? 2 : 0);
+      if (durEsperada && c.dur > 0) s += (Math.abs(c.dur - durEsperada) / durEsperada) * 4;
+      return s;
+    };
+    filas.sort((a, b) => puntos(a) - puntos(b));
 
     return filas.map((c) => c.id);
   } catch (e) {
@@ -183,7 +189,7 @@ const fallosRecientes = new Map();
 // Cache del chequeo de yt-dlp para que /salud responda al instante.
 let ytdlpCache = { ts: 0, ok: false, version: null };
 
-async function obtenerAudio({ videoId, query }) {
+async function obtenerAudio({ videoId, query, dur = 0 }) {
   const clave = videoId || query;
   const id = idSeguro(clave);
 
@@ -207,11 +213,11 @@ async function obtenerAudio({ videoId, query }) {
          video tiene DRM (pasa mucho con los oficiales). */
       candidatos = [videoId];
       if (query) {
-        const extra = await buscarCandidatos(query);
+        const extra = await buscarCandidatos(query, 5, dur);
         for (const c of extra) if (c !== videoId) candidatos.push(c);
       }
     } else {
-      candidatos = await buscarCandidatos(query);
+      candidatos = await buscarCandidatos(query, 5, dur);
       if (!candidatos.length) throw new Error("la búsqueda no devolvió resultados");
     }
 
@@ -260,7 +266,9 @@ async function obtenerAudio({ videoId, query }) {
             // Evita bajar versiones larguísimas (live/mashup) que dejan la
             // canción con minutos de silencio al final: preferimos las de
             // duración normal (~2–8 min).
-            "--match-filter", "duration > 120 & duration < 480",
+            "--match-filter", dur > 0
+              ? `duration > ${Math.max(60, Math.round(dur * 0.65))} & duration < ${Math.round(dur * 1.45)}`
+              : "duration > 120 & duration < 480",
             // Un navegador real; sin esto es más fácil que nos marquen.
             "--user-agent", UA,
             // Si nos limitan la tasa, reintenta en vez de morir.
@@ -279,7 +287,9 @@ async function obtenerAudio({ videoId, query }) {
             limpiarSiHaceFalta();
             return { archivo, id };
           }
-          ultimoError = new Error("yt-dlp no dejó ningún archivo");
+          ultimoError = new Error("rechazado por el filtro de duración (o sin archivo)");
+          saltarVideo = true;   // este video no cumple; probamos otro
+          break;
         } catch (e) {
           ultimoError = e;
           const msg = String(e.message || "");
@@ -457,6 +467,8 @@ const servidor = http.createServer(async (req, res) => {
   if (ruta === "/resolver") {
     const videoId = url.searchParams.get("v") || "";
     const query = url.searchParams.get("q") || "";
+    // Duración real de la canción (iTunes), para filtrar versiones dobles.
+    const dur = Math.max(0, Number(url.searchParams.get("dur")) || 0);
     if (!videoId && !query) return json(res, 400, { error: "falta v o q" });
 
     /* ¿Cuánto esperamos con el request abierto? Si la descarga no
@@ -497,7 +509,7 @@ const servidor = http.createServer(async (req, res) => {
     fallosRecientes.delete(id);
 
     // Lanzamos la descarga (o nos sumamos a la que ya está en curso).
-    const tarea = obtenerAudio({ videoId, query });
+    const tarea = obtenerAudio({ videoId, query, dur });
     tarea.catch((e) => {
       fallosRecientes.set(id, { ts: Date.now(), detalle: String(e.message || e).slice(0, 300) });
     });
