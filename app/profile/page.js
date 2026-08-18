@@ -1325,7 +1325,7 @@ export default function ProfilePage() {
                     ) : (
                       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
                         {(amigoVista.favoritos||[]).slice(0,12).map((f,i)=>(
-                          <a key={i} href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source||"itunes"}`} style={{textDecoration:"none"}}>
+                          <a key={i} href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source||"itunes"}${f.item_type==="track"?"&track="+encodeURIComponent(f.name||""):""}`} style={{textDecoration:"none"}}>
                             <CoverImg url={f.cover_url} size="100%" r={8}/>
                             <div style={{color:"var(--text2)",fontSize:"0.66em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{f.name}</div>
                             <div style={{color:"var(--text4)",fontSize:"0.6em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
@@ -1363,7 +1363,7 @@ export default function ProfilePage() {
                         <div style={{color:"var(--text4)",fontSize:"0.7em"}}>playlist · de @{s.de?.username} · tocá para verla</div>
                       </div>
                     ) : (
-                    <a href={s.item?.album_id?`/spotify?album=${s.item.album_id}&source=${s.item.source||"itunes"}`:`/spotify?buscar=${encodeURIComponent((s.item?.artist||"")+" "+(s.item?.name||""))}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
+                    <a href={s.item?.album_id?`/spotify?album=${s.item.album_id}&source=${s.item.source||"itunes"}&track=${encodeURIComponent(s.item?.name||"")}`:`/spotify?buscar=${encodeURIComponent((s.item?.artist||"")+" "+(s.item?.name||""))}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
                       <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.item?.name}</div>
                       <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{s.item?.artist} · de @{s.de?.username}</div>
                     </a>
@@ -1725,10 +1725,10 @@ export default function ProfilePage() {
                 try{const m=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=[String(f.item_id),(f.artist+" "+f.name).trim(),(f.name+" "+f.artist).trim(),f.name.trim()];for(const k of ks){if(m[k]?.audio_url){isDl=true;break;}}}catch{}
                 return (
                   <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:"1px solid var(--border2)"}}>
-                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{flexShrink:0,display:"block"}}>
+                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}&track=${encodeURIComponent(f.name||"")}`} style={{flexShrink:0,display:"block"}}>
                       <CoverImg url={f.cover_url} size={46} r={8}/>
                     </a>
-                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
+                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}&track=${encodeURIComponent(f.name||"")}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
                       <div style={{color:"var(--text)",fontSize:"0.9em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
                       <div style={{color:"var(--text4)",fontSize:"0.76em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
                     </a>

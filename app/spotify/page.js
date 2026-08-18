@@ -114,7 +114,8 @@ export default function SpotifyPage() {
     const artistId = params.get("artist");
     const source = params.get("source") || "itunes";
     const buscarParam = params.get("buscar");
-    if (albumId) loadAlbum(albumId, source);
+    const trackParam = params.get("track");
+    if (albumId) loadAlbum(albumId, source, trackParam);
     else if (artistId) loadArtist(artistId);
     else if (buscarParam) { setTab("search"); search(buscarParam); }
   }, []);
@@ -124,6 +125,17 @@ export default function SpotifyPage() {
      descargas. Con ellas, el server busca artistas del mismo estilo
      (relacionados de Deezer) y trae sus álbumes. Cada canción que
      agregás puede cambiar las semillas → la sección se mueve sola. */
+  /* Canción a RESALTAR al abrir un álbum (desde búsqueda o favoritos):
+     la fila se marca y la página baja sola hasta ella. */
+  const [resaltada, setResaltada] = useState(null);
+  const resaltadaRef = useRef(null);
+  useEffect(() => {
+    if (!album || !resaltada) return;
+    const t = setTimeout(() => {
+      try { resaltadaRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
+    }, 350);
+    return () => clearTimeout(t);
+  }, [album, resaltada]);
   const [recs, setRecs] = useState(null);
   const [recsDe, setRecsDe] = useState([]);
   useEffect(() => {
@@ -354,7 +366,8 @@ export default function SpotifyPage() {
     setLoading(false);
   }
 
-  async function loadAlbum(albumId, source = "itunes") {
+  async function loadAlbum(albumId, source = "itunes", resaltar = null) {
+    setResaltada(resaltar ? String(resaltar).toLowerCase().trim() : null);
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try {
       const endpoint = "/api/music?action=lookup&id=" + albumId + "&source=itunes";
@@ -716,7 +729,7 @@ export default function SpotifyPage() {
                   <SectionHeader icon="" title="Canciones" subtitle="" />
                   <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                     {songResults.map(s => (
-                      <div key={s.id} onClick={() => loadAlbum(s.album_id, "itunes")} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
+                      <div key={s.id} onClick={() => loadAlbum(s.album_id, "itunes", s.name)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
                         {s.cover ? <img src={s.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ color: "var(--text)", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
@@ -803,8 +816,14 @@ export default function SpotifyPage() {
                 {album.tracks.map((track, i) => {
                   const trackKey = String(track.id || `${album.id}-${i}`);
                   const isPlaying = playingTrack === trackKey;
+                  const nombreBajo = (track.name || "").toLowerCase().trim();
+                  const esResaltada = Boolean(resaltada && (nombreBajo === resaltada || nombreBajo.includes(resaltada) || resaltada.includes(nombreBajo)));
                   return (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--border)" }}>
+                    <div key={i} ref={esResaltada ? (el) => { resaltadaRef.current = el; } : undefined}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--border)",
+                        background: esResaltada ? "rgba(124,92,252,0.14)" : "transparent",
+                        borderLeft: esResaltada ? "3px solid var(--accent)" : "3px solid transparent",
+                        transition: "background 0.3s" }}>
                       <span style={{ color: "var(--text5)", width: 22, textAlign: "right", fontSize: "0.82em" }}>{track.number || i + 1}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ color: "var(--text)", fontSize: "0.9em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{track.name}</div>
