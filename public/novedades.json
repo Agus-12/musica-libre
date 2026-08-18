@@ -1,13 +1,13 @@
 {
-  "version": "18 de agosto, 2026 · v5",
+  "version": "18 de agosto, 2026 · v6",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🔒 Reanudar desde la pantalla bloqueada ya funciona siempre (la app se mantiene despierta mientras está en pausa)",
+    "📴 Modo offline automático: si la red falla, la app entra sola en 4 segundos con tu música descargada",
+    "🎯 Al abrir un álbum desde una canción, la canción queda resaltada",
+    "🔍 El buscador ahora encuentra canciones sueltas (con preview)",
     "⏭ Vista de cola: mirá qué va a sonar (tu cola + el orden aleatorio real) y deslizá ← para quitar",
     "⬇️ Descargá playlists COMPLETAS con un botón (modo avión total)",
-    "📊 Estadísticas: tus más escuchadas y tus artistas top (pestaña Stats)",
-    "⏭ Cola de reproducción: marcá canciones para que suenen a continuación",
-    "📃 Compartí playlists enteras con tus amigos (les llegan al buzón)",
-    "🔔 Notificaciones push: te avisamos aunque la app esté cerrada",
-    "🎤 Letras karaoke sincronizadas en el reproductor"
+    "📊 Estadísticas: tus más escuchadas y tus artistas top (pestaña Stats)"
   ]
 }

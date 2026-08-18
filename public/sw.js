@@ -115,7 +115,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith((async () => {
       try {
-        const fresca = await fetch(request);
+        const fresca = await conTimeout(fetch(request), 4000);
         if (fresca && fresca.ok) {
           const cache = await caches.open(STATIC_CACHE);
           cache.put(request, fresca.clone());
@@ -152,9 +152,19 @@ self.addEventListener('fetch', (event) => {
 
 // ── Strategies ──
 
+/* Red con LÍMITE de tiempo: si la conexión está caída o inservible
+   (wifi muerto, datos sin señal real), no nos quedamos colgados
+   esperando: a los pocos segundos caemos al modo offline (caché). */
+function conTimeout(promesa, ms) {
+  return Promise.race([
+    promesa,
+    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)),
+  ]);
+}
+
 async function networkFirstWithCache(event, cacheName) {
   try {
-    const response = await fetch(event.request);
+    const response = await conTimeout(fetch(event.request), 5000);
     if (response.ok) {
       const cache = await caches.open(cacheName);
       cache.put(event.request, response.clone());

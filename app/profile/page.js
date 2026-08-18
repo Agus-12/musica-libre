@@ -74,6 +74,33 @@ export default function ProfilePage() {
   const wakeRef = useRef(null);           // reanudar al volver a la app
   const audioRef = useRef(null);          // <audio> para archivos guardados (offline)
   const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
+  const silencioRef = useRef(null);       // audio silencioso: mantiene viva la app pausada
+  const silTimerRef = useRef(null);
+  const deteniendoRef = useRef(false);    // true mientras el usuario DETIENE del todo
+  /* iOS congela la PWA ~30 s después de pausar: el play de la pantalla
+     bloqueada llegaba a una app dormida y no pasaba nada. Mientras la
+     canción esté pausada reproducimos un silencio en loop (10 min máx)
+     para que la app siga despierta y el play funcione al instante. */
+  function mantenerViva(encender) {
+    try {
+      if (encender) {
+        if (!silencioRef.current) {
+          const s = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA");
+          s.loop = true;
+          silencioRef.current = s;
+        }
+        const pr = silencioRef.current.play();
+        if (pr && pr.catch) pr.catch(() => {});
+        clearTimeout(silTimerRef.current);
+        silTimerRef.current = setTimeout(() => {
+          try { silencioRef.current && silencioRef.current.pause(); } catch {}
+        }, 10 * 60 * 1000);
+      } else {
+        clearTimeout(silTimerRef.current);
+        if (silencioRef.current) { try { silencioRef.current.pause(); } catch {} }
+      }
+    } catch {}
+  }
   const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
   const colaRef = useRef([]);             // cola "reproducir a continuación"
   const ordenAleatorioRef = useRef([]);   // orden pre-generado del aleatorio (visible en la cola)
@@ -752,6 +779,7 @@ export default function ProfilePage() {
       a.addEventListener("ended", () => handleTrackEnd());
       a.addEventListener("play", () => {
         setIsPlaying(true);
+        mantenerViva(false);
         /* Avisar a iOS el estado REAL: sin esto, tras pausar desde la
            pantalla bloqueada iOS daba la sesión por muerta y el botón
            de reanudar no hacía nada. */
@@ -760,6 +788,8 @@ export default function ProfilePage() {
       a.addEventListener("pause", () => {
         setIsPlaying(false);
         try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused"; } catch {}
+        // Pausa a mitad de canción (no al terminar): mantener la app viva
+        if (!a.ended && a.currentTime > 0 && !deteniendoRef.current) mantenerViva(true);
       });
       a.addEventListener("error", () => {
         // El archivo cacheado falló: probamos con YouTube si hay conexión
@@ -1060,6 +1090,9 @@ export default function ProfilePage() {
   }
 
   function stopPlayback() {
+    deteniendoRef.current = true;
+    setTimeout(() => { deteniendoRef.current = false; }, 300);
+    mantenerViva(false);
     // Ojo: NO destruimos el player, solo paramos. Así sigue listo para la
     // próxima canción y el play responde al primer toque.
     if (playerRef.current && playerReadyRef.current) { try { playerRef.current.stopVideo(); } catch {} }
