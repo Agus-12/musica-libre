@@ -430,21 +430,23 @@ que levantarlo a mano **y actualizar la URL en Vercel**.
 ### 8.3 Que yt-dlp se mantenga al día
 
 **Esto es lo que más se rompe.** YouTube cambia seguido y un yt-dlp viejo deja
-de funcionar de golpe.
+de funcionar de golpe (el síntoma: `HTTP Error 403: Forbidden` en todo).
+
+> **Lección aprendida (2026-08):** el canal *stable* puede tardar semanas en
+> traer el fix. El canal **nightly** sale casi a diario y fue lo que resolvió
+> el 403. Usá nightly.
 
 ```bash
 crontab -e
 ```
 
-Agregá:
+Agregá (todos los días a las 4 AM):
 
 ```
-0 4 * * 1 /usr/local/bin/yt-dlp -U >/dev/null 2>&1
+0 4 * * * /usr/local/bin/yt-dlp --update-to nightly >/dev/null 2>&1
 ```
 
 (Si lo instalaste con Homebrew, usá `brew upgrade yt-dlp` en su lugar.)
-
-Se actualiza los lunes a las 4 AM.
 
 ### 8.4 Que la Mac no duerma
 
