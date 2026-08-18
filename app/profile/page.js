@@ -242,6 +242,9 @@ export default function ProfilePage() {
   const buscaTimer = useRef(null);
 
   const [sinDatos, setSinDatos] = useState(false);
+  // "En línea" DE VERDAD: con el Modo sin datos activo, la app se
+  // comporta como offline aunque haya datos móviles disponibles.
+  const enLinea = isOnline && !sinDatos;
   async function aplicarSinDatos(activar) {
     setSinDatos(activar);
     try {
@@ -249,6 +252,7 @@ export default function ProfilePage() {
       const c = await caches.open("ml-config");
       if (activar) await c.put("modo-sin-datos", new Response("1"));
       else await c.delete("modo-sin-datos");
+      window.dispatchEvent(new CustomEvent("aura-sin-datos", { detail: activar }));
     } catch {}
     toast.info(activar ? "Modo sin datos ACTIVO: la app no tocará internet" : "Modo sin datos apagado", 3500);
   }
@@ -261,6 +265,9 @@ export default function ProfilePage() {
     } catch {}
     cargarAmigos();
     cargarBuzon();
+    const alCambiarDatos = (e) => setSinDatos(Boolean(e.detail));
+    window.addEventListener("aura-sin-datos", alCambiarDatos);
+    return () => window.removeEventListener("aura-sin-datos", alCambiarDatos);
   }, []);
 
   /* Si una llamada da 401 (sesión caducada), renovamos la sesión con
@@ -1663,7 +1670,7 @@ export default function ProfilePage() {
           ) : (
             <>
             {/* Aviso de modo offline */}
-            {!isOnline && (
+            {!enLinea && (
               <div style={{display:"flex",gap:10,alignItems:"center",background:"rgba(34,197,94,0.10)",border:"1px solid rgba(34,197,94,0.30)",borderRadius:10,padding:"10px 13px",marginBottom:12}}>
                 <span style={{flexShrink:0,display:"inline-flex",alignItems:"center",gap:6,background:"rgba(34,197,94,0.18)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.45)",borderRadius:6,padding:"3px 8px",fontSize:"0.62em",fontWeight:800,letterSpacing:0.5}}>
                   <Ico d={<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={11} stroke="#22c55e" sw={2.4}/> OFF
@@ -1762,9 +1769,9 @@ export default function ProfilePage() {
                     {/* Sin internet ocultamos re-descargar y borrar: no se
                         pueden completar offline y sólo confunden. */}
                     {iconBtn(e=>{e.stopPropagation();encolarSiguiente(item);}, <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={14}/>, "#555", "none", "Reproducir a continuación")}
-                    {isOnline && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
-                    {isOnline && !item.audio_url && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
-                    {isOnline && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
+                    {enLinea && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
+                    {enLinea && !item.audio_url && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
+                    {enLinea && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
                   </div>
                 );
               })}

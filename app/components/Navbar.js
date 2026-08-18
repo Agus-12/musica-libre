@@ -21,6 +21,24 @@ export default function Navbar({ children }) {
   const { user, profile, logout } = useUser();
   const [menuOpen, setMenuOpen] = useState(false);
   const [temaClaro, setTemaClaro] = useState(false);
+  const [sinDatos, setSinDatos] = useState(false);
+  useEffect(() => {
+    try { setSinDatos(localStorage.getItem("aura_sin_datos") === "1"); } catch {}
+    const alCambiar = (e) => setSinDatos(Boolean(e.detail));
+    window.addEventListener("aura-sin-datos", alCambiar);
+    return () => window.removeEventListener("aura-sin-datos", alCambiar);
+  }, []);
+  async function toggleSinDatos() {
+    const nuevo = !sinDatos;
+    setSinDatos(nuevo);
+    try {
+      localStorage.setItem("aura_sin_datos", nuevo ? "1" : "");
+      const c = await caches.open("ml-config");
+      if (nuevo) await c.put("modo-sin-datos", new Response("1"));
+      else await c.delete("modo-sin-datos");
+      window.dispatchEvent(new CustomEvent("aura-sin-datos", { detail: nuevo }));
+    } catch {}
+  }
 
   // Modo claro: se guarda la preferencia y se aplica una clase en <html>.
   useEffect(() => {
@@ -116,33 +134,70 @@ export default function Navbar({ children }) {
               justifyContent: "center", flexShrink: 0, position: "relative", zIndex: 2,
             }} className="mobile-menu-btn">
             {menuOpen ? "✕" : "☰"}
+            {sinDatos && !menuOpen && <span style={{ position: "absolute", top: 9, right: 7, width: 8, height: 8, borderRadius: "50%", background: "#eab308" }} />}
           </button>
         </div>
 
         {/* Mobile dropdown */}
         {menuOpen && (
           <div style={{
-            padding: "8px 16px calc(16px + env(safe-area-inset-bottom))",
-            borderTop: "1px solid rgba(var(--border-rgb),0.5)",
-            display: "flex", flexDirection: "column", gap: 4,
-            maxHeight: "70vh", overflowY: "auto",
+            padding: "10px 16px calc(18px + env(safe-area-inset-bottom))",
+            borderTop: "1px solid rgba(255,255,255,0.06)",
+            display: "flex", flexDirection: "column", gap: 8,
+            maxHeight: "72vh", overflowY: "auto",
+            background: "rgba(10,10,20,0.72)",
+            backdropFilter: "blur(24px) saturate(1.4)",
+            WebkitBackdropFilter: "blur(24px) saturate(1.4)",
           }} className="mobile-dropdown">
             {links.map(l => (
               <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)} style={{
-                padding: "12px 14px", borderRadius: 8, textDecoration: "none",
-                color: "var(--text2)", fontSize: "0.95em", display: "flex", alignItems: "center", gap: 11,
-                background: "rgba(var(--panel-rgb),0.5)",
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "13px 14px", borderRadius: 14, textDecoration: "none",
+                color: "#e6e6f0", fontSize: "0.95em", fontWeight: 600,
+                background: "rgba(255,255,255,0.045)",
+                border: "1px solid rgba(255,255,255,0.07)",
               }}>
-                <Ico d={l.icon} size={18} stroke="var(--accent)" /> {l.label}
+                <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(124,92,252,0.16)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Ico d={l.icon} size={17} stroke="var(--accent)" />
+                </span>
+                <span style={{ flex: 1 }}>{l.label}</span>
+                <Ico d={<polyline points="9 18 15 12 9 6"/>} size={14} stroke="rgba(255,255,255,0.25)" />
               </a>
             ))}
-              <button onClick={() => { logout(); setMenuOpen(false); }} style={{
-                padding: "12px 14px", borderRadius: 8, border: "none",
-                color: "#ef4444", fontSize: "0.95em", cursor: "pointer", textAlign: "left",
-                background: "rgba(239,68,68,0.05)", display: "flex", alignItems: "center", gap: 11,
-              }}>
-                <Ico d={ICON_LOGOUT} size={18} stroke="#ef4444" /> Cerrar sesión
-              </button>
+
+            {/* Modo sin datos: a la vista, con switch */}
+            <button onClick={toggleSinDatos} style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "13px 14px", borderRadius: 14, border: sinDatos ? "1px solid rgba(234,179,8,0.35)" : "1px solid rgba(255,255,255,0.07)",
+              background: sinDatos ? "rgba(234,179,8,0.09)" : "rgba(255,255,255,0.045)",
+              color: "#e6e6f0", fontSize: "0.95em", fontWeight: 600, cursor: "pointer", textAlign: "left",
+            }}>
+              <span style={{ width: 34, height: 34, borderRadius: 10, background: sinDatos ? "rgba(234,179,8,0.18)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Ico d={<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={17} stroke={sinDatos ? "#eab308" : "#8a8a9a"} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                Modo sin datos
+                <span style={{ display: "block", fontSize: "0.72em", fontWeight: 500, color: "rgba(230,230,240,0.45)", marginTop: 2 }}>
+                  {sinDatos ? "Activo: solo tu música descargada" : "La app no tocará internet"}
+                </span>
+              </span>
+              {/* Switch */}
+              <span style={{ width: 46, height: 27, borderRadius: 14, background: sinDatos ? "#eab308" : "rgba(255,255,255,0.14)", position: "relative", flexShrink: 0, transition: "background 0.2s" }}>
+                <span style={{ position: "absolute", top: 3, left: sinDatos ? 22 : 3, width: 21, height: 21, borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.35)" }} />
+              </span>
+            </button>
+
+            <button onClick={() => { logout(); setMenuOpen(false); }} style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "13px 14px", borderRadius: 14, border: "1px solid rgba(239,68,68,0.18)",
+              background: "rgba(239,68,68,0.07)",
+              color: "#ef4444", fontSize: "0.95em", fontWeight: 700, cursor: "pointer", textAlign: "left",
+            }}>
+              <span style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(239,68,68,0.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Ico d={ICON_LOGOUT} size={17} stroke="#ef4444" />
+              </span>
+              Cerrar sesión
+            </button>
           </div>
         )}
       </nav>
