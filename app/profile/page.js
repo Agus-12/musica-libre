@@ -85,44 +85,33 @@ export default function ProfilePage() {
      segundo elemento no sirve: iOS bloquea audios nuevos en segundo
      plano; el mismo elemento ya está "bendecido" por tu toque. */
   function pausarConGuardian() {
-    /* PLAN C (el estable): NO pausamos ni cambiamos la fuente — solo
-       MUTEAMOS. El audio sigue "sonando" en silencio, así iOS nunca
-       duerme la app y el play del dashboard siempre responde. Al
-       reanudar: desmutear y volver al segundo exacto de la pausa.
-       Cero eventos raros: sin pause(), sin src swap, sin errores. */
+    // Pausa simple y honesta. (iOS congela las PWA pausadas ~30 s
+    // después: es un límite de Apple que ningún truco web vence bien.)
     const a = audioRef.current;
-    if (!a || enSilencioRef.current) return;
-    enSilencioRef.current = true;
+    if (!a) return;
     posPausaRef.current = a.currentTime || 0;
-    try { a.muted = true; } catch {}
+    try { a.pause(); } catch {}
     setIsPlaying(false);
-    try {
-      navigator.mediaSession.playbackState = "paused";
-      const durTotal = Math.max(1, a.duration || finRealRef.current || 1);
-      navigator.mediaSession.setPositionState({ duration: durTotal, playbackRate: 1, position: Math.min(posPausaRef.current, durTotal) });
-    } catch {}
-    // A los 10 min: pausa real (batería); reabrir la app reanuda igual
-    clearTimeout(silTimerRef.current);
-    silTimerRef.current = setTimeout(() => {
-      try { a.pause(); a.muted = false; } catch {}
-    }, 10 * 60 * 1000);
+    try { navigator.mediaSession.playbackState = "paused"; } catch {}
   }
   function reanudarDeGuardian() {
     const a = audioRef.current;
     if (!a) return;
-    clearTimeout(silTimerRef.current);
-    if (enSilencioRef.current) {
-      enSilencioRef.current = false;
-      try { a.currentTime = posPausaRef.current || 0; } catch {}
-      try { a.muted = false; } catch {}
-      if (a.paused) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); }
-    } else if (a.paused) {
-      const pr = a.play();
-      if (pr && pr.catch) pr.catch(() => {});
-    }
+    const destino = posPausaRef.current || a.currentTime || 0;
+    const pr = a.play();
+    if (pr && pr.catch) pr.catch(() => {
+      // iOS congeló el elemento: recargar en el mismo punto y reintentar
+      try {
+        a.load();
+        const alCargar = () => { try { a.currentTime = destino; } catch {} a.removeEventListener("loadedmetadata", alCargar); };
+        a.addEventListener("loadedmetadata", alCargar);
+        const pr2 = a.play();
+        if (pr2 && pr2.catch) pr2.catch(() => {});
+      } catch {}
+    });
     setIsPlaying(true);
     try { navigator.mediaSession.playbackState = "playing"; } catch {}
-  }  const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
+  } const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
   const colaRef = useRef([]);             // cola "reproducir a continuación"
   const ordenAleatorioRef = useRef([]);   // orden pre-generado del aleatorio (visible en la cola)
   const [showCola, setShowCola] = useState(false);
@@ -797,11 +786,7 @@ export default function ProfilePage() {
         setDuration(d);
         setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
       });
-      a.addEventListener("ended", () => {
-        if (!enSilencioRef.current) { handleTrackEnd(); return; }
-        // Terminó mientras estaba en pausa-muteada: rebobinar muteado
-        try { a.currentTime = Math.max(0, (a.duration || 2) - 2); const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); } catch {}
-      });
+      a.addEventListener("ended", () => handleTrackEnd());
       a.addEventListener("play", () => {
         if (enSilencioRef.current) return;   // es el guardián, no la canción
         setIsPlaying(true);
@@ -811,11 +796,9 @@ export default function ProfilePage() {
         try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing"; } catch {}
       });
       a.addEventListener("pause", () => {
-        if (enSilencioRef.current) return;   // pausa interna del guardián
+        if (!a.ended) posPausaRef.current = a.currentTime || 0;
         setIsPlaying(false);
         try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused"; } catch {}
-        // Pausa a mitad de canción (no al terminar, no al detener): guardián
-        if (!a.ended && a.currentTime > 0 && !deteniendoRef.current) pausarConGuardian();
       });
       a.addEventListener("error", () => {
         if (enSilencioRef.current || deteniendoRef.current) return;  // error del guardián: ignorar
