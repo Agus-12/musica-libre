@@ -222,8 +222,16 @@ async function processOne(track, currentQueue, setQueue) {
   const params = new URLSearchParams();
   params.set("q", sq);
   /* Reparación: ya sabemos el video exacto → Vercel no busca en YouTube
-     y la Mac lo encuentra en su caché por id. Respuesta casi instantánea. */
-  if (track.video_id) params.set("v", track.video_id);
+     y la Mac lo encuentra en su caché por id. Respuesta casi instantánea.
+     PERO: si ese video ya falló 2 veces, lo soltamos y dejamos que se
+     busque uno nuevo de cero (el video guardado puede estar roto/DRM y
+     con él la reparación ciclaba "esperando→bajando→esperando"). */
+  let intentosPrevios = 0;
+  try {
+    const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+    intentosPrevios = (s[String(track.key)]?.intentos_repair || s[sq]?.intentos_repair || 0);
+  } catch {}
+  if (track.video_id && !(track.repair && intentosPrevios >= 2)) params.set("v", track.video_id);
   // Duracion real (de iTunes, en segundos) para que el filtro de YouTube
   // busque una version de longitud similar y NO un live/mashup de 7-8 min.
   if (track.duration_ms) {
