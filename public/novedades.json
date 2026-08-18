@@ -1,13 +1,12 @@
 {
-  "version": "18 de agosto, 2026 · v12",
+  "version": "18 de agosto, 2026 · v13",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🧠 Modo sin datos inteligente: si hay internet te ofrece salir, y si NO hay internet te ofrece activarlo — un toque en ambos casos",
     "✨ Menú rediseñado: estilo cristal con botones nuevos",
     "📵 Modo sin datos ahora vive en el menú, con switch y puntito indicador",
     "🟢 Con el modo activo, la app muestra el estado OFF aunque tengas datos encendidos",
     "🎚 Mini-reproductor en la sección Música: controlá lo que suena sin salir de Descubrir",
-    "👁 El icono de Descubrir ya se ve con cualquier tema y color de acento",
-    "▶️ Seguir escuchando ahora suena AL TOQUE, ahí mismo en Descubrir",
-    "📵 Nuevo Modo sin datos (Perfil → Personalizar): actívalo al salir y la app no toca internet, solo tu música descargada"
+    "👁 El icono de Descubrir ya se ve con cualquier tema y color de acento"
   ]
 }

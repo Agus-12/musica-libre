@@ -144,16 +144,32 @@ export default function PWASetup() {
      la app o volver a ella), avisamos: nadie se queda "atrapado" en
      modo offline por olvidarlo encendido. */
   const [avisoDatos, setAvisoDatos] = useState(false);
+  const [avisoSinRed, setAvisoSinRed] = useState(false);
   useEffect(() => {
     let ultimoPing = 0;
     const revisar = async () => {
       try {
-        if (localStorage.getItem("aura_sin_datos") !== "1") { setAvisoDatos(false); return; }
-        if (sessionStorage.getItem("aura_ping_snooze") === "1") return;
+        const activo = localStorage.getItem("aura_sin_datos") === "1";
         if (Date.now() - ultimoPing < 60000) return;
         ultimoPing = Date.now();
-        const r = await fetch("/manifest.json?aura-ping=" + Date.now(), { cache: "no-store", signal: AbortSignal.timeout(4000) });
-        if (r.ok) setAvisoDatos(true);
+        if (activo) {
+          /* Modo activo: ¿hay internet? → ofrecer salir */
+          setAvisoSinRed(false);
+          if (sessionStorage.getItem("aura_ping_snooze") === "1") return;
+          const r = await fetch("/manifest.json?aura-ping=" + Date.now(), { cache: "no-store", signal: AbortSignal.timeout(4000) });
+          if (r.ok) setAvisoDatos(true);
+        } else {
+          /* Modo apagado: ¿NO hay internet? → ofrecer activarlo */
+          setAvisoDatos(false);
+          if (sessionStorage.getItem("aura_ping_snooze_off") === "1") return;
+          try {
+            const r = await fetch("/manifest.json?aura-ping=" + Date.now(), { cache: "no-store", signal: AbortSignal.timeout(4000) });
+            if (!r.ok) throw new Error("sin red");
+            setAvisoSinRed(false);
+          } catch {
+            setAvisoSinRed(true);
+          }
+        }
       } catch {}
     };
     const alVolver = () => { if (document.visibilityState === "visible") revisar(); };
@@ -175,6 +191,20 @@ export default function PWASetup() {
   function seguirSinDatos() {
     try { sessionStorage.setItem("aura_ping_snooze", "1"); } catch {}
     setAvisoDatos(false);
+  }
+  async function activarSinDatosDesdeAviso() {
+    try {
+      localStorage.setItem("aura_sin_datos", "1");
+      const c = await caches.open("ml-config");
+      await c.put("modo-sin-datos", new Response("1"));
+      window.dispatchEvent(new CustomEvent("aura-sin-datos", { detail: true }));
+    } catch {}
+    setAvisoSinRed(false);
+    window.location.reload();
+  }
+  function posponerSinRed() {
+    try { sessionStorage.setItem("aura_ping_snooze_off", "1"); } catch {}
+    setAvisoSinRed(false);
   }
   useEffect(() => {
     if (!hayUpdate) return;
@@ -212,6 +242,20 @@ export default function PWASetup() {
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={salirDeSinDatos} style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "none", background: "#eab308", color: "#141414", fontWeight: 800, fontSize: "0.85em", cursor: "pointer" }}>Usar internet</button>
               <button onClick={seguirSinDatos} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "rgba(230,230,240,0.7)", fontWeight: 700, fontSize: "0.85em", cursor: "pointer" }}>Seguir sin datos</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Aviso: NO hay internet → ofrecer el modo sin datos ── */}
+      {avisoSinRed && !avisoDatos && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 350, padding: "12px 16px calc(14px + env(safe-area-inset-bottom))", background: "rgba(10,10,20,0.85)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(234,179,8,0.35)" }}>
+          <div style={{ maxWidth: 500, margin: "0 auto" }}>
+            <div style={{ color: "#eab308", fontWeight: 800, fontSize: "0.88em", marginBottom: 4 }}>Parece que no hay conexión</div>
+            <div style={{ color: "rgba(230,230,240,0.7)", fontSize: "0.78em", marginBottom: 10, lineHeight: 1.45 }}>Activá el modo sin datos: la app va más fluida con tu música descargada y no gasta datos intentando conectar.</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={activarSinDatosDesdeAviso} style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "none", background: "#eab308", color: "#141414", fontWeight: 800, fontSize: "0.85em", cursor: "pointer" }}>Activar modo sin datos</button>
+              <button onClick={posponerSinRed} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "rgba(230,230,240,0.7)", fontWeight: 700, fontSize: "0.85em", cursor: "pointer" }}>Ahora no</button>
             </div>
           </div>
         </div>
