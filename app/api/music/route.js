@@ -63,13 +63,23 @@ async function manejarGET(req) {
     /* ── FEED VIVO: charts y lanzamientos REALES (Deezer los
        actualiza a diario) + Latin Hits de iTunes ── */
     if (action === "feed") {
-      const [chartAlb, releases, seleccion, chartTracks, latin] = await Promise.all([
+      /* Géneros que ROTAN con la hora: cada visita del día trae filas
+         distintas (charts reales por género, actualizados a diario). */
+      const POOL = [[132, "Pop"], [116, "Hip-Hop"], [152, "Rock"], [106, "Electrónica"], [98, "Clásica"], [173, "Bandas sonoras"]];
+      const hora = new Date().getUTCHours();
+      const g1 = POOL[hora % POOL.length];
+      const g2 = POOL[(hora + 3) % POOL.length];
+
+      const [chartAlb, releases, seleccion, chartTracks, latinDz, gen1, gen2] = await Promise.all([
         fetchJSON(DEEZER_BASE + "/chart/0/albums?limit=12").catch(() => ({ data: [] })),
         fetchJSON(DEEZER_BASE + "/editorial/0/releases?limit=12").catch(() => ({ data: [] })),
         // Respaldo: la selección curada de Deezer (releases suele venir vacío)
         fetchJSON(DEEZER_BASE + "/editorial/0/selection").catch(() => ({ data: [] })),
         fetchJSON(DEEZER_BASE + "/chart/0/tracks?limit=14").catch(() => ({ data: [] })),
-        fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent("latin hits") + "&entity=album&limit=10").catch(() => ({ results: [] })),
+        // Latino: chart REAL diario (antes: búsqueda fija en iTunes)
+        fetchJSON(DEEZER_BASE + "/chart/197/albums?limit=10").catch(() => ({ data: [] })),
+        fetchJSON(DEEZER_BASE + "/chart/" + g1[0] + "/albums?limit=10").catch(() => ({ data: [] })),
+        fetchJSON(DEEZER_BASE + "/chart/" + g2[0] + "/albums?limit=10").catch(() => ({ data: [] })),
       ]);
       const nuevosData = (releases.data || []).length ? releases.data : (seleccion.data || []);
       const resp = NextResponse.json({
@@ -85,7 +95,11 @@ async function manejarGET(req) {
           duration_ms: (t.duration || 0) * 1000,
           source: "deezer",
         })),
-        latin: (latin.results || []).map(normalizeITunesAlbum),
+        latin: (latinDz.data || []).map(normalizeDeezerAlbum),
+        generos: [
+          { nombre: g1[1], albums: (gen1.data || []).map(normalizeDeezerAlbum) },
+          { nombre: g2[1], albums: (gen2.data || []).map(normalizeDeezerAlbum) },
+        ].filter(g => g.albums.length),
       });
       resp.headers.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400");
       return resp;

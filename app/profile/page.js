@@ -540,6 +540,25 @@ export default function ProfilePage() {
 
   useEffect(() => { refreshDownloads(); }, [favorites, queue]);
 
+  /* "Seguir escuchando" (desde Descubrir): al llegar con una canción
+     marcada, la reproducimos de una y limpiamos la marca. */
+  const autoplayHechoRef = useRef(false);
+  useEffect(() => {
+    if (autoplayHechoRef.current || !downloadedMusic.length) return;
+    try {
+      const k = localStorage.getItem("aura_autoplay");
+      if (!k) return;
+      const item = downloadedMusic.find(x => String(x.key) === k || (x.keys || []).includes(k));
+      if (item) {
+        autoplayHechoRef.current = true;
+        localStorage.removeItem("aura_autoplay");
+        setTimeout(() => { try { startTrack(item); setExpanded(true); } catch {} }, 400);
+      } else {
+        localStorage.removeItem("aura_autoplay");
+      }
+    } catch {}
+  }, [downloadedMusic]);
+
   /* CLAVE PARA EL AUTOPLAY: creamos el reproductor apenas carga la página,
      NO cuando tocás una canción. Antes el iframe nacía dentro del click y
      tardaba en estar listo; para cuando respondía, el navegador ya había

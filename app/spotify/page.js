@@ -11,7 +11,7 @@ function Ico({ d, size = 16, fill = "none", stroke = "currentColor", sw = 2 }) {
 }
 
 export default function SpotifyPage() {
-  const { user, favorites, isFavorite, toggleFavorite, checkSession } = useUser();
+  const { user, profile, favorites, isFavorite, toggleFavorite, checkSession } = useUser();
   const { enqueueAlbum } = useDownloads();
   const [playlistModal, setPlaylistModal] = useState(null);
   const [tab, setTab] = useState("discover"); // discover, search, url, itunes
@@ -151,6 +151,25 @@ export default function SpotifyPage() {
      descargas. Con ellas, el server busca artistas del mismo estilo
      (relacionados de Deezer) y trae sus álbumes. Cada canción que
      agregás puede cambiar las semillas → la sección se mueve sola. */
+  /* "Seguir escuchando": lo último que sonó (de las stats locales).
+     Tocar una la REPRODUCE al instante en el perfil. */
+  const [recientes, setRecientes] = useState([]);
+  useEffect(() => {
+    try {
+      const st = JSON.parse(localStorage.getItem("aura_stats") || "{}");
+      const arr = Object.entries(st)
+        .map(([key, v]) => ({ key, ...v }))
+        .filter(v => v && v.name)
+        .sort((a, b) => (b.last || 0) - (a.last || 0))
+        .slice(0, 8);
+      setRecientes(arr);
+    } catch {}
+  }, []);
+  function seguirEscuchando(s) {
+    try { localStorage.setItem("aura_autoplay", String(s.key)); } catch {}
+    window.location.href = "/profile";
+  }
+
   /* Canción a RESALTAR al abrir un álbum (desde búsqueda o favoritos):
      la fila se marca y la página baja sola hasta ella. */
   const [resaltada, setResaltada] = useState(null);
@@ -350,9 +369,10 @@ export default function SpotifyPage() {
         newReleases: d.nuevos || [],
         latin: d.latin || [],
         momento: d.momento || [],
+        generos: d.generos || [],
       });
     } catch {
-      setCharts({ top: [], newReleases: [], latin: [], momento: [] });
+      setCharts({ top: [], newReleases: [], latin: [], momento: [], generos: [] });
     }
     setChartsLoading(false);
   }
@@ -659,6 +679,33 @@ export default function SpotifyPage() {
             <button onClick={() => { setTab("search"); search(); }} disabled={loading} style={BS}>{loading ? "..." : "Buscar"}</button>
           </div>
 
+          {/* Saludo */}
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: "1.35em", fontWeight: 800, color: "var(--text-strong)" }}>
+              {(() => { const h = new Date().getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()}{profile?.display_name || profile?.username ? ", " + (profile.display_name || profile.username) : ""}
+            </div>
+            <div style={{ color: "var(--text4)", fontSize: "0.85em", marginTop: 2 }}>Esto está sonando hoy</div>
+          </div>
+
+          {/* Seguir escuchando: un toque y sigue sonando */}
+          {recientes.length > 0 && (
+            <div style={{ marginBottom: 30 }}>
+              <SectionHeader icon={<Ico d={<><polygon points="5 3 19 12 5 21 5 3"/></>} size={18} stroke="#22c55e" fill="#22c55e" />} title="Seguir escuchando" subtitle="Retomá donde quedaste" />
+              <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+                {recientes.map(s => (
+                  <div key={s.key} onClick={() => seguirEscuchando(s)} style={{ flex: "0 0 200px", width: 200, minWidth: 0, maxWidth: 200, display: "flex", alignItems: "center", gap: 9, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
+                    {s.cover ? <img src={s.cover} style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} loading="lazy" /> : <div style={{ width: 44, height: 44, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: "var(--text)", fontSize: "0.8em", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+                      <div style={{ color: "var(--text4)", fontSize: "0.7em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}</div>
+                    </div>
+                    <Ico d={<polygon points="5 3 19 12 5 21 5 3"/>} size={14} stroke="#22c55e" fill="#22c55e" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Para ti: artistas del mismo estilo que lo que escuchás */}
           {recs && recs.length > 0 ? (
             <div style={{ marginBottom: 30 }}>
@@ -712,6 +759,12 @@ export default function SpotifyPage() {
                   <HorizontalAlbumRow albums={charts.top.slice(0, 8)} onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
+              {(charts.generos || []).map(g => (
+                <div key={g.nombre} style={{ marginBottom: 30 }}>
+                  <SectionHeader icon={<Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={18} stroke="var(--accent)" />} title={g.nombre} subtitle="Lo mejor del género hoy" />
+                  <HorizontalAlbumRow albums={g.albums.slice(0, 8)} onSelect={(id, s2) => loadAlbum(id, s2 || "deezer")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="deezer" />
+                </div>
+              ))}
             </>
           )}
         </div>
