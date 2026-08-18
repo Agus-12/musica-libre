@@ -120,7 +120,22 @@ async function processOne(track, currentQueue, setQueue) {
     params.set("expected_song", track.name);
   }
   const res = await fetch("/api/download-mp3?" + params.toString());
-  const data = await res.json().catch(() => ({}));
+  let data = await res.json().catch(() => ({}));
+
+  /* La Mac baja la canción en segundo plano y el server responde
+     "pendiente" mientras tanto. Reintentamos cada 10 s hasta que el
+     archivo esté listo (o nos rendimos tras ~2 minutos y queda como
+     reproducción por YouTube). En los reintentos mandamos v=<video_id>
+     para que Vercel no repita la búsqueda de YouTube. */
+  const MAX_REINTENTOS = 12;
+  for (let intento = 0; intento < MAX_REINTENTOS && data.pendiente && !data.audio_url; intento++) {
+    if (data.video_id && !params.get("v")) params.set("v", data.video_id);
+    await new Promise((r) => setTimeout(r, 10000));
+    try {
+      const r2 = await fetch("/api/download-mp3?" + params.toString());
+      data = await r2.json().catch(() => data);
+    } catch {}
+  }
 
   let guardadoOffline = false;
   if (data.audio_url && "caches" in window) {

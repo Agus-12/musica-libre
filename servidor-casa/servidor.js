@@ -158,6 +158,11 @@ const NO_INSISTIR = /unavailable|private|removed|copyright|no video/i;
 // Evita bajar dos veces lo mismo si llegan pedidos simultáneos.
 const enProceso = new Map();
 
+/* Fallos recientes: si una canción acaba de fallar, NO la reintentamos
+   en cada poll del cliente (sería martillar a YouTube). Guardamos el
+   motivo 10 minutos y lo devolvemos directo. */
+const fallosRecientes = new Map();
+
 async function obtenerAudio({ videoId, query }) {
   const clave = videoId || query;
   const id = idSeguro(clave);
@@ -389,8 +394,20 @@ const servidor = http.createServer(async (req, res) => {
     const query = url.searchParams.get("q") || "";
     if (!videoId && !query) return json(res, 400, { error: "falta v o q" });
 
-    try {
-      const { archivo, id } = await obtenerAudio({ videoId, query });
+    /* ¿Cuánto esperamos con el request abierto? Si la descarga no
+       terminó en ese tiempo, respondemos 202 "descargando" y el que
+       llama vuelve a preguntar en unos segundos (polling).
+
+       Por qué: el túnel de Cloudflare mata los requests que tardan
+       ~100 s en responder (502), y las funciones de Vercel tienen su
+       propio límite. Tener el request abierto durante minutos era LA
+       causa de que las descargas nuevas siempre fallaran. */
+    const espera = Math.max(0, Math.min(Number(url.searchParams.get("espera") ?? 20), 75)) * 1000;
+
+    const clave = videoId || query;
+    const id = idSeguro(clave);
+
+    const responderListo = (archivo) => {
       const ext = path.extname(archivo);
       const qs = TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : "";
       return json(res, 200, {
@@ -399,10 +416,38 @@ const servidor = http.createServer(async (req, res) => {
         bytes: fs.statSync(archivo).size,
         tipo: MIME[ext] || "audio/mp4",
       });
-    } catch (e) {
-      log("ERROR resolviendo", videoId || query, "→", e.message);
-      return json(res, 502, { error: "no se pudo bajar", detalle: e.message.slice(0, 300) });
+    };
+
+    // Ya la teníamos bajada: respuesta instantánea.
+    const ya = buscarExistente(id);
+    if (ya) return responderListo(ya);
+
+    // ¿Falló hace poco? Devolvemos el motivo sin reintentar.
+    const fallo = fallosRecientes.get(id);
+    if (fallo && Date.now() - fallo.ts < 10 * 60 * 1000) {
+      return json(res, 502, { error: "no se pudo bajar", detalle: fallo.detalle });
     }
+    fallosRecientes.delete(id);
+
+    // Lanzamos la descarga (o nos sumamos a la que ya está en curso).
+    const tarea = obtenerAudio({ videoId, query });
+    tarea.catch((e) => {
+      fallosRecientes.set(id, { ts: Date.now(), detalle: String(e.message || e).slice(0, 300) });
+    });
+
+    const resultado = await Promise.race([
+      tarea.then((r) => ({ r }), (e) => ({ e })),
+      dormir(espera).then(() => null),
+    ]);
+
+    if (resultado && resultado.r) return responderListo(resultado.r.archivo);
+    if (resultado && resultado.e) {
+      log("ERROR resolviendo", clave, "→", resultado.e.message);
+      return json(res, 502, { error: "no se pudo bajar", detalle: String(resultado.e.message || "").slice(0, 300) });
+    }
+    // Sigue bajando en segundo plano: 202 = "volvé a preguntar".
+    log("descargando en segundo plano:", clave);
+    return json(res, 202, { ok: false, estado: "descargando", id });
   }
 
   // ── /audio/<id>.<ext>: el archivo, con Range ──

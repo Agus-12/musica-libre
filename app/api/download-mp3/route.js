@@ -128,13 +128,22 @@ async function pedirAlServidorCasero({ videoId, query }) {
   if (query) p.set("q", query);
   if (!videoId && !query) return null;
   if (token) p.set("token", token);
+  // La Mac espera como mucho 20 s con el request abierto; si la descarga
+  // sigue, responde 202 y el cliente vuelve a preguntar (polling).
+  p.set("espera", "20");
 
   try {
     const resp = await fetch(`${base}/resolver?${p}`, {
-      // Bajar y convertir puede tardar; damos margen pero no infinito.
-      signal: AbortSignal.timeout(120000),
+      // 20 s de espera de la Mac + margen. Nunca minutos: los túneles
+      // matan los requests largos y eso daba 502 en toda descarga nueva.
+      signal: AbortSignal.timeout(35000),
       headers: { Accept: "application/json" },
     });
+    if (resp.status === 202) {
+      // La Mac sigue bajando la canción en segundo plano.
+      ultimoMotivoCasa = "la Mac todavía está bajando la canción";
+      return { pendiente: true };
+    }
     if (!resp.ok) {
       ultimoMotivoCasa = resp.status === 401
         ? "401: el token no coincide con el de la Mac"
@@ -298,7 +307,8 @@ export async function GET(req) {
         videoId: video?.videoId,
         query,
       });
-      if (casero) { audioUrl = casero.url; fuente = "casa"; }
+      const pendiente = Boolean(casero && casero.pendiente);
+      if (casero && casero.url) { audioUrl = casero.url; fuente = "casa"; }
 
       if (!audioUrl && video) {
         audioUrl = await obtenerAudioUrl(video.url);
@@ -314,6 +324,7 @@ export async function GET(req) {
         video_title: video?.title || null,
         audio_url: audioUrl,                 // null si no se pudo
         offline: Boolean(audioUrl),          // ¿se puede guardar de verdad?
+        pendiente,                           // true = la Mac sigue bajando; reintentá
         fuente,                              // "casa" | "local" | null
         config: {
           servidor: process.env.MUSICA_SERVER ? "configurado" : "FALTA",
@@ -338,12 +349,21 @@ export async function GET(req) {
       } catch {}
     }
 
-    const video = await buscarEnYouTube(
-      searchQuery,
-      p.get("expected_duration") ? Number(p.get("expected_duration")) : null,
-      p.get("expected_artist") || null,
-      p.get("expected_song") || null
-    );
+    const video = p.get("v") && /^[\w-]{11}$/.test(p.get("v"))
+      ? /* Reintento de polling: el cliente ya sabe qué video es, no hace
+           falta volver a buscar en YouTube (ahorra ~10 s por reintento). */
+        {
+          videoId: p.get("v"),
+          url: "https://youtube.com/watch?v=" + p.get("v"),
+          title: searchQuery,
+          duration: null,
+        }
+      : await buscarEnYouTube(
+          searchQuery,
+          p.get("expected_duration") ? Number(p.get("expected_duration")) : null,
+          p.get("expected_artist") || null,
+          p.get("expected_song") || null
+        );
     if (!video) {
       return NextResponse.json(
         { error: "No se encontró la canción en YouTube" },
@@ -360,7 +380,8 @@ export async function GET(req) {
     let fuente = null;
 
     const casero = await pedirAlServidorCasero({ videoId: video.videoId, query: searchQuery });
-    if (casero) { audioUrl = casero.url; fuente = "casa"; }
+    const pendiente = Boolean(casero && casero.pendiente);
+    if (casero && casero.url) { audioUrl = casero.url; fuente = "casa"; }
 
     if (!audioUrl) {
       audioUrl = await obtenerAudioUrl(video.url);
@@ -372,6 +393,7 @@ export async function GET(req) {
       method: audioUrl ? "audio" : "youtube",
       audio_url: audioUrl,                 // null → la app usa el iframe
       offline: Boolean(audioUrl),
+      pendiente,                           // true = la Mac sigue bajando; reintentá
       fuente,                              // "casa" | "local" | null
       video_id: video.videoId,
       video_url: video.url,
