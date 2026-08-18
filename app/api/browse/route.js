@@ -128,7 +128,7 @@ export async function GET(req) {
       let css = await resp.text();
       css = rewriteCssUrls(css, finalUrl);
       responseHeaders["Content-Type"] = "text/css";
-      responseHeaders["Cache-Control"] = "public, max-age=3600";
+      responseHeaders["Cache-Control"] = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
       return new NextResponse(css, { status: 200, headers: responseHeaders });
     }
 
@@ -137,14 +137,14 @@ export async function GET(req) {
       let js = await resp.text();
       js = rewriteJsUrls(js, finalUrl);
       responseHeaders["Content-Type"] = contentType;
-      responseHeaders["Cache-Control"] = "public, max-age=3600";
+      responseHeaders["Cache-Control"] = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
       return new NextResponse(js, { status: 200, headers: responseHeaders });
     }
 
     // ── Everything else → pass through ──
     const body = await resp.arrayBuffer();
     responseHeaders["Content-Type"] = contentType || "application/octet-stream";
-    responseHeaders["Cache-Control"] = "public, max-age=3600";
+    responseHeaders["Cache-Control"] = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
     
     if (isBinaryDownload(targetUrl)) {
       responseHeaders["Content-Disposition"] = `attachment; filename="${filenameFromUrl(targetUrl)}"`;

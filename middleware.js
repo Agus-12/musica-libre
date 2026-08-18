@@ -41,6 +41,9 @@ export async function middleware(request) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /* Excluimos los API públicos (música, portadas, descargas): no usan
+       sesión y el refresh de Supabase les sumaba cientos de ms A CADA
+       request — con ~30 portadas por pantalla, el feed se arrastraba. */
+    "/((?!_next/static|_next/image|favicon.ico|api/music|api/browse|api/proxy|api/download-mp3|api/download|api/mirror|api/spotify|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

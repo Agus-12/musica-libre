@@ -3,7 +3,7 @@
 
 const CACHE_NAME = 'ml-static-v7';
 const STATIC_CACHE = 'ml-static-v7';
-const DATA_CACHE = 'ml-data-v3';
+const DATA_CACHE = 'ml-data-v4';
 const IMAGE_CACHE = 'ml-images-v5';
 const SAVED_CACHE = 'ml-saved-v1';
 
@@ -73,8 +73,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API requests: network first, fallback to cache
+  // API requests
   if (url.pathname.startsWith('/api/')) {
+    /* download-mp3 NUNCA se cachea: es el polling de descargas y una
+       respuesta vieja ("pendiente") rompería el estado real. */
+    if (url.pathname.startsWith('/api/download-mp3')) {
+      event.respondWith(
+        fetch(request).catch(() => new Response(
+          JSON.stringify({ error: 'Sin conexión', offline: true }),
+          { headers: { 'Content-Type': 'application/json' }, status: 503 }
+        ))
+      );
+      return;
+    }
+    /* Feed y búsquedas: caché primero + refresco por detrás. La pantalla
+       aparece AL INSTANTE con lo último que viste y se actualiza sola.
+       Antes era red-primero: cada entrada al inicio esperaba a iTunes. */
+    if (url.pathname.startsWith('/api/music') || url.pathname.startsWith('/api/browse')) {
+      event.respondWith(staleWhileRevalidate(event, DATA_CACHE));
+      return;
+    }
+    // Resto de APIs: network first, fallback to cache
     event.respondWith(networkFirstWithCache(event, DATA_CACHE));
     return;
   }

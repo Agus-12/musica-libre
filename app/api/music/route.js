@@ -24,6 +24,22 @@ async function fetchJSON(url, headers = {}) {
 }
 
 export async function GET(req) {
+  const resp = await manejarGET(req);
+  /* Cache del edge de Vercel: los resultados de iTunes/Deezer no cambian
+     minuto a minuto. Con esto, el feed y las búsquedas repetidas salen
+     de la CDN en milisegundos en vez de pegarle a iTunes cada vez. */
+  try {
+    if (resp && resp.ok) {
+      resp.headers.set(
+        "Cache-Control",
+        "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
+      );
+    }
+  } catch {}
+  return resp;
+}
+
+async function manejarGET(req) {
   const p = req.nextUrl.searchParams;
   const action = p.get("action") || "search";
   const query = p.get("q") || "";

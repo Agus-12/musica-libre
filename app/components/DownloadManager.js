@@ -35,7 +35,15 @@ export function DownloadProvider({ children }) {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        if (Array.isArray(saved)) setQueue(saved.filter(t => t.status !== "done"));
+        if (Array.isArray(saved)) {
+          /* Si la app se cerró a mitad de una descarga, el item quedaba en
+             "downloading" para siempre y el procesador solo toma "pending":
+             la canción desaparecía de la cola sin bajarse. Lo devolvemos
+             a pending para que se reanude solo. */
+          setQueue(saved
+            .filter(t => t.status !== "done")
+            .map(t => (t.status === "downloading" ? { ...t, status: "pending" } : t)));
+        }
       }
     } catch {}
     ensureNotificationPermission();
@@ -157,6 +165,12 @@ async function processOne(track, currentQueue, setQueue) {
       apple_url: data.apple_url || "",
       method: guardadoOffline ? "audio" : "youtube",
       title: data.title || data.video_title || track.name,
+      /* Datos REALES de la canción (de iTunes), para que Descargadas y la
+         pantalla de bloqueo muestren la carátula del álbum y el nombre
+         correcto, no la miniatura y el título del video de YouTube. */
+      name: track.name || "",
+      artist: track.artist || "",
+      cover: track.cover || "",
       saved_at: Date.now(),
     };
     saved[sq] = entry;

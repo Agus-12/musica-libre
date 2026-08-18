@@ -40,7 +40,7 @@ export async function GET(req) {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800",
         "Access-Control-Allow-Origin": "*",
       },
     });

@@ -104,9 +104,16 @@ export default function ProfilePage() {
         // la cancion nunca aparecia en Descargadas. La mostramos aunque
         // este vacia para que el usuario sepa que se intento.
         if (!entry.video_id && !entry.apple_url && !entry.audio_url && !entry.title) continue;
-        let coverUrl = "", artistName = "", trackName = entry.title || key;
+        /* Preferimos los datos REALES de la canción (guardados por el
+           gestor de descargas): carátula del álbum y nombre de iTunes.
+           El título del video de YouTube queda como último recurso. */
+        let coverUrl = entry.cover || "", artistName = entry.artist || "", trackName = entry.name || entry.title || key;
         const oe = offline[key];
-        if (oe) { coverUrl = oe.cover_url || ""; artistName = oe.artist || ""; trackName = oe.name || trackName; }
+        if (oe) {
+          coverUrl = coverUrl || oe.cover_url || "";
+          artistName = artistName || oe.artist || "";
+          if (!entry.name) trackName = oe.name || trackName;
+        }
         if (!coverUrl) {
           const fm = favorites.find(f => [String(f.item_id), (f.artist+" "+f.name).trim(), (f.name+" "+f.artist).trim(), f.name.trim()].includes(key));
           if (fm) { coverUrl = fm.cover_url || ""; artistName = fm.artist || ""; trackName = fm.name || trackName; }
@@ -638,13 +645,48 @@ export default function ProfilePage() {
     if("mediaSession" in navigator){navigator.mediaSession.playbackState="none";navigator.mediaSession.metadata=null;}
   }
 
+  /* Re-descarga DE VERDAD: pide el archivo a la Mac (con polling mientras
+     baja), lo cachea para offline y guarda audio_url. Antes solo guardaba
+     el video_id, así que la canción seguía sonando por YouTube y el modo
+     offline nunca se arreglaba. */
   async function reDownload(item) {
     setDownloadingItems(p=>({...p,[item.key]:true}));
-    toast.info("Buscando: "+item.title,3000);
+    toast.info("Descargando: "+item.title,3000);
     try {
-      const res = await fetch("/api/download-mp3?q="+encodeURIComponent((item.artist+" "+item.title).trim()||item.key));
-      const data = await res.json();
-      if(data.video_id){try{const s=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=item.keys&&item.keys.length?item.keys:[item.key];for(const k of ks)s[k]={...s[k],video_id:data.video_id,saved_at:Date.now()};localStorage.setItem("ml_mp3",JSON.stringify(s));}catch{} toast.success("Encontrada: "+item.title,4000);refreshDownloads();}
+      const params = new URLSearchParams();
+      params.set("q", (item.artist+" "+item.title).trim()||item.key);
+      let data = {};
+      for (let intento = 0; intento < 13; intento++) {
+        const res = await fetch("/api/download-mp3?"+params.toString());
+        data = await res.json().catch(()=>({}));
+        if (data.audio_url || !data.pendiente) break;
+        if (data.video_id && !params.get("v")) params.set("v", data.video_id);
+        await new Promise(r=>setTimeout(r,10000));
+      }
+      let guardado = false;
+      if (data.audio_url && "caches" in window) {
+        try {
+          const c = await caches.open("ml-saved-v1");
+          const r = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" } });
+          if (r.ok && r.status === 200) { await c.put(data.audio_url, r.clone()); guardado = true; }
+        } catch {}
+      }
+      if (guardado || data.video_id) {
+        try{
+          const s=JSON.parse(localStorage.getItem("ml_mp3")||"{}");
+          const ks=item.keys&&item.keys.length?item.keys:[item.key];
+          for(const k of ks) s[k]={...s[k],
+            video_id:data.video_id||s[k]?.video_id||"",
+            audio_url:guardado?data.audio_url:(s[k]?.audio_url||""),
+            method:guardado?"audio":(s[k]?.method||"youtube"),
+            name:s[k]?.name||item.title||"", artist:s[k]?.artist||item.artist||"",
+            cover:s[k]?.cover||item.cover_url||"",
+            saved_at:Date.now()};
+          localStorage.setItem("ml_mp3",JSON.stringify(s));
+        }catch{}
+        toast.success(guardado?"Guardada sin internet: "+item.title:"Encontrada (suena por YouTube): "+item.title,4000);
+        refreshDownloads();
+      }
       else toast.warning("No se encontro",4000);
     } catch { toast.error("Error buscando",3000); }
     setDownloadingItems(p=>({...p,[item.key]:false}));
@@ -774,6 +816,30 @@ export default function ProfilePage() {
       {/* TAB: Descargadas */}
       {tab==="downloads" && (
         <div>
+          {/* Cola de descargas EN CURSO: antes las canciones encoladas eran
+              invisibles hasta terminar y parecía que no se descargaban. */}
+          {queue && queue.filter(t=>t.status!=="done").length>0 && (
+            <div style={{background:"#12121f",border:"1px solid #2a2a3e",borderRadius:10,marginBottom:14,overflow:"hidden"}}>
+              <div style={{padding:"9px 14px",fontSize:"0.72em",fontWeight:700,letterSpacing:0.4,color:"#eab308",borderBottom:"1px solid #2a2a3e",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:"#eab308",animation:"pulse 1.2s infinite"}}/>
+                DESCARGANDO ({queue.filter(t=>t.status!=="done").length})
+              </div>
+              {queue.filter(t=>t.status!=="done").map(t=>(
+                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"1px solid #1e1e30"}}>
+                  <CoverImg url={t.cover} size={38} r={6}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{color:"#ccc",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div>
+                    <div style={{color:"#666",fontSize:"0.72em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.artist}</div>
+                  </div>
+                  {t.status==="failed"
+                    ? <span style={{color:"#ef4444",fontSize:"0.68em",fontWeight:700,flexShrink:0}} title={t.error||""}>falló</span>
+                    : t.status==="downloading"
+                      ? <span style={{color:"#eab308",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>bajando…</span>
+                      : <span style={{color:"#666",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>en cola</span>}
+                </div>
+              ))}
+            </div>
+          )}
           {downloadedMusic.length===0 ? (
             <div style={{textAlign:"center",padding:40,color:"#555"}}>
               <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={40} stroke="#555"/>
@@ -870,15 +936,15 @@ export default function ProfilePage() {
                       {cp && <div style={{marginTop:4,height:3,borderRadius:2,background:"#2a2a3e",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"#22c55e",width:progress+"%",transition:"width 0.5s linear"}}/></div>}
                     </div>
                     {cp && <span style={{color:"#22c55e",fontSize:"0.72em",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{fmt(currentTime)} / {fmt(duration)}</span>}
-                    {/* Estado: sin internet la canción completa (YouTube) no
-                        suena, así que lo decimos en vez de mostrar "OFF". */}
-                    {item.video_id && (
-                      isOnline
-                        ? <span style={{padding:"2px 6px",borderRadius:4,fontSize:"0.6em",fontWeight:700,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.3)"}}>OFF</span>
-                        : <span title="Necesita internet" style={{display:"inline-flex",alignItems:"center",flexShrink:0,padding:"2px 5px",borderRadius:4,background:"rgba(234,179,8,0.12)",border:"1px solid rgba(234,179,8,0.3)"}}>
-                            <Ico d={<><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={11} stroke="#eab308"/>
-                          </span>
-                    )}
+                    {/* Estado real: verde OFF solo si hay ARCHIVO guardado
+                        (suena sin internet). Si solo hay video de YouTube,
+                        badge amarillo YT: necesita internet. Antes el OFF
+                        verde salía aunque no hubiera archivo, y mentía. */}
+                    {item.audio_url
+                      ? <span style={{padding:"2px 6px",borderRadius:4,fontSize:"0.6em",fontWeight:700,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.3)"}}>OFF</span>
+                      : item.video_id
+                        ? <span title="Suena por YouTube: necesita internet. Tocá ⟳ para bajarla de verdad." style={{padding:"2px 6px",borderRadius:4,fontSize:"0.6em",fontWeight:700,flexShrink:0,background:"rgba(234,179,8,0.12)",color:"#eab308",border:"1px solid rgba(234,179,8,0.3)"}}>YT</span>
+                        : null}
                     {/* Sin internet ocultamos re-descargar y borrar: no se
                         pueden completar offline y sólo confunden. */}
                     {isOnline && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "#555", "none", "Buscar de nuevo")}
