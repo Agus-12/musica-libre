@@ -74,32 +74,61 @@ export default function ProfilePage() {
   const wakeRef = useRef(null);           // reanudar al volver a la app
   const audioRef = useRef(null);          // <audio> para archivos guardados (offline)
   const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
-  const silencioRef = useRef(null);       // audio silencioso: mantiene viva la app pausada
+  const SILENCIO = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA";
+  const enSilencioRef = useRef(false);    // el elemento está tocando el silencio guardián
+  const posPausaRef = useRef(0);          // dónde quedó la canción real
+  const srcRealRef = useRef("");
   const silTimerRef = useRef(null);
   const deteniendoRef = useRef(false);    // true mientras el usuario DETIENE del todo
-  /* iOS congela la PWA ~30 s después de pausar: el play de la pantalla
-     bloqueada llegaba a una app dormida y no pasaba nada. Mientras la
-     canción esté pausada reproducimos un silencio en loop (10 min máx)
-     para que la app siga despierta y el play funcione al instante. */
-  function mantenerViva(encender) {
+  /* iOS congela la PWA ~30 s después de pausar y el play de la pantalla
+     bloqueada llegaba a una app dormida. Solución: al pausar, EL MISMO
+     reproductor cambia a un silencio en loop — la sesión de audio nunca
+     muere, la app sigue despierta y el play responde siempre. Un
+     segundo elemento no sirve: iOS bloquea audios nuevos en segundo
+     plano; el mismo elemento ya está "bendecido" por tu toque. */
+  function pausarConGuardian() {
+    const a = audioRef.current;
+    if (!a || enSilencioRef.current) return;
     try {
-      if (encender) {
-        if (!silencioRef.current) {
-          const s = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQQAAACAgICA");
-          s.loop = true;
-          silencioRef.current = s;
-        }
-        const pr = silencioRef.current.play();
-        if (pr && pr.catch) pr.catch(() => {});
-        clearTimeout(silTimerRef.current);
-        silTimerRef.current = setTimeout(() => {
-          try { silencioRef.current && silencioRef.current.pause(); } catch {}
-        }, 10 * 60 * 1000);
-      } else {
-        clearTimeout(silTimerRef.current);
-        if (silencioRef.current) { try { silencioRef.current.pause(); } catch {} }
-      }
+      posPausaRef.current = a.currentTime || 0;
+      srcRealRef.current = a.src;
+      enSilencioRef.current = true;
+      a.src = SILENCIO;
+      a.loop = true;
+      const pr = a.play();
+      if (pr && pr.catch) pr.catch(() => {});
+      setIsPlaying(false);
+      try {
+        navigator.mediaSession.playbackState = "paused";
+        navigator.mediaSession.setPositionState({ duration: Math.max(1, finRealRef.current || duration || 1), playbackRate: 1, position: Math.min(posPausaRef.current, Math.max(1, finRealRef.current || duration || 1)) });
+      } catch {}
+      // A los 10 min soltamos el guardián (batería); reabrir la app reanuda igual
+      clearTimeout(silTimerRef.current);
+      silTimerRef.current = setTimeout(() => { try { a.pause(); } catch {} }, 10 * 60 * 1000);
     } catch {}
+  }
+  function reanudarDeGuardian() {
+    const a = audioRef.current;
+    if (!a) return;
+    clearTimeout(silTimerRef.current);
+    if (enSilencioRef.current) {
+      enSilencioRef.current = false;
+      const destino = posPausaRef.current || 0;
+      a.loop = false;
+      a.src = srcRealRef.current;
+      const alCargar = () => {
+        try { a.currentTime = destino; } catch {}
+        a.removeEventListener("loadedmetadata", alCargar);
+      };
+      a.addEventListener("loadedmetadata", alCargar);
+      const pr = a.play();
+      if (pr && pr.catch) pr.catch(() => {});
+    } else if (a.paused) {
+      const pr = a.play();
+      if (pr && pr.catch) pr.catch(() => {});
+    }
+    setIsPlaying(true);
+    try { navigator.mediaSession.playbackState = "playing"; } catch {}
   }
   const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
   const colaRef = useRef([]);             // cola "reproducir a continuación"
@@ -756,7 +785,7 @@ export default function ProfilePage() {
       a.preload = "auto";
       audioRef.current = a;
       a.addEventListener("timeupdate", () => {
-        if (seekingRef.current) return;
+        if (seekingRef.current || enSilencioRef.current) return;
         let d = a.duration || 0;
         const fin = finRealRef.current;
         /* Si el archivo trae cola de más (versiones viejas corruptas:
@@ -776,20 +805,21 @@ export default function ProfilePage() {
         setDuration(d);
         setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
       });
-      a.addEventListener("ended", () => handleTrackEnd());
+      a.addEventListener("ended", () => { if (!enSilencioRef.current) handleTrackEnd(); });
       a.addEventListener("play", () => {
+        if (enSilencioRef.current) return;   // es el guardián, no la canción
         setIsPlaying(true);
-        mantenerViva(false);
         /* Avisar a iOS el estado REAL: sin esto, tras pausar desde la
            pantalla bloqueada iOS daba la sesión por muerta y el botón
            de reanudar no hacía nada. */
         try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing"; } catch {}
       });
       a.addEventListener("pause", () => {
+        if (enSilencioRef.current) return;   // pausa interna del guardián
         setIsPlaying(false);
         try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused"; } catch {}
-        // Pausa a mitad de canción (no al terminar): mantener la app viva
-        if (!a.ended && a.currentTime > 0 && !deteniendoRef.current) mantenerViva(true);
+        // Pausa a mitad de canción (no al terminar, no al detener): guardián
+        if (!a.ended && a.currentTime > 0 && !deteniendoRef.current) pausarConGuardian();
       });
       a.addEventListener("error", () => {
         // El archivo cacheado falló: probamos con YouTube si hay conexión
@@ -799,6 +829,8 @@ export default function ProfilePage() {
     }
 
     usingAudioRef.current = true;
+    enSilencioRef.current = false;          // canción nueva: fuera guardián
+    clearTimeout(silTimerRef.current);
     finRealRef.current = item.duration_ms ? item.duration_ms / 1000 : 0;
     setPlayingKey(item.key); setPlayingTitle(item.title);
     setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
@@ -957,21 +989,7 @@ export default function ProfilePage() {
         }
       } catch {}
       if (usingAudioRef.current && audioRef.current) {
-        const p = audioRef.current;
-        if (p.paused) {
-          const t = p.currentTime || 0;
-          const pr = p.play();
-          /* Si iOS congeló el elemento mientras estaba pausado, el play()
-             puede fallar: lo recargamos en el mismo punto y reintentamos. */
-          if (pr && pr.catch) pr.catch(() => {
-            try {
-              p.load();
-              p.currentTime = t;
-              const pr2 = p.play();
-              if (pr2 && pr2.catch) pr2.catch(() => {});
-            } catch {}
-          });
-        }
+        reanudarDeGuardian();
       } else {
         try { playerRef.current?.playVideo(); } catch {}
         kickPlay();
@@ -981,9 +999,7 @@ export default function ProfilePage() {
     });
     navigator.mediaSession.setActionHandler("pause", () => {
       if (usingAudioRef.current && audioRef.current) {
-        try { audioRef.current.pause(); } catch {}
-        setIsPlaying(false);
-        try { navigator.mediaSession.playbackState = "paused"; } catch {}
+        pausarConGuardian();
         return;
       }
       try { playerRef.current?.pauseVideo(); } catch {}
@@ -1063,6 +1079,7 @@ export default function ProfilePage() {
   }
 
   function seekTo(seconds) {
+    if (enSilencioRef.current) { posPausaRef.current = seconds; setCurrentTime(seconds); return; }
     const d = duration || 0;
     const t = Math.max(0, Math.min(seconds, d || seconds));
     try {
@@ -1080,8 +1097,8 @@ export default function ProfilePage() {
   function togglePlay() {
     if (usingAudioRef.current && audioRef.current) {
       const a = audioRef.current;
-      if (a.paused) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); setIsPlaying(true); }
-      else { a.pause(); setIsPlaying(false); }
+      if (enSilencioRef.current || a.paused) reanudarDeGuardian();
+      else pausarConGuardian();
       return;
     }
     if (!playerRef.current || !playerReadyRef.current) return;
@@ -1092,7 +1109,8 @@ export default function ProfilePage() {
   function stopPlayback() {
     deteniendoRef.current = true;
     setTimeout(() => { deteniendoRef.current = false; }, 300);
-    mantenerViva(false);
+    clearTimeout(silTimerRef.current);
+    enSilencioRef.current = false;
     // Ojo: NO destruimos el player, solo paramos. Así sigue listo para la
     // próxima canción y el play responde al primer toque.
     if (playerRef.current && playerReadyRef.current) { try { playerRef.current.stopVideo(); } catch {} }
