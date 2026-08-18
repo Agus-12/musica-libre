@@ -29,7 +29,11 @@ export function UserProvider({ children }) {
       setProfile(loadOffline("profile"));
       setLoading(false);
     }
-    checkSession();
+    /* FAILSAFE: la pantalla "Cargando..." JAMÁS puede quedarse pegada.
+       Si en 6 s la sesión no respondió (red lenta, LTE moribundo), la
+       app entra igual con lo que haya guardado. */
+    const tope = setTimeout(() => setLoading(false), 6000);
+    checkSession().finally(() => clearTimeout(tope));
   }, []);
 
   // Keep offline cache in sync
@@ -37,8 +41,17 @@ export function UserProvider({ children }) {
   useEffect(() => { saveOffline("playlists", playlists); }, [playlists]);
 
   async function checkSession() {
+    /* Modo sin datos activo: ni intentamos tocar la red */
     try {
-      const res = await fetch("/api/auth");
+      if (localStorage.getItem("aura_sin_datos") === "1") {
+        const cachedUser = loadOffline("user");
+        if (cachedUser) { setUser(cachedUser); setProfile(loadOffline("profile")); }
+        setLoading(false);
+        return;
+      }
+    } catch {}
+    try {
+      const res = await fetch("/api/auth", { signal: AbortSignal.timeout(8000) });
       const data = await res.json();
       if (data.user) {
         setUser(data.user);
