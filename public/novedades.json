@@ -1,13 +1,13 @@
 {
-  "version": "18 de agosto, 2026 · v8",
+  "version": "18 de agosto, 2026 · v9",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🎛 Chips de mood: Fiesta, Chill, Gym, Corazón roto... un toque y a buscar",
+    "📜 Playlists del momento: las listas que el mundo escucha, abribles canción por canción",
+    "❤️ De tus favoritos: un recorrido aleatorio por lo tuyo en cada visita",
+    "🔄 Botón de refrescar: re-baraja los géneros del feed al instante",
     "👋 El Descubrir te saluda por tu nombre",
     "▶️ Seguir escuchando: lo último que oíste, un toque y sigue sonando",
-    "🎸 Filas por género que rotan durante el día (Pop, Hip-Hop, Rock, Electrónica...)",
-    "🌎 Latin Hits ahora es el chart latino REAL del día",
-    "🔍 Autocompletado en vivo: escribí 'Ari' y aparece Ariana Grande al instante",
-    "📈 Feed vivo: Éxitos del momento, Top Global y lanzamientos REALES que cambian a diario",
-    "🎧 Más variedad: catálogo doble iTunes + Deezer sin canciones dobles"
+    "🎸 Filas por género que rotan durante el día (Pop, Hip-Hop, Rock, Electrónica...)"
   ]
 }

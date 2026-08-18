@@ -66,11 +66,15 @@ async function manejarGET(req) {
       /* Géneros que ROTAN con la hora: cada visita del día trae filas
          distintas (charts reales por género, actualizados a diario). */
       const POOL = [[132, "Pop"], [116, "Hip-Hop"], [152, "Rock"], [106, "Electrónica"], [98, "Clásica"], [173, "Bandas sonoras"]];
+      // Con ?r= (botón refrescar) los géneros salen AL AZAR; si no, rotan por hora
+      const alAzar = Boolean(p.get("r"));
       const hora = new Date().getUTCHours();
-      const g1 = POOL[hora % POOL.length];
-      const g2 = POOL[(hora + 3) % POOL.length];
+      const i1 = alAzar ? Math.floor(Math.random() * POOL.length) : hora % POOL.length;
+      const i2 = (i1 + 1 + (alAzar ? Math.floor(Math.random() * (POOL.length - 1)) : 2)) % POOL.length;
+      const g1 = POOL[i1];
+      const g2 = POOL[i2 === i1 ? (i1 + 1) % POOL.length : i2];
 
-      const [chartAlb, releases, seleccion, chartTracks, latinDz, gen1, gen2] = await Promise.all([
+      const [chartAlb, releases, seleccion, chartTracks, latinDz, gen1, gen2, chartPls] = await Promise.all([
         fetchJSON(DEEZER_BASE + "/chart/0/albums?limit=12").catch(() => ({ data: [] })),
         fetchJSON(DEEZER_BASE + "/editorial/0/releases?limit=12").catch(() => ({ data: [] })),
         // Respaldo: la selección curada de Deezer (releases suele venir vacío)
@@ -80,6 +84,7 @@ async function manejarGET(req) {
         fetchJSON(DEEZER_BASE + "/chart/197/albums?limit=10").catch(() => ({ data: [] })),
         fetchJSON(DEEZER_BASE + "/chart/" + g1[0] + "/albums?limit=10").catch(() => ({ data: [] })),
         fetchJSON(DEEZER_BASE + "/chart/" + g2[0] + "/albums?limit=10").catch(() => ({ data: [] })),
+        fetchJSON(DEEZER_BASE + "/chart/0/playlists?limit=8").catch(() => ({ data: [] })),
       ]);
       const nuevosData = (releases.data || []).length ? releases.data : (seleccion.data || []);
       const resp = NextResponse.json({
@@ -100,8 +105,37 @@ async function manejarGET(req) {
           { nombre: g1[1], albums: (gen1.data || []).map(normalizeDeezerAlbum) },
           { nombre: g2[1], albums: (gen2.data || []).map(normalizeDeezerAlbum) },
         ].filter(g => g.albums.length),
+        playlists: (chartPls.data || []).map(pl => ({
+          id: String(pl.id),
+          nombre: pl.title || "",
+          cover: pl.picture_medium || pl.picture_big || "",
+          canciones: pl.nb_tracks || 0,
+        })),
       });
       resp.headers.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400");
+      return resp;
+    }
+
+    /* ── PLAYLIST del chart: sus canciones (para el visor del feed) ── */
+    if (action === "playlist") {
+      if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
+      const [det, trs] = await Promise.all([
+        fetchJSON(DEEZER_BASE + "/playlist/" + id).catch(() => ({})),
+        fetchJSON(DEEZER_BASE + "/playlist/" + id + "/tracks?limit=40").catch(() => ({ data: [] })),
+      ]);
+      const resp = NextResponse.json({
+        nombre: det.title || "Playlist",
+        cover: det.picture_medium || "",
+        tracks: (trs.data || []).filter(t => t.id).map(t => ({
+          name: t.title || "",
+          artist: t.artist?.name || "",
+          album_id: String(t.album?.id || ""),
+          cover: t.album?.cover_small || t.album?.cover_medium || "",
+          duration_ms: (t.duration || 0) * 1000,
+          preview_url: t.preview || "",
+        })),
+      });
+      resp.headers.set("Cache-Control", "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400");
       return resp;
     }
 

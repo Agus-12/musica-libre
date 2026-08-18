@@ -165,6 +165,17 @@ export default function SpotifyPage() {
       setRecientes(arr);
     } catch {}
   }, []);
+  /* Visor de una playlist del chart */
+  const [plVista, setPlVista] = useState(null);
+  async function abrirPlaylistChart(pl) {
+    setPlVista({ nombre: pl.nombre, cover: pl.cover, tracks: [], cargando: true });
+    try {
+      const r = await fetch("/api/music?action=playlist&id=" + pl.id);
+      const d = await r.json();
+      setPlVista({ nombre: d.nombre || pl.nombre, cover: d.cover || pl.cover, tracks: d.tracks || [], cargando: false });
+    } catch { setPlVista(v => v ? { ...v, cargando: false } : null); }
+  }
+
   function seguirEscuchando(s) {
     try { localStorage.setItem("aura_autoplay", String(s.key)); } catch {}
     window.location.href = "/profile";
@@ -357,12 +368,12 @@ export default function SpotifyPage() {
     }).catch(() => {});
   }
 
-  async function loadCharts() {
+  async function loadCharts(refrescar) {
     setChartsLoading(true);
     try {
       /* Feed VIVO: charts y lanzamientos reales (Deezer los actualiza
-         a diario) — antes eran 3 búsquedas fijas que nunca cambiaban. */
-      const res = await fetch("/api/music?action=feed");
+         a diario). Con refrescar=true los géneros salen al azar. */
+      const res = await fetch("/api/music?action=feed" + (refrescar ? "&r=" + Date.now() : ""));
       const d = await res.json();
       setCharts({
         top: d.top || [],
@@ -370,9 +381,10 @@ export default function SpotifyPage() {
         latin: d.latin || [],
         momento: d.momento || [],
         generos: d.generos || [],
+        playlists: d.playlists || [],
       });
     } catch {
-      setCharts({ top: [], newReleases: [], latin: [], momento: [], generos: [] });
+      setCharts({ top: [], newReleases: [], latin: [], momento: [], generos: [], playlists: [] });
     }
     setChartsLoading(false);
   }
@@ -663,6 +675,30 @@ export default function SpotifyPage() {
     <div style={{ maxWidth: 1000, margin: "0 auto", padding: "15px 20px", minHeight: "100vh", position: "relative" }}>
       {playlistModal && <AddToPlaylistModal item={playlistModal} onClose={() => setPlaylistModal(null)} />}
 
+      {/* Visor de playlist del chart */}
+      {plVista && (
+        <div onClick={() => setPlVista(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 440, maxHeight: "78vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+              {plVista.cover ? <img src={plVista.cover} style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} /> : null}
+              <div style={{ flex: 1, minWidth: 0, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }}>{plVista.nombre}</div>
+              <button onClick={() => setPlVista(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", fontSize: "1.2em", flexShrink: 0 }}>✕</button>
+            </div>
+            {plVista.cargando ? <p style={{ color: "var(--text4)", textAlign: "center", padding: 20 }}>Cargando...</p> :
+              plVista.tracks.map((t, i) => (
+                <div key={i} onClick={() => { setPlVista(null); if (t.album_id) loadAlbum(t.album_id, "deezer", t.name); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 2px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
+                  <span style={{ color: "var(--text5)", width: 20, textAlign: "center", fontSize: "0.75em", flexShrink: 0 }}>{i + 1}</span>
+                  {t.cover ? <img src={t.cover} style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} loading="lazy" /> : <div style={{ width: 36, height: 36, borderRadius: 6, background: "var(--border)", flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: "var(--text)", fontSize: "0.85em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
+                    <div style={{ color: "var(--text4)", fontSize: "0.7em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.artist}</div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
         <button onClick={() => { setTab("discover"); setAlbum(null); setArtist(null); setResults(null); setQuery(""); setError(""); }} style={TabS(tab === "discover" && !album && !artist)}><Ico d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />} size={16} stroke="var(--accent)" fill="var(--accent)" /> Descubrir</button>
@@ -679,12 +715,24 @@ export default function SpotifyPage() {
             <button onClick={() => { setTab("search"); search(); }} disabled={loading} style={BS}>{loading ? "..." : "Buscar"}</button>
           </div>
 
-          {/* Saludo */}
-          <div style={{ marginBottom: 22 }}>
+          {/* Saludo + refrescar */}
+          <div style={{ marginBottom: 22, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: "1.35em", fontWeight: 800, color: "var(--text-strong)" }}>
               {(() => { const h = new Date().getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()}{profile?.display_name || profile?.username ? ", " + (profile.display_name || profile.username) : ""}
             </div>
             <div style={{ color: "var(--text4)", fontSize: "0.85em", marginTop: 2 }}>Esto está sonando hoy</div>
+            </div>
+            <button onClick={() => loadCharts(true)} title="Refrescar el feed" disabled={chartsLoading} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Ico d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></>} size={17} stroke="var(--accent)" />
+            </button>
+          </div>
+
+          {/* Chips de mood: búsqueda al toque */}
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6, marginBottom: 20 }}>
+            {[["Fiesta", "fiesta reggaeton hits"], ["Chill", "chill relax acoustic"], ["Gym", "gym workout motivation"], ["Corazón roto", "sad canciones para llorar"], ["Road trip", "road trip classics"], ["Noventas", "90s hits"]].map(([et, q]) => (
+              <button key={et} onClick={() => { setTab("search"); search(q); }} style={{ flexShrink: 0, padding: "8px 16px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text2)", fontSize: "0.82em", fontWeight: 700, cursor: "pointer" }}>{et}</button>
+            ))}
           </div>
 
           {/* Seguir escuchando: un toque y sigue sonando */}
@@ -739,6 +787,26 @@ export default function SpotifyPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {charts.playlists?.length > 0 && (
+                <div style={{ marginBottom: 30 }}>
+                  <SectionHeader icon={<Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={18} stroke="#ec4899" />} title="Playlists del momento" subtitle="Las listas que el mundo escucha" />
+                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+                    {charts.playlists.map(pl => (
+                      <div key={pl.id} onClick={() => abrirPlaylistChart(pl)} style={{ flex: "0 0 130px", width: 130, minWidth: 0, maxWidth: 130, overflow: "hidden", cursor: "pointer" }}>
+                        {pl.cover ? <img src={pl.cover} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", borderRadius: 10, display: "block" }} loading="lazy" /> : <div style={{ width: "100%", aspectRatio: 1, borderRadius: 10, background: "var(--border)" }} />}
+                        <div style={{ color: "var(--text2)", fontSize: "0.78em", fontWeight: 600, marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pl.nombre}</div>
+                        <div style={{ color: "var(--text4)", fontSize: "0.68em" }}>{pl.canciones} canciones</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {favorites.filter(f => f.item_type === "album").length > 2 && (
+                <div style={{ marginBottom: 30 }}>
+                  <SectionHeader icon={<Ico d={<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />} size={18} stroke="#ef4444" />} title="De tus favoritos" subtitle="Un recorrido por lo tuyo" />
+                  <HorizontalAlbumRow albums={[...favorites.filter(f => f.item_type === "album")].sort(() => Math.random() - 0.5).slice(0, 8).map(f => ({ id: f.item_id, name: f.name, artist: f.artist, cover_medium: f.cover_url, cover_big: f.cover_url, source: f.source || "itunes" }))} onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
               {charts.latin?.length > 0 && (
