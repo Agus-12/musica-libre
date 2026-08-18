@@ -31,12 +31,13 @@ export default function Navbar({ children }) {
     } catch {}
   }, []);
   function toggleTema() {
-    const nuevo = !temaClaro;
+    // Estado REAL desde el DOM (así nunca se desincroniza con el panel
+    // de Personalizar del perfil, que también cambia el tema).
+    const d = document.documentElement;
+    const nuevo = !d.classList.contains("tema-claro");
     setTemaClaro(nuevo);
-    try {
-      localStorage.setItem("aura_tema", nuevo ? "claro" : "oscuro");
-      document.documentElement.classList.toggle("tema-claro", nuevo);
-    } catch {}
+    d.classList.toggle("tema-claro", nuevo);
+    try { localStorage.setItem("aura_tema", nuevo ? "claro" : "oscuro"); } catch {}
   }
 
   const links = [

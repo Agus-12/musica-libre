@@ -1,3 +1,4 @@
+import "./globals.css";
 import Providers from "./components/Providers";
 import PWASetup from "./components/PWASetup";
 
