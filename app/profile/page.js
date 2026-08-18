@@ -832,7 +832,9 @@ export default function ProfilePage() {
                     <div style={{color:"#666",fontSize:"0.72em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.artist}</div>
                   </div>
                   {t.status==="failed"
-                    ? <span style={{color:"#ef4444",fontSize:"0.68em",fontWeight:700,flexShrink:0}} title={t.error||""}>falló</span>
+                    ? (t.repair
+                        ? <span style={{color:"#eab308",fontSize:"0.68em",fontWeight:700,flexShrink:0}} title="La Mac aún la está bajando; se reintenta solo">esperando…</span>
+                        : <span style={{color:"#ef4444",fontSize:"0.68em",fontWeight:700,flexShrink:0}} title={t.error||""}>falló</span>)
                     : t.status==="downloading"
                       ? <span style={{color:"#eab308",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>bajando…</span>
                       : <span style={{color:"#666",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>en cola</span>}

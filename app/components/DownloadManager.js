@@ -39,15 +39,77 @@ export function DownloadProvider({ children }) {
           /* Si la app se cerró a mitad de una descarga, el item quedaba en
              "downloading" para siempre y el procesador solo toma "pending":
              la canción desaparecía de la cola sin bajarse. Lo devolvemos
-             a pending para que se reanude solo. */
+             a pending para que se reanude solo. Las reparaciones que
+             fallaron también se reintentan en cada apertura. */
           setQueue(saved
             .filter(t => t.status !== "done")
-            .map(t => (t.status === "downloading" ? { ...t, status: "pending" } : t)));
+            .map(t => (t.status === "downloading" || (t.repair && t.status === "failed"))
+              ? { ...t, status: "pending" } : t));
         }
       }
     } catch {}
     ensureNotificationPermission();
   }, []);
+
+  /* ── AUTO-REPARACIÓN ────────────────────────────────────────────
+     El talón de Aquiles era este: si la Mac tardaba más que la espera
+     de la app, la canción quedaba guardada como "YouTube" PARA SIEMPRE,
+     aunque la Mac terminara de bajarla 30 segundos después.
+     Ahora, al abrir la app (y cada 5 minutos), buscamos las canciones
+     sin archivo y las reencolamos. Como la Mac casi siempre ya las
+     tiene, el primer pedido responde al instante y pasan a OFF. */
+  const autoRepair = useCallback(() => {
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    let candidatos = [];
+    try {
+      const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const vistos = new Set();
+      for (const [key, e] of Object.entries(saved)) {
+        if (!e || e.audio_url) continue;                      // ya está offline
+        if (!e.video_id && !e.title && !e.name) continue;     // entrada vacía
+        const grupo = e.video_id || ((e.artist || "") + "|" + (e.name || e.title || key)).toLowerCase();
+        if (vistos.has(grupo)) continue;
+        vistos.add(grupo);
+        candidatos.push({ key, e });
+      }
+    } catch { return; }
+    if (!candidatos.length) return;
+    setQueue(prev => {
+      /* Las reparaciones que fallaron antes vuelven a intentarse en
+         este ciclo (la Mac pudo haber terminado mientras tanto). */
+      const base = prev.map(t => (t.repair && t.status === "failed") ? { ...t, status: "pending" } : t);
+      const enCola = new Set(base.filter(t => t.status !== "done").map(t => t.key));
+      const nuevos = [];
+      for (const { key, e } of candidatos.slice(0, 6)) {
+        if (enCola.has(key)) continue;
+        nuevos.push({
+          id: `fix_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${nuevos.length}`,
+          key,
+          name: e.name || e.title || key,
+          artist: e.artist || "",
+          cover: e.cover || "",
+          duration_ms: e.duration_ms || null,
+          /* Con el video exacto no hace falta volver a buscar en YouTube,
+             y la Mac lo encuentra en su caché por id. */
+          video_id: e.video_id || "",
+          query: (e.artist && e.name) ? "" : (/^\d+$/.test(key) ? (e.title || "") : key),
+          repair: true,
+          status: "pending",
+          savedAt: Date.now(),
+        });
+      }
+      const resultado = nuevos.length ? [...base, ...nuevos] : base;
+      return resultado;
+    });
+  }, []);
+
+  useEffect(() => {
+    const t0 = setTimeout(autoRepair, 8000);                    // al abrir
+    const cada = setInterval(autoRepair, 5 * 60 * 1000);        // y cada 5 min
+    const alVolver = () => { if (navigator.onLine) autoRepair(); };
+    window.addEventListener("online", alVolver);
+    return () => { clearTimeout(t0); clearInterval(cada); window.removeEventListener("online", alVolver); };
+  }, [autoRepair]);
 
   // Cada vez que cambia la cola la persistimos.
   useEffect(() => {
@@ -108,9 +170,12 @@ export function DownloadProvider({ children }) {
 
 async function processOne(track, currentQueue, setQueue) {
   setQueue(prev => prev.map(t => t.id === track.id ? { ...t, status: "downloading" } : t));
-  const sq = (track.artist + " " + track.name).trim();
+  const sq = ((track.artist + " " + track.name).trim() || track.query || String(track.key || "")).trim();
   const params = new URLSearchParams();
   params.set("q", sq);
+  /* Reparación: ya sabemos el video exacto → Vercel no busca en YouTube
+     y la Mac lo encuentra en su caché por id. Respuesta casi instantánea. */
+  if (track.video_id) params.set("v", track.video_id);
   // Duracion real (de iTunes, en segundos) para que el filtro de YouTube
   // busque una version de longitud similar y NO un live/mashup de 7-8 min.
   if (track.duration_ms) {
@@ -159,18 +224,22 @@ async function processOne(track, currentQueue, setQueue) {
 
   try {
     const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+    /* No pisamos datos buenos que ya existieran (carátula, nombre real,
+       o un audio_url previo) con datos peores de este intento. */
+    const previo = saved[sq] || (track.key ? saved[String(track.key)] : null) || {};
+    const tieneAudio = guardadoOffline || Boolean(previo.audio_url);
     const entry = {
-      video_id: data.video_id || "",
-      audio_url: guardadoOffline ? data.audio_url : "",
-      apple_url: data.apple_url || "",
-      method: guardadoOffline ? "audio" : "youtube",
-      title: data.title || data.video_title || track.name,
-      /* Datos REALES de la canción (de iTunes), para que Descargadas y la
-         pantalla de bloqueo muestren la carátula del álbum y el nombre
-         correcto, no la miniatura y el título del video de YouTube. */
-      name: track.name || "",
-      artist: track.artist || "",
-      cover: track.cover || "",
+      video_id: data.video_id || previo.video_id || "",
+      audio_url: guardadoOffline ? data.audio_url : (previo.audio_url || ""),
+      apple_url: data.apple_url || previo.apple_url || "",
+      method: tieneAudio ? "audio" : "youtube",
+      title: data.title || data.video_title || previo.title || track.name,
+      /* Datos REALES de la canción (iTunes): en reparaciones preferimos
+         lo que ya estaba guardado; en descargas nuevas, lo que viene
+         del track. Nunca el título del video de YouTube. */
+      name: (track.repair ? (previo.name || track.name) : (track.name || previo.name)) || "",
+      artist: (track.repair ? (previo.artist || track.artist) : (track.artist || previo.artist)) || "",
+      cover: (track.repair ? (previo.cover || track.cover) : (track.cover || previo.cover)) || "",
       saved_at: Date.now(),
     };
     saved[sq] = entry;
@@ -178,7 +247,21 @@ async function processOne(track, currentQueue, setQueue) {
     localStorage.setItem("ml_mp3", JSON.stringify(saved));
   } catch {}
 
-  setQueue(prev => prev.map(t => t.id === track.id ? { ...t, status: "done", savedAt: Date.now(), bytes: data.bytes || 0 } : t));
+  /* Una reparación solo "termina" si consiguió el archivo; si no, queda
+     como fallida y se vuelve a intentar en la próxima apertura o ciclo. */
+  const exito = guardadoOffline || !track.repair;
+  setQueue(prev => prev.map(t => t.id === track.id
+    ? { ...t, status: exito ? "done" : "failed",
+        error: exito ? undefined : "la Mac aún la está bajando; se reintenta solo",
+        savedAt: Date.now(), bytes: data.bytes || 0 }
+    : t));
+
+  if (track.repair) {
+    if (guardadoOffline) {
+      notifyBrowser("Ahora disponible sin internet", `${track.name} — ${track.artist}`, track.cover);
+    }
+    return;   // sin notificación de "álbum listo" para reparaciones
+  }
 
   notifyBrowser(
     guardadoOffline ? "Guardada sin internet" : "Guardada",
