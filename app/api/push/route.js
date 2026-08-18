@@ -10,11 +10,53 @@ import { enviarPush } from "@/app/utils/push";
                                    cada deploy)                         */
 
 export async function POST(req) {
+  const body = await req.json().catch(() => ({}));
+
+  /* ── Aviso AUTOMÁTICO de versión nueva ─────────────────────────
+     Lo llama la app del PRIMER usuario que detecta la actualización.
+     El servidor deduplica por huella de build (app_config): el push
+     a todos sale UNA sola vez por deploy, sin tocar nada a mano. */
+  if (body.avisar_version) {
+    try {
+      const { enviarPush } = await import("@/app/utils/push");
+      const { createClient: createAdmin } = await import("@supabase/supabase-js");
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!url || !key) return NextResponse.json({ ok: false, motivo: "faltan claves en Vercel" });
+      const admin = createAdmin(url, key, { auth: { persistSession: false } });
+
+      // Huella del build actual, leída del propio sw.js desplegado
+      let build = "";
+      try {
+        const sw = await fetch(new URL("/sw.js", req.url), { cache: "no-store" }).then(r => r.text());
+        build = (sw.match(/AURA_BUILD = "([^"]+)"/) || [])[1] || "";
+      } catch {}
+      if (!build || build === "dev") return NextResponse.json({ ok: false, motivo: "sin huella de build" });
+
+      const { data: previo } = await admin.from("app_config").select("valor").eq("clave", "ultima_version_avisada").maybeSingle();
+      if (previo && previo.valor === build) {
+        return NextResponse.json({ ok: true, ya_avisado: true });
+      }
+      // Marcamos ANTES de enviar (si dos lo piden a la vez, solo pasa uno)
+      await admin.from("app_config").upsert({ clave: "ultima_version_avisada", valor: build, actualizado: new Date().toISOString() });
+
+      let cuerpo = "Abrí AURA y tocá Actualizar para tenerla.";
+      try {
+        const nov = await fetch(new URL("/novedades.json", req.url), { cache: "no-store" }).then(r => r.json());
+        if (nov.cambios && nov.cambios.length) cuerpo = nov.cambios[0] + " …y más. Abrí AURA para actualizar.";
+      } catch {}
+      const resultado = await enviarPush(null, { titulo: "AURA se actualizó 🎉", cuerpo, url: "/spotify" });
+      return NextResponse.json({ ok: true, ...resultado });
+    } catch (e) {
+      return NextResponse.json({ ok: false, motivo: String(e.message || e).slice(0, 100) });
+    }
+  }
+
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { subscription } = await req.json().catch(() => ({}));
+  const { subscription } = body;
   if (!subscription || !subscription.endpoint) {
     return NextResponse.json({ error: "Falta subscription" }, { status: 400 });
   }

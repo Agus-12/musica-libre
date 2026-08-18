@@ -144,6 +144,14 @@ export default function PWASetup() {
       .then(r => r.json())
       .then(d => { setNovedades(d); setShowNovedades(true); })
       .catch(() => {});
+    /* AVISO AUTOMÁTICO A TODOS: el primer dispositivo que detecta la
+       versión nueva le pide al servidor mandar el push a todos los
+       suscritos. El servidor deduplica por build: sale una sola vez. */
+    fetch("/api/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avisar_version: true }),
+    }).catch(() => {});
     try {
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("AURA se actualizó 🎉", {
