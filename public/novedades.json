@@ -1,15 +1,15 @@
 {
-  "version": "18 de agosto, 2026 · v2",
+  "version": "18 de agosto, 2026 · v3",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
-    "🔀 Aleatorio de verdad: no repite una canción hasta que suenen hasta 20 distintas",
-    "🔒 Arreglado: reanudar desde la pantalla bloqueada ya funciona",
+    "🔔 Notificaciones push: te avisamos aunque la app esté cerrada (actívalas en Perfil → Personalizar)",
+    "🎤 Arreglado: la letra karaoke ya no empuja la pantalla hacia arriba",
     "🎤 Letras de canciones en el reproductor, sincronizadas tipo karaoke",
     "🧬 'Para ti' ahora está vivo: te recomienda artistas de tu mismo estilo",
     "👥 Amigos: agregá por @usuario y mirá sus favoritos",
     "📤 Enviá canciones a tus amigos (les llegan a su buzón)",
     "🎨 Personalizá tema, color y fuente — te siguen en todos tus dispositivos",
-    "🔍 Buscador más ágil: búsquedas recientes, artistas con foto y botón ✕",
-    "⚡ La app abre y carga mucho más rápido"
+    "🔀 Aleatorio de verdad: no repite una canción hasta que suenen hasta 20 distintas",
+    "🔒 Arreglado: reanudar desde la pantalla bloqueada ya funciona"
   ]
 }

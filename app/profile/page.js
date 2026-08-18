@@ -133,9 +133,20 @@ export default function ProfilePage() {
   const lineaActiva = (letra && letra.lineas.length)
     ? letra.lineas.reduce((acc, l, i) => (currentTime >= l.t - 0.3 ? i : acc), -1)
     : -1;
+  const letraContRef = useRef(null);
   useEffect(() => {
     if (!showLetra || lineaActiva < 0) return;
-    try { lineaRefs.current[lineaActiva]?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
+    /* Scroll SOLO dentro del panel de letra. scrollIntoView arrastraba
+       también a los contenedores padres: todo el reproductor se iba
+       subiendo y tapaba la X de cerrar. */
+    try {
+      const cont = letraContRef.current;
+      const el = lineaRefs.current[lineaActiva];
+      if (cont && el) {
+        const destino = el.offsetTop - cont.clientHeight / 2 + el.clientHeight / 2;
+        cont.scrollTo({ top: Math.max(0, destino), behavior: "smooth" });
+      }
+    } catch {}
   }, [lineaActiva, showLetra]);
 
   const [expanded, setExpanded] = useState(false);
@@ -197,6 +208,56 @@ export default function ProfilePage() {
       else { localStorage.removeItem("aura_fuente"); document.documentElement.removeAttribute("data-fuente"); }
     } catch {}
     sincronizarAjustes({ fuente: f });
+  }
+  /* ── Notificaciones push (aunque la app esté cerrada) ── */
+  const [pushOn, setPushOn] = useState(false);
+  const VAPID_PUB = "BGtFZHPcbMcTfR4lyetmKGuQQvHfdRpc5df4ZDLn0FpDFoxfeDQWRvZVW4uEx8VS_bIwz8xtutlDXoKseeOOBAs";
+  function b64aBytes(b64) {
+    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    const base = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base);
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+  useEffect(() => {
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker?.ready;
+        const sub = await reg?.pushManager?.getSubscription();
+        setPushOn(Boolean(sub) && Notification.permission === "granted");
+      } catch {}
+    })();
+  }, []);
+  async function activarPush() {
+    try {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        toast.warning("Tu navegador no soporta notificaciones push. En iPhone: agregá AURA a la pantalla de inicio primero.", 5000);
+        return;
+      }
+      const permiso = await Notification.requestPermission();
+      if (permiso !== "granted") { toast.warning("Permiso de notificaciones denegado", 3500); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(VAPID_PUB) });
+      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+      const d = await r.json();
+      if (d.ok) { setPushOn(true); toast.success("Notificaciones activadas 🔔", 3500); }
+      else toast.warning(d.error || "No se pudo", 4000);
+    } catch (e) {
+      toast.error("No se pudo activar: " + String(e.message || e).slice(0, 60), 4000);
+    }
+  }
+  async function desactivarPush() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        try { await fetch("/api/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) }); } catch {}
+        await sub.unsubscribe();
+      }
+      setPushOn(false);
+      toast.info("Notificaciones desactivadas", 3000);
+    } catch {}
   }
   async function cargarAmigos() {
     try {
@@ -1084,6 +1145,13 @@ export default function ProfilePage() {
               ))}
             </div>
           </div>
+          <div style={{marginBottom:14}}>
+            <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>NOTIFICACIONES</div>
+            <button onClick={pushOn?desactivarPush:activarPush} style={{padding:"9px 16px",borderRadius:10,border:"1px solid var(--border)",background:pushOn?"rgba(34,197,94,0.15)":"var(--panel2)",color:pushOn?"#22c55e":"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer"}}>
+              {pushOn ? "🔔 Activadas ✓ (tocá para apagar)" : "🔕 Activar notificaciones"}
+            </button>
+            <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:6,lineHeight:1.5}}>Te avisamos de versiones nuevas y cuando un amigo te manda una canción, aunque la app esté cerrada.</div>
+          </div>
           <div>
             <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>FUENTE</div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -1672,7 +1740,7 @@ export default function ProfilePage() {
                   </div>
                   <button onClick={()=>setShowLetra(false)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",color:"#fff",fontSize:"1em",flexShrink:0}}>✕</button>
                 </div>
-                <div style={{flex:1,overflowY:"auto",padding:"10px 24px calc(120px + env(safe-area-inset-bottom))"}}>
+                <div ref={letraContRef} style={{flex:1,overflowY:"auto",position:"relative",padding:"10px 24px calc(120px + env(safe-area-inset-bottom))"}}>
                   {letraCargando && <p style={{color:"var(--accent)",textAlign:"center",padding:30}}>Buscando la letra...</p>}
                   {!letraCargando && letra && !letra.encontrada && (
                     <p style={{color:"#8a8a9a",textAlign:"center",padding:30,lineHeight:1.6}}>No encontramos la letra de esta canción 😔</p>

@@ -54,6 +54,19 @@ export async function POST(req) {
     if (msg.includes("policy")) return NextResponse.json({ error: "Solo podés enviar a tus amigos" }, { status: 403 });
     return NextResponse.json({ error: msg }, { status: 400 });
   }
+
+  /* Push al amigo, aunque tenga la app cerrada (si activó notificaciones) */
+  try {
+    const { enviarPush } = await import("@/app/utils/push");
+    const { data: yo } = await supabase.from("profiles").select("username, display_name").eq("id", user.id).single();
+    const quien = yo?.display_name || yo?.username || "Alguien";
+    await enviarPush([to_id], {
+      titulo: `🎵 ${quien} te mandó una canción`,
+      cuerpo: `${limpio.name}${limpio.artist ? " — " + limpio.artist : ""}`,
+      url: "/profile",
+    });
+  } catch {}
+
   return NextResponse.json({ ok: true });
 }
 
