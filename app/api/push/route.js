@@ -33,18 +33,28 @@ export async function POST(req) {
       } catch {}
       if (!build || build === "dev") return NextResponse.json({ ok: false, motivo: "sin huella de build" });
 
+      /* Dedupe por CONTENIDO de novedades, no por build: así los deploys
+         de arreglos chiquitos (sin novedades nuevas) no spamean pushes.
+         El banner dentro de la app sí aparece siempre. */
+      let cuerpo = "Abrí AURA y tocá Actualizar para tenerla.";
+      let firmaNov = build;
+      try {
+        const nov = await fetch(new URL("/novedades.json", req.url), { cache: "no-store" }).then(r => r.json());
+        if (nov.cambios && nov.cambios.length) {
+          cuerpo = nov.cambios[0] + " …y más. Abrí AURA para actualizar.";
+          const texto = JSON.stringify(nov.cambios) + (nov.version || "");
+          let h = 0;
+          for (let i = 0; i < texto.length; i++) h = (h * 31 + texto.charCodeAt(i)) | 0;
+          firmaNov = String(h);
+        }
+      } catch {}
+
       const { data: previo } = await admin.from("app_config").select("valor").eq("clave", "ultima_version_avisada").maybeSingle();
-      if (previo && previo.valor === build) {
+      if (previo && previo.valor === firmaNov) {
         return NextResponse.json({ ok: true, ya_avisado: true });
       }
       // Marcamos ANTES de enviar (si dos lo piden a la vez, solo pasa uno)
-      await admin.from("app_config").upsert({ clave: "ultima_version_avisada", valor: build, actualizado: new Date().toISOString() });
-
-      let cuerpo = "Abrí AURA y tocá Actualizar para tenerla.";
-      try {
-        const nov = await fetch(new URL("/novedades.json", req.url), { cache: "no-store" }).then(r => r.json());
-        if (nov.cambios && nov.cambios.length) cuerpo = nov.cambios[0] + " …y más. Abrí AURA para actualizar.";
-      } catch {}
+      await admin.from("app_config").upsert({ clave: "ultima_version_avisada", valor: firmaNov, actualizado: new Date().toISOString() });
       const resultado = await enviarPush(null, { titulo: "AURA se actualizó 🎉", cuerpo, url: "/spotify" });
       return NextResponse.json({ ok: true, ...resultado });
     } catch (e) {

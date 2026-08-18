@@ -1618,7 +1618,7 @@ export default function ProfilePage() {
                         pueden completar offline y sólo confunden. */}
                     {iconBtn(e=>{e.stopPropagation();encolarSiguiente(item);}, <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={14}/>, "#555", "none", "Reproducir a continuación")}
                     {isOnline && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
-                    {isOnline && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
+                    {isOnline && !item.audio_url && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
                     {isOnline && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
                   </div>
                 );
