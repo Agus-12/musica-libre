@@ -75,9 +75,16 @@ export function DownloadProvider({ children }) {
     } catch { return; }
     if (!candidatos.length) return;
     setQueue(prev => {
-      /* Las reparaciones que fallaron antes vuelven a intentarse en
-         este ciclo (la Mac pudo haber terminado mientras tanto). */
-      const base = prev.map(t => (t.repair && t.status === "failed") ? { ...t, status: "pending" } : t);
+      /* Reintentos automáticos en cada ciclo:
+         - reparaciones fallidas → vuelven a pending (la Mac pudo terminar)
+         - descargas normales fallidas → hasta 4 reintentos (antes un
+           fallo por parpadeo de red era definitivo) */
+      const base = prev.map(t => {
+        if (t.status !== "failed") return t;
+        if (t.repair) return { ...t, status: "pending" };
+        if ((t.intentos || 0) < 4) return { ...t, status: "pending", intentos: (t.intentos || 0) + 1 };
+        return t;
+      });
       const enCola = new Set(base.filter(t => t.status !== "done").map(t => t.key));
       const nuevos = [];
       for (const { key, e } of candidatos.slice(0, 6)) {
@@ -161,8 +168,16 @@ export function DownloadProvider({ children }) {
     setQueue(prev => prev.filter(t => t.status !== "done"));
   }, []);
 
+  /* Cuando el usuario borra una canción de sus descargas, sacamos de la
+     cola cualquier item con sus claves (incluidas reparaciones): antes
+     una reparación pendiente podía "resucitar" la canción borrada. */
+  const removeByKeys = useCallback((keys) => {
+    const set = new Set((keys || []).map(String));
+    setQueue(prev => prev.filter(t => !set.has(String(t.key))));
+  }, []);
+
   return (
-    <DownloadContext.Provider value={{ queue, enqueueAlbum, clearDone, running }}>
+    <DownloadContext.Provider value={{ queue, enqueueAlbum, clearDone, removeByKeys, running }}>
       {children}
     </DownloadContext.Provider>
   );
@@ -192,22 +207,26 @@ async function processOne(track, currentQueue, setQueue) {
   if (track.name) {
     params.set("expected_song", track.name);
   }
-  const res = await fetch("/api/download-mp3?" + params.toString());
-  let data = await res.json().catch(() => ({}));
-
   /* La Mac baja la canción en segundo plano y el server responde
      "pendiente" mientras tanto. Reintentamos cada 10 s hasta que el
      archivo esté listo (o nos rendimos tras ~2 minutos y queda como
      reproducción por YouTube). En los reintentos mandamos v=<video_id>
-     para que Vercel no repita la búsqueda de YouTube. */
+     para que Vercel no repita la búsqueda de YouTube.
+
+     Importante: si el fetch en sí revienta (iOS congeló la app un
+     segundo, parpadeó el wifi), NO abortamos la descarga: contamos ese
+     intento como "pendiente" y seguimos. Antes cualquier parpadeo de
+     red marcaba la canción como fallida para siempre. */
   const MAX_REINTENTOS = 12;
-  for (let intento = 0; intento < MAX_REINTENTOS && data.pendiente && !data.audio_url; intento++) {
+  let data = {};
+  for (let intento = 0; intento < MAX_REINTENTOS; intento++) {
+    try {
+      const res = await fetch("/api/download-mp3?" + params.toString());
+      data = await res.json().catch(() => ({}));
+    } catch { data = { ...data, pendiente: true }; }
+    if (data.audio_url || !data.pendiente) break;
     if (data.video_id && !params.get("v")) params.set("v", data.video_id);
     await new Promise((r) => setTimeout(r, 10000));
-    try {
-      const r2 = await fetch("/api/download-mp3?" + params.toString());
-      data = await r2.json().catch(() => data);
-    } catch {}
   }
 
   let guardadoOffline = false;
@@ -218,6 +237,18 @@ async function processOne(track, currentQueue, setQueue) {
       if (r.ok && r.status === 200) {
         await c.put(data.audio_url, r.clone());
         guardadoOffline = true;
+      }
+    } catch {}
+  }
+
+  /* Si el usuario BORRÓ la canción mientras esta reparación corría,
+     no la revivimos: marcamos el item como terminado y listo. */
+  if (track.repair) {
+    try {
+      const actual = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      if (!actual[String(track.key)] && !(sq && actual[sq])) {
+        setQueue(prev => prev.map(t => t.id === track.id ? { ...t, status: "done", savedAt: Date.now() } : t));
+        return;
       }
     } catch {}
   }

@@ -54,7 +54,7 @@ export default function ProfilePage() {
   const [playlistItems, setPlaylistItems] = useState([]);
   const [downloadingItems, setDownloadingItems] = useState({});
   const toast = useToast();
-  const { queue } = useDownloads();
+  const { queue, removeByKeys } = useDownloads();
 
   const [playingKey, setPlayingKey] = useState(null);
   const [playingTitle, setPlayingTitle] = useState("");
@@ -110,7 +110,10 @@ export default function ProfilePage() {
         let coverUrl = entry.cover || "", artistName = entry.artist || "", trackName = entry.name || entry.title || key;
         const oe = offline[key];
         if (oe) {
-          coverUrl = coverUrl || oe.cover_url || "";
+          // Ignoramos miniaturas de video de YouTube guardadas por
+          // versiones viejas: acá va la carátula del álbum o nada.
+          const oeCover = oe.cover_url && !/ytimg|img\.youtube/i.test(oe.cover_url) ? oe.cover_url : "";
+          coverUrl = coverUrl || oeCover;
           artistName = artistName || oe.artist || "";
           if (!entry.name) trackName = oe.name || trackName;
         }
@@ -700,6 +703,10 @@ export default function ProfilePage() {
       const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       for (const k of claves) delete s[k];
       localStorage.setItem("ml_mp3", JSON.stringify(s));
+
+      // Sacamos de la cola de descargas cualquier item de esta canción
+      // (incluidas reparaciones): antes podían "resucitarla".
+      try { removeByKeys && removeByKeys(claves); } catch {}
 
       // También la metadata offline
       try {

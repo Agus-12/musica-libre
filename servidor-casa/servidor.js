@@ -488,8 +488,10 @@ const servidor = http.createServer(async (req, res) => {
     if (ya) return responderListo(ya);
 
     // ¿Falló hace poco? Devolvemos el motivo sin reintentar.
+    // 3 minutos: suficiente para no martillar a YouTube, pero corto
+    // para que "borrar y volver a descargar" no quede trabado.
     const fallo = fallosRecientes.get(id);
-    if (fallo && Date.now() - fallo.ts < 10 * 60 * 1000) {
+    if (fallo && Date.now() - fallo.ts < 3 * 60 * 1000) {
       return json(res, 502, { error: "no se pudo bajar", detalle: fallo.detalle });
     }
     fallosRecientes.delete(id);
