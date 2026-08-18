@@ -104,8 +104,19 @@ yt-dlp --version    # ej: 2026.07.04
 node --version      # ej: v24.19.0
 ```
 
-> **¿Y ffmpeg?** No hace falta. El servidor baja el audio ya listo (`.m4a`)
-> y no lo convierte, así que ffmpeg nunca se usa.
+> **¿Y ffmpeg?** **SÍ hace falta** (lección aprendida). El audio de YouTube
+> viene en MP4 *fragmentado* (DASH) y el iPhone calcula mal la duración de
+> ese formato: agrega minutos de silencio fantasma al final. Con ffmpeg
+> instalado, yt-dlp repara el contenedor automáticamente al terminar cada
+> descarga y el problema desaparece. Instalá el binario estático:
+>
+> ```bash
+> curl -L https://evermeet.cx/ffmpeg/getrelease/zip -o /tmp/ffmpeg.zip
+> sudo unzip -o /tmp/ffmpeg.zip -d /usr/local/bin
+> sudo chmod a+rx /usr/local/bin/ffmpeg
+> sudo xattr -d com.apple.quarantine /usr/local/bin/ffmpeg 2>/dev/null
+> ffmpeg -version
+> ```
 
 > **¿Por qué no Homebrew?** En macOS 13 y anteriores con procesador Intel,
 > Homebrew ya no tiene paquetes precompilados: intenta compilar todo desde
