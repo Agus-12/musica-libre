@@ -78,9 +78,47 @@ async function obtenerAudioUrl(videoUrl) {
 // Último motivo por el que falló el servidor casero, para diagnóstico.
 let ultimoMotivoCasa = null;
 
+/* Chequeo rápido de vida ANTES de pedir la descarga.
+   Sin esto, si la Mac está caída (o la URL del túnel es vieja) el
+   request de /resolver se queda esperando hasta 120 segundos y la app
+   parece colgada. /salud responde al instante: si en 5 segundos no
+   contesta bien, asumimos que la Mac no está y seguimos con YouTube. */
+async function servidorCaseroVivo(base) {
+  try {
+    const resp = await fetch(`${base}/salud`, {
+      signal: AbortSignal.timeout(5000),
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!resp.ok) {
+      ultimoMotivoCasa = resp.status === 502 || resp.status === 503
+        ? `${resp.status}: el túnel responde pero el servidor de la Mac no está corriendo (¿servidor.js apagado, o la URL de trycloudflare es de un túnel viejo?)`
+        : `salud respondió ${resp.status}`;
+      return false;
+    }
+    const data = await resp.json().catch(() => null);
+    if (!data || data.ok !== true) {
+      ultimoMotivoCasa = "salud no devolvió ok:true";
+      return false;
+    }
+    if (data.ytdlp === false) {
+      ultimoMotivoCasa = "la Mac responde pero yt-dlp no está instalado o no está en el PATH";
+      return false;
+    }
+    return true;
+  } catch (e) {
+    ultimoMotivoCasa =
+      "la Mac no responde (túnel caído o URL vieja): " + String(e.message || e).slice(0, 60);
+    return false;
+  }
+}
+
 async function pedirAlServidorCasero({ videoId, query }) {
   const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
   if (!base) { ultimoMotivoCasa = "MUSICA_SERVER vacía"; return null; }
+
+  // Fail-fast: si la Mac no está viva, no esperamos 120 s al pedo.
+  if (!(await servidorCaseroVivo(base))) return null;
 
   const token = process.env.MUSICA_TOKEN || "";
   const p = new URLSearchParams();
