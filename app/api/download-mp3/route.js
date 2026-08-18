@@ -221,7 +221,7 @@ async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist, ex
   if (scored.length === 0) return null;
   const mejor = scored[0];
   if (mejor.score >= META_DESCARTE) {
-    log("todos descartados por filtro:",
+    console.log("todos descartados por filtro:",
         scored.length,
         "videos; mejor score=",
         mejor.score);
