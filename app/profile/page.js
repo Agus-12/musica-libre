@@ -76,6 +76,46 @@ export default function ProfilePage() {
   const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
   const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
   const colaRef = useRef([]);             // cola "reproducir a continuación"
+  const ordenAleatorioRef = useRef([]);   // orden pre-generado del aleatorio (visible en la cola)
+  const [showCola, setShowCola] = useState(false);
+  const [, setTickCola] = useState(0);
+  const refrescarCola = () => setTickCola(t => t + 1);
+  const [swipeCola, setSwipeCola] = useState({ key: null, dx: 0, x0: 0 });
+
+  function regenerarOrdenAleatorio(excluirKey) {
+    const lista = visibleList();
+    const pool = lista.map(x => x.key).filter(k => k !== excluirKey);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    ordenAleatorioRef.current = pool;
+  }
+  function quitarDeColaYSonar(item) {
+    quitarDeCola(item.key);
+    startTrack(item);
+  }
+  function quitarDeCola(k) {
+    colaRef.current = colaRef.current.filter(x => x !== k);
+    refrescarCola();
+  }
+  /* Lo que viene: primero tu cola manual, después el orden real
+     (aleatorio pre-generado o secuencial). */
+  function proximas(max = 20) {
+    const lista = visibleList();
+    const porKey = new Map(lista.map(x => [x.key, x]));
+    const manual = colaRef.current.map(k => porKey.get(k)).filter(Boolean);
+    let resto = [];
+    if (shuffle) {
+      resto = ordenAleatorioRef.current.map(k => porKey.get(k)).filter(Boolean);
+    } else {
+      const i = lista.findIndex(x => x.key === playingKey);
+      resto = i >= 0 ? [...lista.slice(i + 1), ...(repeat === "all" ? lista.slice(0, i) : [])] : lista;
+    }
+    const enManual = new Set(colaRef.current);
+    resto = resto.filter(x => !enManual.has(x.key) && x.key !== playingKey);
+    return { manual, resto: resto.slice(0, max) };
+  }
   const usingAudioRef = useRef(false);    // ¿estamos usando el archivo o YouTube?
   const seekingRef = useRef(false);       // espejo de `seeking` para los eventos
   const [isOnline, setIsOnline] = useState(true);
@@ -334,6 +374,7 @@ export default function ProfilePage() {
   }
   function encolarSiguiente(item) {
     colaRef.current = [...colaRef.current.filter(k => k !== item.key), item.key];
+    refrescarCola();
     toast.success("Sonará a continuación: " + item.title, 2500);
   }
 
@@ -786,19 +827,27 @@ export default function ProfilePage() {
     }
     if (liveRef.current.shuffle) {
       if (lista.length === 1) return lista[0];
-      /* Aleatorio CON MEMORIA: una canción no se repite hasta que hayan
-         sonado otras (hasta 20, o todas menos una si tenés menos).
-         Antes era puro azar y repetía las mismas una y otra vez. */
-      const max = Math.max(1, Math.min(lista.length - 1, 20));
-      const recientes = new Set(historialRef.current.slice(-max));
-      let candidatos = lista.filter(x => !recientes.has(x.key) && x.key !== actual);
-      if (candidatos.length === 0) {
-        // Ya sonaron todas: reiniciamos la memoria (menos la actual)
-        historialRef.current = actual ? [actual] : [];
-        candidatos = lista.filter(x => x.key !== actual);
-        if (candidatos.length === 0) candidatos = lista;
+      /* Anterior en aleatorio: volvemos por el historial real */
+      if (dir === -1) {
+        const h = historialRef.current;
+        const idx = h.lastIndexOf(actual);
+        const prevKey = idx > 0 ? h[idx - 1] : null;
+        const it = prevKey ? lista.find(x => x.key === prevKey) : null;
+        if (it) return it;
+        return lista[Math.floor(Math.random() * lista.length)];
       }
-      return candidatos[Math.floor(Math.random() * candidatos.length)];
+      /* Siguiente: consumimos el orden PRE-GENERADO (una permutación:
+         no repite hasta agotar todas) — y es lo que muestra la cola. */
+      let intentos = 0;
+      while (intentos < 3) {
+        if (!ordenAleatorioRef.current.length) { regenerarOrdenAleatorio(actual); intentos++; }
+        while (ordenAleatorioRef.current.length) {
+          const k = ordenAleatorioRef.current.shift();
+          const it = lista.find(x => x.key === k);
+          if (it) { refrescarCola(); return it; }
+        }
+      }
+      return lista.find(x => x.key !== actual) || lista[0];
     }
     if (i === -1) return lista[0];
     const sig = i + dir;
@@ -1817,10 +1866,16 @@ export default function ProfilePage() {
                   <Ico d={<polyline points="6 9 12 15 18 9"/>} size={26} stroke="#c8c8d8" sw={2.2}/>
                 </button>
                 <div style={{color:"#9a9aaa",fontSize:"0.68em",fontWeight:700,letterSpacing:1.4,textTransform:"uppercase"}}>Reproduciendo</div>
+                <div style={{display:"flex",alignItems:"center"}}>
+                <button onClick={()=>{setShowCola(v=>!v);refrescarCola();}} title="Cola de reproducción"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:10,display:"flex"}}>
+                  <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={21} stroke={showCola||colaRef.current.length?"#22c55e":"#8a8a9a"} sw={2}/>
+                </button>
                 <button onClick={()=>{stopPlayback();setExpanded(false);}} title="Cerrar"
                   style={{background:"none",border:"none",cursor:"pointer",padding:10,display:"flex",marginRight:-10}}>
                   <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={22} stroke="#8a8a9a" sw={2.2}/>
                 </button>
+                </div>
               </div>
 
               {/* Portada grande */}
@@ -1883,7 +1938,7 @@ export default function ProfilePage() {
                   <Ico d={<><path d="M11 17l-5-5 5-5"/><path d="M18 17l-5-5 5-5"/></>} size={21} stroke="#8a8a9a" sw={2.2}/>
                 </button>
 
-                <button onClick={()=>{setShuffle(s=>!s);toast.info(!shuffle?"Aleatorio activado":"Aleatorio desactivado",2000);}} title="Aleatorio"
+                <button onClick={()=>{const nuevo=!shuffle;setShuffle(nuevo);if(nuevo)regenerarOrdenAleatorio(playingKey);toast.info(nuevo?"Aleatorio activado":"Aleatorio desactivado",2000);}} title="Aleatorio"
                   style={{background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
                   <Ico d={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>} size={21} stroke={shuffle?"#22c55e":"#8a8a9a"} sw={2.1}/>
                 </button>
@@ -1905,6 +1960,54 @@ export default function ProfilePage() {
                 </button>
               </div>
             </div>
+
+            {/* ── Panel de COLA: qué va a sonar a continuación ── */}
+            {showCola && (() => {
+              const { manual, resto } = proximas(20);
+              const filaCola = (item, esManual) => (
+                <div key={(esManual?"m_":"s_")+item.key}
+                  onTouchStart={esManual ? (e)=>setSwipeCola({key:item.key,dx:0,x0:e.touches[0].clientX}) : undefined}
+                  onTouchMove={esManual ? (e)=>{ if(swipeCola.key===item.key) setSwipeCola(s=>({...s,dx:Math.min(0,e.touches[0].clientX-s.x0)})); } : undefined}
+                  onTouchEnd={esManual ? ()=>{ if(swipeCola.key===item.key && swipeCola.dx<-70) quitarDeCola(item.key); setSwipeCola({key:null,dx:0,x0:0}); } : undefined}
+                  style={{position:"relative",overflow:"hidden",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+                  {esManual && swipeCola.key===item.key && swipeCola.dx<-20 && (
+                    <div style={{position:"absolute",inset:0,background:"rgba(239,68,68,0.25)",display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:18,color:"#ef4444",fontWeight:800,fontSize:"0.8em"}}>Quitar ✕</div>
+                  )}
+                  <div onClick={()=>{ if(esManual) quitarDeColaYSonar(item); else startTrack(item); }}
+                    style={{display:"flex",alignItems:"center",gap:11,padding:"10px 4px",cursor:"pointer",background:"rgba(10,10,20,0.92)",transform:swipeCola.key===item.key?`translateX(${swipeCola.dx}px)`:"none",transition:swipeCola.key===item.key?"none":"transform 0.2s"}}>
+                    <CoverImg url={item.cover_url} size={42} r={7}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:"#e8e8f0",fontSize:"0.88em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                      <div style={{color:"#7a7a8c",fontSize:"0.72em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.artist}</div>
+                    </div>
+                    {esManual && (
+                      <button onClick={(e)=>{e.stopPropagation();quitarDeCola(item.key);}} title="Quitar de la cola"
+                        style={{background:"rgba(255,255,255,0.07)",border:"none",borderRadius:"50%",width:28,height:28,cursor:"pointer",color:"#8a8a9a",fontSize:"0.75em",flexShrink:0}}>✕</button>
+                    )}
+                  </div>
+                </div>
+              );
+              return (
+                <div onClick={e=>e.stopPropagation()} style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(10,10,20,0.97),rgba(10,10,20,0.99))",zIndex:5,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",flexShrink:0}}>
+                    <div style={{color:"#fff",fontWeight:800}}>⏭ A continuación</div>
+                    <button onClick={()=>setShowCola(false)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",color:"#fff",fontSize:"1em",flexShrink:0}}>✕</button>
+                  </div>
+                  <div style={{flex:1,overflowY:"auto",padding:"0 18px calc(110px + env(safe-area-inset-bottom))"}}>
+                    {manual.length > 0 && (
+                      <>
+                        <div style={{color:"#22c55e",fontSize:"0.68em",fontWeight:800,letterSpacing:0.5,margin:"6px 0 4px"}}>TU COLA · deslizá ← para quitar</div>
+                        {manual.map(it => filaCola(it, true))}
+                      </>
+                    )}
+                    <div style={{color:"#7a7a8c",fontSize:"0.68em",fontWeight:800,letterSpacing:0.5,margin:"14px 0 4px"}}>{shuffle ? "DESPUÉS · orden aleatorio" : "DESPUÉS"}</div>
+                    {resto.length === 0 && manual.length === 0
+                      ? <p style={{color:"#7a7a8c",fontSize:"0.85em",textAlign:"center",padding:24}}>Nada en cola. Marcá canciones con el botón ⏭ en Descargadas.</p>
+                      : resto.map(it => filaCola(it, false))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Panel de LETRA (karaoke): se desliza sobre el player ── */}
             {showLetra && (
