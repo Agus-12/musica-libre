@@ -1,15 +1,14 @@
 {
-  "version": "18 de agosto, 2026 · v3",
+  "version": "18 de agosto, 2026 · v4",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "⬇️ Descargá playlists COMPLETAS con un botón (modo avión total)",
+    "📊 Estadísticas: tus más escuchadas y tus artistas top (pestaña Stats)",
+    "⏭ Cola de reproducción: marcá canciones para que suenen a continuación",
+    "📃 Compartí playlists enteras con tus amigos (les llegan al buzón)",
     "🔔 Notificaciones push: te avisamos aunque la app esté cerrada (actívalas en Perfil → Personalizar)",
     "🎤 Arreglado: la letra karaoke ya no empuja la pantalla hacia arriba",
     "🎤 Letras de canciones en el reproductor, sincronizadas tipo karaoke",
-    "🧬 'Para ti' ahora está vivo: te recomienda artistas de tu mismo estilo",
-    "👥 Amigos: agregá por @usuario y mirá sus favoritos",
-    "📤 Enviá canciones a tus amigos (les llegan a su buzón)",
-    "🎨 Personalizá tema, color y fuente — te siguen en todos tus dispositivos",
-    "🔀 Aleatorio de verdad: no repite una canción hasta que suenen hasta 20 distintas",
-    "🔒 Arreglado: reanudar desde la pantalla bloqueada ya funciona"
+    "🧬 'Para ti' ahora está vivo: te recomienda artistas de tu mismo estilo"
   ]
 }

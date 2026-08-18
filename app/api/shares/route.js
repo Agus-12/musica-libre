@@ -46,6 +46,7 @@ export async function POST(req) {
     artist: String(item.artist || "").slice(0, 200),
     cover: String(item.cover || "").slice(0, 500),
     album_id: String(item.album_id || "").slice(0, 40),
+    playlist_id: String(item.playlist_id || "").slice(0, 40),
     source: String(item.source || "itunes").slice(0, 20),
   };
   const { error } = await supabase.from("shares").insert({ from_id: user.id, to_id, item: limpio });

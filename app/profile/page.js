@@ -54,7 +54,7 @@ export default function ProfilePage() {
   const [playlistItems, setPlaylistItems] = useState([]);
   const [downloadingItems, setDownloadingItems] = useState({});
   const toast = useToast();
-  const { queue, removeByKeys } = useDownloads();
+  const { queue, removeByKeys, enqueueAlbum } = useDownloads();
 
   const [playingKey, setPlayingKey] = useState(null);
   const [playingTitle, setPlayingTitle] = useState("");
@@ -75,6 +75,7 @@ export default function ProfilePage() {
   const audioRef = useRef(null);          // <audio> para archivos guardados (offline)
   const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
   const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
+  const colaRef = useRef([]);             // cola "reproducir a continuación"
   const usingAudioRef = useRef(false);    // ¿estamos usando el archivo o YouTube?
   const seekingRef = useRef(false);       // espejo de `seeking` para los eventos
   const [isOnline, setIsOnline] = useState(true);
@@ -323,7 +324,7 @@ export default function ProfilePage() {
     try {
       const r = await fetch("/api/shares", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         to_id: amigo.id,
-        item: { type: "track", name: it.title || it.name, artist: it.artist || "", cover: it.cover_url || it.cover || "", album_id: it.album_id || "", source: "itunes" },
+        item: { type: it.type || "track", name: it.title || it.name, artist: it.artist || "", cover: it.cover_url || it.cover || "", album_id: it.album_id || "", playlist_id: it.playlist_id || "", source: "itunes" },
       }) });
       const d = await r.json();
       if (d.ok) toast.success("Enviada a @" + amigo.username, 3000);
@@ -331,6 +332,48 @@ export default function ProfilePage() {
     } catch { toast.error("Error de red", 3000); }
     setCompartirItem(null);
   }
+  function encolarSiguiente(item) {
+    colaRef.current = [...colaRef.current.filter(k => k !== item.key), item.key];
+    toast.success("Sonará a continuación: " + item.title, 2500);
+  }
+
+  /* Descargar TODA la playlist para el modo sin internet */
+  function descargarPlaylist() {
+    const tracks = (playlistItems || [])
+      .filter(i => i.item_type === "track")
+      .map(i => ({
+        key: String(i.item_id),
+        name: i.name,
+        artist: i.artist || "",
+        cover: i.cover_url || "",
+        duration_ms: i.extra_data?.duration_ms || null,
+      }));
+    if (!tracks.length) { toast.warning("Esta playlist no tiene canciones", 3000); return; }
+    enqueueAlbum(selectedPlaylist?.name || "Playlist", tracks);
+    toast.success(`Descargando ${tracks.length} canciones de "${selectedPlaylist?.name}"`, 4000);
+    setTab("downloads");
+  }
+
+  /* Ver una playlist que te compartieron (es pública) */
+  const [plCompartida, setPlCompartida] = useState(null);   // {nombre, items, cargando}
+  async function verPlaylistCompartida(share) {
+    setPlCompartida({ nombre: share.item?.name || "Playlist", items: [], cargando: true });
+    try {
+      const r = await fetch("/api/playlists?id=" + encodeURIComponent(share.item?.playlist_id || ""));
+      const d = await r.json();
+      setPlCompartida({ nombre: d.playlist?.name || share.item?.name || "Playlist", items: d.items || [], cargando: false });
+    } catch { setPlCompartida(p => p ? { ...p, cargando: false } : null); }
+  }
+  function descargarPlaylistCompartida() {
+    const tracks = (plCompartida?.items || [])
+      .filter(i => i.item_type === "track")
+      .map(i => ({ key: String(i.item_id), name: i.name, artist: i.artist || "", cover: i.cover_url || "", duration_ms: i.extra_data?.duration_ms || null }));
+    if (!tracks.length) { toast.warning("No tiene canciones", 3000); return; }
+    enqueueAlbum(plCompartida?.nombre || "Playlist", tracks);
+    toast.success(`Descargando ${tracks.length} canciones`, 4000);
+    setPlCompartida(null); setShowFriends(false); setTab("downloads");
+  }
+
   async function borrarShare(id) {
     try { await fetch("/api/shares", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch {}
     setBuzon(prev => prev.filter(s => s.id !== id));
@@ -691,6 +734,13 @@ export default function ProfilePage() {
   function startTrack(item) {
     // Memoria del aleatorio: registrar lo que va sonando
     try { historialRef.current = [...historialRef.current.filter(k => k !== item.key), item.key].slice(-25); } catch {}
+    // Estadísticas: contar la reproducción
+    try {
+      const st = JSON.parse(localStorage.getItem("aura_stats") || "{}");
+      const k = String(item.key);
+      st[k] = { n: (st[k]?.n || 0) + 1, name: item.title || "", artist: item.artist || "", cover: item.cover_url || "", last: Date.now() };
+      localStorage.setItem("aura_stats", JSON.stringify(st));
+    } catch {}
     // Si la canción tiene archivo guardado, preferimos ese (funciona offline)
     if (item.audio_url) { startAudioFile(item); return; }
     usingAudioRef.current = false;
@@ -725,6 +775,15 @@ export default function ProfilePage() {
     const actual = liveRef.current.playingKey;
     const i = lista.findIndex(x => x.key === actual);
 
+    /* Cola manual primero: lo que el usuario marcó "a continuación"
+       le gana al aleatorio y al orden normal. */
+    if (dir === 1) {
+      while (colaRef.current.length) {
+        const k = colaRef.current.shift();
+        const enCola = lista.find(x => x.key === k);
+        if (enCola) return enCola;
+      }
+    }
     if (liveRef.current.shuffle) {
       if (lista.length === 1) return lista[0];
       /* Aleatorio CON MEMORIA: una canción no se repite hasta que hayan
@@ -1227,10 +1286,17 @@ export default function ProfilePage() {
                 {buzon.map(s=>(
                   <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border2)"}}>
                     <CoverImg url={s.item?.cover} size={38} r={6}/>
+                    {s.item?.type === "playlist" ? (
+                      <div onClick={()=>verPlaylistCompartida(s)} style={{flex:1,minWidth:0,cursor:"pointer"}}>
+                        <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📃 {s.item?.name}</div>
+                        <div style={{color:"var(--text4)",fontSize:"0.7em"}}>playlist · de @{s.de?.username} · tocá para verla</div>
+                      </div>
+                    ) : (
                     <a href={s.item?.album_id?`/spotify?album=${s.item.album_id}&source=${s.item.source||"itunes"}`:`/spotify?buscar=${encodeURIComponent((s.item?.artist||"")+" "+(s.item?.name||""))}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
                       <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.item?.name}</div>
                       <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{s.item?.artist} · de @{s.de?.username}</div>
                     </a>
+                    )}
                     <button onClick={()=>borrarShare(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:5}} title="Quitar">
                       <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="var(--text4)"/>
                     </button>
@@ -1300,6 +1366,34 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* ── Modal: playlist que te compartieron ── */}
+      {plCompartida && (
+        <div onClick={()=>setPlCompartida(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:320,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:420,maxHeight:"75vh",overflowY:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{fontWeight:800,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📃 {plCompartida.nombre}</div>
+              <button onClick={()=>setPlCompartida(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
+            </div>
+            {plCompartida.cargando ? <p style={{color:"var(--text4)",textAlign:"center",padding:20}}>Cargando...</p> : (
+              <>
+                <button onClick={descargarPlaylistCompartida} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"none",background:"#22c55e",color:"#fff",fontSize:"0.85em",fontWeight:800,cursor:"pointer",marginBottom:12}}>
+                  <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={15} stroke="#fff"/> Descargar todas ({plCompartida.items.filter(i=>i.item_type==="track").length})
+                </button>
+                {plCompartida.items.length===0 ? <p style={{color:"var(--text4)",fontSize:"0.85em",textAlign:"center",padding:14}}>Playlist vacía</p> : plCompartida.items.map((it,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 2px",borderBottom:"1px solid var(--border2)"}}>
+                    <CoverImg url={it.cover_url} size={36} r={6}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{it.artist}</div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
         <button onClick={()=>{setTab("downloads");setSelectedPlaylist(null);}} style={{...SM,background:tab==="downloads"?"#22c55e":"var(--panel)",color:tab==="downloads"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
@@ -1311,7 +1405,80 @@ export default function ProfilePage() {
         <button onClick={()=>{setTab("playlists");setSelectedPlaylist(null);}} style={{...SM,background:tab==="playlists"?"var(--accent)":"var(--panel)",color:tab==="playlists"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
           <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={14}/> Playlists ({playlists.length})
         </button>
+        <button onClick={()=>{setTab("stats");setSelectedPlaylist(null);}} style={{...SM,background:tab==="stats"?"var(--accent)":"var(--panel)",color:tab==="stats"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
+          <Ico d={<><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>} size={14}/> Stats
+        </button>
       </div>
+
+      {/* ═══ TAB: Estadísticas ═══ */}
+      {tab==="stats" && (() => {
+        let st = {};
+        try { st = JSON.parse(localStorage.getItem("aura_stats") || "{}"); } catch {}
+        const arr = Object.values(st).filter(v => v && v.n);
+        const total = arr.reduce((a, b) => a + b.n, 0);
+        const topCanciones = [...arr].sort((a, b) => b.n - a.n).slice(0, 10);
+        const porArtista = new Map();
+        for (const c of arr) { const a = c.artist || "¿?"; porArtista.set(a, (porArtista.get(a) || 0) + c.n); }
+        const topArtistas = [...porArtista.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const maxN = topCanciones[0]?.n || 1;
+        const maxA = topArtistas[0]?.[1] || 1;
+        return (
+          <div>
+            {total === 0 ? (
+              <div style={{textAlign:"center",padding:40,color:"var(--text5)"}}>
+                <p style={{fontSize:"1.05em",color:"var(--text3)"}}>Todavía no hay datos 📊</p>
+                <p style={{fontSize:"0.82em",marginTop:8}}>Reproducí canciones desde Descargadas y acá aparecerán tus más escuchadas.</p>
+              </div>
+            ) : (
+              <>
+                {/* Resumen */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:18}}>
+                  {[["Reproducciones",total],["Canciones",arr.length],["Artista top",topArtistas[0]?.[0]||"—"]].map(([l,v])=>(
+                    <div key={l} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
+                      <div style={{color:"var(--accent)",fontWeight:800,fontSize:typeof v==="number"?"1.5em":"0.9em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.68em",fontWeight:700,marginTop:3}}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Top canciones */}
+                <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,marginBottom:10}}>🔥 TUS MÁS ESCUCHADAS</div>
+                <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden",marginBottom:18}}>
+                  {topCanciones.map((c, i) => (
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--border2)"}}>
+                      <span style={{color:i<3?"var(--accent)":"var(--text5)",fontWeight:800,fontSize:"0.9em",width:22,textAlign:"center",flexShrink:0}}>{i+1}</span>
+                      <CoverImg url={c.cover} size={38} r={6}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+                        <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{c.artist}</div>
+                        <div style={{marginTop:4,height:4,borderRadius:2,background:"var(--border2)",overflow:"hidden"}}>
+                          <div style={{height:"100%",width:(c.n/maxN*100)+"%",borderRadius:2,background:"linear-gradient(90deg,var(--accent),#22c55e)"}}/>
+                        </div>
+                      </div>
+                      <span style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,flexShrink:0}}>{c.n}×</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Top artistas */}
+                <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,marginBottom:10}}>🎤 TUS ARTISTAS</div>
+                <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+                  {topArtistas.map(([a, n], i) => (
+                    <div key={a} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid var(--border2)"}}>
+                      <span style={{color:i===0?"var(--accent)":"var(--text5)",fontWeight:800,width:22,textAlign:"center",flexShrink:0}}>{i+1}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{color:"var(--text)",fontSize:"0.88em",fontWeight:700}}>{a}</div>
+                        <div style={{marginTop:4,height:4,borderRadius:2,background:"var(--border2)",overflow:"hidden"}}>
+                          <div style={{height:"100%",width:(n/maxA*100)+"%",borderRadius:2,background:"linear-gradient(90deg,#22c55e,var(--accent))"}}/>
+                        </div>
+                      </div>
+                      <span style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,flexShrink:0}}>{n}×</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       {/* TAB: Descargadas */}
       {tab==="downloads" && (
@@ -1449,6 +1616,7 @@ export default function ProfilePage() {
                         : null}
                     {/* Sin internet ocultamos re-descargar y borrar: no se
                         pueden completar offline y sólo confunden. */}
+                    {iconBtn(e=>{e.stopPropagation();encolarSiguiente(item);}, <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={14}/>, "#555", "none", "Reproducir a continuación")}
                     {isOnline && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
                     {isOnline && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
                     {isOnline && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
@@ -1568,7 +1736,15 @@ export default function ProfilePage() {
           </button>
           <div style={{background:"var(--panel)",borderRadius:10,padding:16,marginBottom:15,border:"1px solid var(--border)",display:"flex",gap:12,alignItems:"center"}}>
             <CoverImg url={selectedPlaylist.cover_url} size={56} r={8}/>
-            <div><h2 style={{fontSize:"1.2em",marginBottom:2}}>{selectedPlaylist.name}</h2><p style={{color:"var(--text3)",fontSize:"0.8em"}}>{selectedPlaylist.description||"Sin descripcion"} · {playlistItems.length} items</p></div>
+            <div style={{flex:1,minWidth:0}}><h2 style={{fontSize:"1.2em",marginBottom:2}}>{selectedPlaylist.name}</h2><p style={{color:"var(--text3)",fontSize:"0.8em"}}>{selectedPlaylist.description||"Sin descripcion"} · {playlistItems.length} items</p></div>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:15,flexWrap:"wrap"}}>
+            <button onClick={descargarPlaylist} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"none",background:"#22c55e",color:"#fff",fontSize:"0.85em",fontWeight:800,cursor:"pointer"}}>
+              <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={15} stroke="#fff"/> Descargar todas ({playlistItems.filter(i=>i.item_type==="track").length})
+            </button>
+            <button onClick={()=>setCompartirItem({type:"playlist",title:selectedPlaylist.name,name:selectedPlaylist.name,artist:"",cover_url:selectedPlaylist.cover_url||"",playlist_id:selectedPlaylist.id})} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.85em",fontWeight:700,cursor:"pointer"}}>
+              <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14} stroke="var(--accent)"/> Enviar a un amigo
+            </button>
           </div>
           {playlistItems.length===0 ? <p style={{textAlign:"center",color:"var(--text5)",padding:20}}>Playlist vacia</p> : (
             <div style={{background:"var(--panel)",borderRadius:10,border:"1px solid var(--border)",overflow:"hidden"}}>
