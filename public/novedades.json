@@ -1,13 +1,13 @@
 {
-  "version": "18 de agosto, 2026 · v6",
+  "version": "18 de agosto, 2026 · v7",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🔍 Autocompletado en vivo: escribí 'Ari' y aparece Ariana Grande al instante",
+    "📈 Feed vivo: Éxitos del momento, Top Global y lanzamientos REALES que cambian a diario",
+    "🎧 Más variedad: catálogo doble iTunes + Deezer sin canciones dobles",
+    "🛠 Álbumes sin canciones: ahora se rescatan automáticamente del otro catálogo",
     "🔒 Reanudar desde la pantalla bloqueada ya funciona siempre (la app se mantiene despierta mientras está en pausa)",
     "📴 Modo offline automático: si la red falla, la app entra sola en 4 segundos con tu música descargada",
-    "🎯 Al abrir un álbum desde una canción, la canción queda resaltada",
-    "🔍 El buscador ahora encuentra canciones sueltas (con preview)",
-    "⏭ Vista de cola: mirá qué va a sonar (tu cola + el orden aleatorio real) y deslizá ← para quitar",
-    "⬇️ Descargá playlists COMPLETAS con un botón (modo avión total)",
-    "📊 Estadísticas: tus más escuchadas y tus artistas top (pestaña Stats)"
+    "🎯 Al abrir un álbum desde una canción, la canción queda resaltada"
   ]
 }

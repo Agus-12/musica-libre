@@ -18,6 +18,32 @@ export default function SpotifyPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [recentSearches, setRecentSearches] = useState([]);
+  /* Autocompletado mientras tecleás (estilo Spotify) */
+  const [sugs, setSugs] = useState([]);
+  const [showSugs, setShowSugs] = useState(false);
+  const sugsTimerRef = useRef(null);
+  function alTeclear(texto) {
+    setQuery(texto);
+    if (sugsTimerRef.current) clearTimeout(sugsTimerRef.current);
+    if (!texto || texto.trim().length < 2) { setSugs([]); setShowSugs(false); return; }
+    sugsTimerRef.current = setTimeout(async () => {
+      try {
+        const r = await fetch("/api/music?action=sugerir&q=" + encodeURIComponent(texto.trim()));
+        const d = await r.json();
+        setSugs(d.sugerencias || []);
+        setShowSugs((d.sugerencias || []).length > 0);
+      } catch {}
+    }, 280);
+  }
+  function elegirSug(s) {
+    setShowSugs(false); setSugs([]);
+    if (s.tipo === "cancion" && s.album_id) {
+      setQuery(s.texto);
+      loadAlbum(s.album_id, s.source || "deezer", s.texto);
+    } else {
+      search(s.texto);
+    }
+  }
   useEffect(() => {
     try { setRecentSearches(JSON.parse(localStorage.getItem("aura_busquedas") || "[]")); } catch {}
   }, []);
@@ -315,22 +341,18 @@ export default function SpotifyPage() {
   async function loadCharts() {
     setChartsLoading(true);
     try {
-      // Get top charts from iTunes + new releases
-      const [topRes, newRes, latRes] = await Promise.all([
-        fetch("/api/music?action=search&q=top+hits+2026&source=itunes&entity=album&limit=10").catch(() => null),
-        fetch("/api/music?action=search&q=new+release+2026&source=itunes&entity=album&limit=10").catch(() => null),
-        fetch("/api/music?action=search&q=latin+music+hits&source=itunes&entity=album&limit=10").catch(() => null),
-      ]);
-      const topData = topRes ? await topRes.json().catch(() => ({})) : {};
-      const newData = newRes ? await newRes.json().catch(() => ({})) : {};
-      const latData = latRes ? await latRes.json().catch(() => ({})) : {};
+      /* Feed VIVO: charts y lanzamientos reales (Deezer los actualiza
+         a diario) — antes eran 3 búsquedas fijas que nunca cambiaban. */
+      const res = await fetch("/api/music?action=feed");
+      const d = await res.json();
       setCharts({
-        top: topData.albums || [],
-        newReleases: newData.albums || [],
-        latin: latData.albums || [],
+        top: d.top || [],
+        newReleases: d.nuevos || [],
+        latin: d.latin || [],
+        momento: d.momento || [],
       });
     } catch {
-      setCharts({ top: [], newReleases: [], latin: [] });
+      setCharts({ top: [], newReleases: [], latin: [], momento: [] });
     }
     setChartsLoading(false);
   }
@@ -641,7 +663,7 @@ export default function SpotifyPage() {
           {recs && recs.length > 0 ? (
             <div style={{ marginBottom: 30 }}>
               <SectionHeader icon={<Ico d={<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />} size={18} stroke="#ec4899" fill="#ec4899" />} title="Para ti" subtitle={recsDe.length ? "Porque escuchás estilos como " + recsDe.slice(0, 3).join(", ") : "Artistas de tu estilo"} />
-              <HorizontalAlbumRow albums={recs} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
+              <HorizontalAlbumRow albums={recs} onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
             </div>
           ) : favorites.length > 0 && (
             <div style={{ marginBottom: 30 }}>
@@ -655,22 +677,39 @@ export default function SpotifyPage() {
             <div style={{ textAlign: "center", padding: 30, color: "var(--accent)" }}>Cargando recomendaciones...</div>
           ) : charts && (
             <>
+              {charts.momento?.length > 0 && (
+                <div style={{ marginBottom: 30 }}>
+                  <SectionHeader icon={<Ico d={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>} size={18} stroke="#22c55e" />} title="Éxitos del momento" subtitle="El top mundial de hoy" />
+                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+                    {charts.momento.map((s, i) => (
+                      <div key={s.id} onClick={() => loadAlbum(s.album_id, "deezer", s.name)} style={{ flex: "0 0 120px", cursor: "pointer" }}>
+                        <div style={{ position: "relative" }}>
+                          {s.cover ? <img src={s.cover} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", borderRadius: 10, display: "block" }} loading="lazy" /> : <div style={{ width: "100%", aspectRatio: 1, borderRadius: 10, background: "var(--border)" }} />}
+                          <span style={{ position: "absolute", top: 6, left: 6, background: "rgba(8,10,14,0.8)", color: "#22c55e", fontWeight: 800, fontSize: "0.68em", padding: "2px 7px", borderRadius: 6 }}>#{i + 1}</span>
+                        </div>
+                        <div style={{ color: "var(--text2)", fontSize: "0.78em", fontWeight: 600, marginTop: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+                        <div style={{ color: "var(--text4)", fontSize: "0.68em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {charts.latin?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
                   <SectionHeader icon={<Ico d={<path d="M12 2s4 4 4 9a4 4 0 0 1-8 0c0-1 .5-2 1-3-2 1-4 3-4 6a6 6 0 0 0 12 0c0-5-5-9-5-9z" />} size={18} stroke="#f97316" fill="#f97316" />} title="Latin Hits" subtitle="Lo más escuchado" />
-                  <HorizontalAlbumRow albums={charts.latin.slice(0, 8)} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
+                  <HorizontalAlbumRow albums={charts.latin.slice(0, 8)} onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
               {charts.newReleases?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
                   <SectionHeader icon={<Ico d={<><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z" /><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z" /></>} size={18} stroke="#fbbf24" fill="#fbbf24" />} title="Nuevos lanzamientos" subtitle="Lo más reciente" />
-                  <HorizontalAlbumRow albums={charts.newReleases.slice(0, 8)} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
+                  <HorizontalAlbumRow albums={charts.newReleases.slice(0, 8)} onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
               {charts.top?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
                   <SectionHeader icon={<Ico d={<><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20z" /></>} size={18} stroke="#38bdf8" />} title="Top Global" subtitle="Los más populares" />
-                  <HorizontalAlbumRow albums={charts.top.slice(0, 8)} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
+                  <HorizontalAlbumRow albums={charts.top.slice(0, 8)} onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
                 </div>
               )}
             </>
@@ -683,10 +722,29 @@ export default function SpotifyPage() {
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-              <input autoFocus value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Buscar álbumes, artistas... (ej: Bad Bunny, Rosalía)" style={{ ...IS, paddingRight: 38 }} />
+              <input autoFocus value={query} onChange={e => alTeclear(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { setShowSugs(false); search(); } }} onBlur={() => setTimeout(() => setShowSugs(false), 250)} placeholder="Buscar álbumes, artistas... (ej: Bad Bunny, Rosalía)" style={{ ...IS, paddingRight: 38 }} />
+              {/* Dropdown de sugerencias en vivo */}
+              {showSugs && sugs.length > 0 && (
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", zIndex: 50, boxShadow: "0 14px 40px rgba(0,0,0,0.45)" }}>
+                  {sugs.map((s, i) => (
+                    <div key={i} onMouseDown={(e) => { e.preventDefault(); elegirSug(s); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
+                      {s.cover
+                        ? <img src={s.cover} style={{ width: 34, height: 34, borderRadius: s.tipo === "artista" ? "50%" : 6, objectFit: "cover", flexShrink: 0 }} />
+                        : <div style={{ width: 34, height: 34, borderRadius: s.tipo === "artista" ? "50%" : 6, background: "var(--border)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Ico d={s.tipo === "artista" ? <><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></> : <><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={15} stroke="var(--text4)" />
+                          </div>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: "var(--text)", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.texto}</div>
+                        <div style={{ color: "var(--text4)", fontSize: "0.7em" }}>{s.tipo === "artista" ? "Artista" : "Canción" + (s.sub ? " · " + s.sub : "")}</div>
+                      </div>
+                      <Ico d={<polyline points="9 18 15 12 9 6"/>} size={13} stroke="var(--text5)" />
+                    </div>
+                  ))}
+                </div>
+              )}
               {/* X para limpiar al instante */}
               {query && (
-                <button onClick={() => { setQuery(""); setResults(null); setError(""); }} aria-label="Limpiar" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", border: "none", background: "var(--border)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.85em", fontWeight: 700 }}>✕</button>
+                <button onClick={() => { setQuery(""); setResults(null); setError(""); setSugs([]); setShowSugs(false); }} aria-label="Limpiar" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", border: "none", background: "var(--border)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.85em", fontWeight: 700 }}>✕</button>
               )}
             </div>
             <button onClick={search} disabled={loading} style={BS}>{loading ? "..." : "Buscar"}</button>
@@ -875,7 +933,7 @@ export default function SpotifyPage() {
           {artist.albums?.length > 0 && (
             <div>
               <SectionHeader icon="" title={`Álbumes (${artist.nb_album || artist.albums.length})`} subtitle="" />
-              <AlbumGrid albums={artist.albums} source="itunes" onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
+              <AlbumGrid albums={artist.albums} source="itunes" onSelect={(id, s2) => loadAlbum(id, s2 || "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
             </div>
           )}
         </div>

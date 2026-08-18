@@ -60,6 +60,64 @@ async function manejarGET(req) {
   const limit = parseInt(p.get("limit") || "20");
 
   try {
+    /* ── FEED VIVO: charts y lanzamientos REALES (Deezer los
+       actualiza a diario) + Latin Hits de iTunes ── */
+    if (action === "feed") {
+      const [chartAlb, releases, chartTracks, latin] = await Promise.all([
+        fetchJSON(DEEZER_BASE + "/chart/0/albums?limit=12").catch(() => ({ data: [] })),
+        fetchJSON(DEEZER_BASE + "/editorial/0/releases?limit=12").catch(() => ({ data: [] })),
+        fetchJSON(DEEZER_BASE + "/chart/0/tracks?limit=14").catch(() => ({ data: [] })),
+        fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent("latin hits") + "&entity=album&limit=10").catch(() => ({ results: [] })),
+      ]);
+      const resp = NextResponse.json({
+        top: (chartAlb.data || []).map(normalizeDeezerAlbum),
+        nuevos: (releases.data || []).map(normalizeDeezerAlbum),
+        momento: (chartTracks.data || []).filter(t => t.id && t.album).map(t => ({
+          id: String(t.id),
+          name: t.title || "",
+          artist: t.artist?.name || "",
+          album_id: String(t.album?.id || ""),
+          cover: t.album?.cover_medium || "",
+          preview_url: t.preview || "",
+          duration_ms: (t.duration || 0) * 1000,
+          source: "deezer",
+        })),
+        latin: (latin.results || []).map(normalizeITunesAlbum),
+      });
+      resp.headers.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=86400");
+      return resp;
+    }
+
+    /* ── SUGERENCIAS: autocompletado estilo Spotify mientras tecleás ── */
+    if (action === "sugerir") {
+      if (!query || query.length < 2) return NextResponse.json({ sugerencias: [] });
+      const [art, trk] = await Promise.all([
+        fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent(query) + "&limit=3").catch(() => ({ data: [] })),
+        fetchJSON(DEEZER_BASE + "/search?q=" + encodeURIComponent(query) + "&limit=6").catch(() => ({ data: [] })),
+      ]);
+      const sugerencias = [];
+      for (const a of (art.data || [])) {
+        sugerencias.push({ tipo: "artista", texto: a.name || "", cover: a.picture_medium || "" });
+      }
+      const vistas = new Set();
+      for (const t of (trk.data || [])) {
+        const k = claveDedupe(t.artist?.name, t.title);
+        if (vistas.has(k)) continue;
+        vistas.add(k);
+        sugerencias.push({
+          tipo: "cancion",
+          texto: t.title || "",
+          sub: t.artist?.name || "",
+          album_id: String(t.album?.id || ""),
+          cover: t.album?.cover_small || t.album?.cover_medium || "",
+          source: "deezer",
+        });
+      }
+      const resp = NextResponse.json({ sugerencias: sugerencias.slice(0, 8) });
+      resp.headers.set("Cache-Control", "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800");
+      return resp;
+    }
+
     /* ── RECOMENDACIONES: el "Para ti" vivo ─────────────────────
        Recibe los artistas que el usuario más escucha (favoritos +
        descargas) y arma recomendaciones REALES:
@@ -351,9 +409,27 @@ async function manejarGET(req) {
             source: "itunes",
             type: "album",
           });
-          /* Si aún así quedó sin pistas, NO se cachea: era esto lo que
-             dejaba álbumes "vacíos" pegados horas en el edge y el SW. */
-          if (songs.length === 0) resp.headers.set("Cache-Control", "no-store");
+          /* RESCATE: si iTunes no soltó las pistas, buscamos el MISMO
+             álbum en Deezer y servimos su versión completa. */
+          if (songs.length === 0) {
+            try {
+              const q = ((main.artistName || "") + " " + (main.collectionName || "")).trim();
+              const b = await fetchJSON(DEEZER_BASE + "/search/album?q=" + encodeURIComponent(q) + "&limit=3");
+              const kIt = claveDedupe(main.artistName, main.collectionName);
+              const cand = (b.data || []).find(x => claveDedupe(x.artist?.name, x.title) === kIt) || (b.data || [])[0];
+              if (cand) {
+                const [det, trs] = await Promise.all([
+                  fetchJSON(DEEZER_BASE + "/album/" + cand.id),
+                  fetchJSON(DEEZER_BASE + "/album/" + cand.id + "/tracks?limit=100").catch(() => ({ data: [] })),
+                ]);
+                if ((trs.data || []).length) {
+                  return NextResponse.json(normalizeDeezerAlbumDetail(det, trs.data || []));
+                }
+              }
+            } catch {}
+            // Sin rescate posible: no cachear el vacío
+            resp.headers.set("Cache-Control", "no-store");
+          }
           return resp;
         }
         const respVacia = NextResponse.json({ results: data.results || [] });
