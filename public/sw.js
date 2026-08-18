@@ -23,12 +23,24 @@ const STATIC_ASSETS = [
 // Install: cache static assets pero NO saltamos waiting —
 // esperamos a que el usuario toque "Actualizar" en el banner de la app
 // para que pueda decidir cuándo aplicar la nueva versión.
+/* Refresca las páginas base UNA a UNA y sin morir si alguna falla.
+   Antes: addAll fallaba completo con una sola página caída, y peor,
+   tras actualizar podía quedar cacheada una página VIEJA (ej: /profile
+   con el menú anterior) que el modo sin datos servía eternamente. */
+async function cachearPaginasFrescas() {
+  try {
+    const cache = await caches.open(STATIC_CACHE);
+    await Promise.allSettled(STATIC_ASSETS.map(async (u) => {
+      try {
+        const r = await fetch(u, { cache: 'no-store' });
+        if (r && r.ok) await cache.put(u, r);
+      } catch {}
+    }));
+  } catch {}
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
+  event.waitUntil(cachearPaginasFrescas());
 });
 
 // Activate: clean old caches y tomar control de los clientes cuando
@@ -41,6 +53,7 @@ self.addEventListener('activate', (event) => {
             .map((key) => caches.delete(key))
       );
     }).then(() => self.clients.claim())
+      .then(() => cachearPaginasFrescas())
   );
 });
 
