@@ -163,6 +163,9 @@ const enProceso = new Map();
    motivo 10 minutos y lo devolvemos directo. */
 const fallosRecientes = new Map();
 
+// Cache del chequeo de yt-dlp para que /salud responda al instante.
+let ytdlpCache = { ts: 0, ok: false, version: null };
+
 async function obtenerAudio({ videoId, query }) {
   const clave = videoId || query;
   const id = idSeguro(clave);
@@ -368,8 +371,18 @@ const servidor = http.createServer(async (req, res) => {
 
   // ── /salud: para saber si el servidor está vivo ──
   if (ruta === "/salud") {
-    let ytdlp = false, version = null;
-    try { version = await correr("yt-dlp", ["--version"], 5000); ytdlp = true; } catch {}
+    /* La versión de yt-dlp se cachea 10 min: ejecutar el binario en cada
+       consulta tarda segundos cuando la Mac está ocupada descargando, y
+       eso hacía que Vercel creyera que el servidor estaba caído. */
+    if (Date.now() - ytdlpCache.ts > 10 * 60 * 1000) {
+      try {
+        const v = await correr("yt-dlp", ["--version"], 8000);
+        ytdlpCache = { ts: Date.now(), ok: true, version: v };
+      } catch {
+        ytdlpCache = { ts: Date.now(), ok: false, version: null };
+      }
+    }
+    const ytdlp = ytdlpCache.ok, version = ytdlpCache.version;
     let guardadas = 0, mb = 0;
     try {
       for (const f of fs.readdirSync(CARPETA)) {

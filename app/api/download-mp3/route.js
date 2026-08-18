@@ -86,7 +86,7 @@ let ultimoMotivoCasa = null;
 async function servidorCaseroVivo(base) {
   try {
     const resp = await fetch(`${base}/salud`, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(8000),
       headers: { Accept: "application/json" },
       cache: "no-store",
     });
@@ -145,9 +145,17 @@ async function pedirAlServidorCasero({ videoId, query }) {
       return { pendiente: true };
     }
     if (!resp.ok) {
+      /* La Mac manda el motivo real del fallo en el JSON (p. ej. el
+         error de yt-dlp). Lo propagamos para poder diagnosticar desde
+         la app sin tener que mirar el log de la Mac. */
+      let detalle = "";
+      try {
+        const j = await resp.json();
+        detalle = String(j.detalle || j.error || "").slice(0, 160);
+      } catch {}
       ultimoMotivoCasa = resp.status === 401
         ? "401: el token no coincide con el de la Mac"
-        : `el servidor respondió ${resp.status}`;
+        : `el servidor respondió ${resp.status}` + (detalle ? ` — ${detalle}` : "");
       return null;
     }
     const data = await resp.json();
