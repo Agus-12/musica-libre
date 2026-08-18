@@ -220,7 +220,13 @@ async function obtenerAudio({ videoId, query }) {
         try {
           log(`bajando (${est.nombre}) ${vid}:`, clave);
           await correr("yt-dlp", [
-            "-f", "bestaudio[ext=m4a]/bestaudio",
+            // Preferencia: m4a de un solo stream (NO DASH, que baja audio y video
+            // por separado y es 2-3x mas lento). Si no hay m4a, aceptamos webm
+            // o cualquier bestaudio. Filtro "abr<=160" acelerara el download
+            // manteniendo calidad audible (128-160 kbps es indistinguible para
+            // musica en la mayoria de los oidos y baja 3-5x mas rapido).
+            "-f", "bestaudio[ext=m4a][protocol!=dash_list]*/bestaudio[ext=m4a]/bestaudio",
+            "-S", "abr,ext",
             "-o", destino,
             "--no-playlist",
             "--no-warnings",

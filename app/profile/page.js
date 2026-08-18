@@ -483,6 +483,10 @@ export default function ProfilePage() {
     // Usamos /api/proxy para servir la portada desde nuestro dominio: así el
     // sistema la puede leer y además queda cacheada para offline.
     const as = item.cover_url ? "/api/proxy?url=" + encodeURIComponent(item.cover_url) : "/icon-512.png";
+    // Pre-cargar la portada para que este en memoria del navegador cuando se
+    // arme la metadata. Asi el lock screen no muestra el poster del video
+    // de YouTube "por un instante" mientras se carga el real.
+    try { await fetch(as, { mode: 'no-cors' }); } catch {}
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: item.title || "", artist: item.artist || "", album: "AURA",
