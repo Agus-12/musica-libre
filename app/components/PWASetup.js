@@ -133,8 +133,55 @@ export default function PWASetup() {
     }
   }
 
+  /* ── Novedades: cuando hay versión nueva, mostramos QUÉ cambió y
+     avisamos con una notificación (si el usuario las tiene activas).
+     Un toque en "Actualizar ahora" y listo: nada de reinstalar. ── */
+  const [novedades, setNovedades] = useState(null);
+  const [showNovedades, setShowNovedades] = useState(false);
+  useEffect(() => {
+    if (!hayUpdate) return;
+    fetch("/novedades.json?v=" + Date.now())
+      .then(r => r.json())
+      .then(d => { setNovedades(d); setShowNovedades(true); })
+      .catch(() => {});
+    try {
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("AURA se actualizó 🎉", {
+          body: "Hay una versión nueva lista. Abrí la app y tocá Actualizar.",
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+        });
+      }
+    } catch {}
+  }, [hayUpdate]);
+
   return (
     <>
+      {/* ── Modal de NOVEDADES: qué trae la versión nueva ── */}
+      {showNovedades && hayUpdate && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div style={{background:"var(--panel, #1a1a2e)",border:"1px solid var(--border, #2a2a3e)",borderRadius:18,padding:24,width:"100%",maxWidth:420,maxHeight:"80vh",overflowY:"auto",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
+            <div style={{fontSize:"1.15em",fontWeight:800,color:"var(--text, #e0e0e0)",marginBottom:4}}>{novedades?.titulo || "🎉 Versión nueva de AURA"}</div>
+            {novedades?.version && <div style={{color:"var(--text4, #666)",fontSize:"0.75em",marginBottom:14}}>{novedades.version}</div>}
+            <div style={{marginBottom:18}}>
+              {(novedades?.cambios || ["Mejoras y correcciones"]).map((c, i) => (
+                <div key={i} style={{display:"flex",gap:9,alignItems:"flex-start",padding:"6px 0",color:"var(--text2, #ccc)",fontSize:"0.88em",lineHeight:1.45}}>
+                  <span style={{color:"#22c55e",fontWeight:800,flexShrink:0}}>✓</span> {c}
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={handleUpdate} style={{flex:1,padding:"13px 16px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",fontWeight:800,fontSize:"0.95em",cursor:"pointer",boxShadow:"0 6px 20px rgba(34,197,94,0.35)"}}>
+                Actualizar ahora
+              </button>
+              <button onClick={()=>setShowNovedades(false)} style={{padding:"13px 16px",borderRadius:12,border:"1px solid var(--border, #2a2a3e)",background:"transparent",color:"var(--text3, #888)",fontWeight:700,fontSize:"0.9em",cursor:"pointer"}}>
+                Después
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Banner de actualización: aparece arriba cuando hay versión nueva.
             El SW espera nuestro OK para tomar el control, así el usuario
             decide cuándo actualizar. ── */}

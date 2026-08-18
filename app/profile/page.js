@@ -88,6 +88,55 @@ export default function ProfilePage() {
   const [search, setSearch] = useState("");
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState("off");   // off | all | one
+  /* ── Letras (lrclib): con resaltado sincronizado tipo karaoke ── */
+  const [showLetra, setShowLetra] = useState(false);
+  const [letra, setLetra] = useState(null);            // {lineas:[{t,texto}], plain, encontrada}
+  const [letraCargando, setLetraCargando] = useState(false);
+  const letraDeRef = useRef("");                        // para qué canción es la letra cargada
+  const lineaRefs = useRef([]);
+
+  function parseLRC(texto) {
+    const out = [];
+    for (const ln of (texto || "").split("\n")) {
+      const m = /\[(\d+):(\d+(?:\.\d+)?)\](.*)/.exec(ln);
+      if (m) {
+        const t = Number(m[1]) * 60 + Number(m[2]);
+        const txt = m[3].trim();
+        if (txt) out.push({ t, texto: txt });
+      }
+    }
+    return out.sort((a, b) => a.t - b.t);
+  }
+
+  async function abrirLetra() {
+    setShowLetra(true);
+    const clave = (playingArtist || "") + "|" + (playingTitle || "");
+    if (letraDeRef.current === clave && letra) return;   // ya la tenemos
+    setLetra(null); setLetraCargando(true);
+    try {
+      const p = new URLSearchParams({ artista: playingArtist || "", cancion: playingTitle || "" });
+      if (duration > 30) p.set("dur", String(Math.round(duration)));
+      const r = await fetch("/api/letras?" + p);
+      const d = await r.json();
+      letraDeRef.current = clave;
+      setLetra({
+        encontrada: Boolean(d.encontrada),
+        lineas: parseLRC(d.synced),
+        plain: d.plain || "",
+      });
+    } catch { setLetra({ encontrada: false, lineas: [], plain: "" }); }
+    setLetraCargando(false);
+  }
+
+  // Línea activa según el tiempo actual (para el resaltado karaoke)
+  const lineaActiva = (letra && letra.lineas.length)
+    ? letra.lineas.reduce((acc, l, i) => (currentTime >= l.t - 0.3 ? i : acc), -1)
+    : -1;
+  useEffect(() => {
+    if (!showLetra || lineaActiva < 0) return;
+    try { lineaRefs.current[lineaActiva]?.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
+  }, [lineaActiva, showLetra]);
+
   const [expanded, setExpanded] = useState(false);
 
   /* ── Personalización + Amigos ── */
@@ -1557,6 +1606,11 @@ export default function ProfilePage() {
                   <Ico d={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>} size={21} stroke={shuffle?"#22c55e":"#8a8a9a"} sw={2.1}/>
                 </button>
 
+                <button onClick={abrirLetra} title="Letra"
+                  style={{background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
+                  <Ico d={<><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>} size={21} stroke={showLetra?"#22c55e":"#8a8a9a"} sw={2.1}/>
+                </button>
+
                 <button onClick={()=>{const o=repeat==="off"?"all":repeat==="all"?"one":"off";setRepeat(o);toast.info(o==="off"?"Repetir desactivado":o==="all"?"Repetir todo":"Repetir esta canción",2000);}} title="Repetir"
                   style={{position:"relative",background:"none",border:"none",cursor:"pointer",padding:7,display:"flex"}}>
                   <Ico d={<><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></>} size={21} stroke={repeat!=="off"?"#22c55e":"#8a8a9a"} sw={2.1}/>
@@ -1569,6 +1623,41 @@ export default function ProfilePage() {
                 </button>
               </div>
             </div>
+
+            {/* ── Panel de LETRA (karaoke): se desliza sobre el player ── */}
+            {showLetra && (
+              <div onClick={e=>e.stopPropagation()} style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(10,10,20,0.97),rgba(10,10,20,0.99))",zIndex:5,display:"flex",flexDirection:"column",paddingTop:"env(safe-area-inset-top)"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",flexShrink:0}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{color:"#fff",fontWeight:800,fontSize:"1em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
+                    <div style={{color:"#8a8a9a",fontSize:"0.78em"}}>{playingArtist}</div>
+                  </div>
+                  <button onClick={()=>setShowLetra(false)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",color:"#fff",fontSize:"1em",flexShrink:0}}>✕</button>
+                </div>
+                <div style={{flex:1,overflowY:"auto",padding:"10px 24px calc(120px + env(safe-area-inset-bottom))"}}>
+                  {letraCargando && <p style={{color:"var(--accent)",textAlign:"center",padding:30}}>Buscando la letra...</p>}
+                  {!letraCargando && letra && !letra.encontrada && (
+                    <p style={{color:"#8a8a9a",textAlign:"center",padding:30,lineHeight:1.6}}>No encontramos la letra de esta canción 😔</p>
+                  )}
+                  {/* Sincronizada: karaoke con línea activa + tocar para saltar */}
+                  {!letraCargando && letra && letra.lineas.length > 0 && letra.lineas.map((l, i) => (
+                    <p key={i} ref={el=>{lineaRefs.current[i]=el;}} onClick={()=>seekTo(l.t)}
+                      style={{
+                        color: i===lineaActiva ? "#fff" : i<lineaActiva ? "#5a5a6e" : "#8a8a9a",
+                        fontSize: i===lineaActiva ? "1.35em" : "1.05em",
+                        fontWeight: i===lineaActiva ? 800 : 600,
+                        lineHeight: 1.45, margin: "14px 0", cursor: "pointer",
+                        transition: "color 0.25s, font-size 0.25s",
+                        textShadow: i===lineaActiva ? "0 2px 18px rgba(34,197,94,0.35)" : "none",
+                      }}>{l.texto}</p>
+                  ))}
+                  {/* Solo texto plano (sin tiempos) */}
+                  {!letraCargando && letra && letra.lineas.length === 0 && letra.plain && (
+                    <pre style={{color:"#c5c5d2",fontSize:"1.02em",lineHeight:1.8,whiteSpace:"pre-wrap",fontFamily:"inherit"}}>{letra.plain}</pre>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
