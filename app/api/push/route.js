@@ -55,7 +55,7 @@ export async function POST(req) {
       }
       // Marcamos ANTES de enviar (si dos lo piden a la vez, solo pasa uno)
       await admin.from("app_config").upsert({ clave: "ultima_version_avisada", valor: firmaNov, actualizado: new Date().toISOString() });
-      const resultado = await enviarPush(null, { titulo: "AURA se actualizó", cuerpo, url: "/spotify" });
+      const resultado = await enviarPush(null, { titulo: "AURA se actualizó 🎉", cuerpo, url: "/spotify" });
       return NextResponse.json({ ok: true, ...resultado });
     } catch (e) {
       return NextResponse.json({ ok: false, motivo: String(e.message || e).slice(0, 100) });
@@ -108,7 +108,7 @@ export async function GET(req) {
     if (nov.cambios && nov.cambios.length) cuerpo = nov.cambios[0] + " …y más. Abrí AURA para actualizar.";
   } catch {}
   const resultado = await enviarPush(null, {
-    titulo: "AURA se actualizó",
+    titulo: "AURA se actualizó 🎉",
     cuerpo,
     url: "/spotify",
   });
