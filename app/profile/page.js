@@ -214,6 +214,21 @@ export default function ProfilePage() {
     cargarBuzon();
   }, []);
 
+  /* Si una llamada da 401 (sesión caducada), renovamos la sesión con
+     /api/auth (usa el refresh token) y reintentamos UNA vez. Solo si
+     de verdad murió, avisamos que hay que volver a entrar. */
+  async function fetchConSesion(url, opts) {
+    let r = await fetch(url, opts);
+    if (r.status === 401) {
+      try { await fetch("/api/auth"); } catch {}
+      r = await fetch(url, opts);
+      if (r.status === 401) {
+        toast.warning("Tu sesión caducó: cerrá sesión (menú) y volvé a entrar", 5000);
+      }
+    }
+    return r;
+  }
+
   function sincronizarAjustes(cambios) {
     // Guarda tema/color/fuente en tu cuenta (te siguen a otros dispositivos)
     try {
@@ -223,7 +238,7 @@ export default function ProfilePage() {
         fuente: localStorage.getItem("aura_fuente") || "",
         ...cambios,
       };
-      fetch("/api/ajustes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actual) }).catch(() => {});
+      fetchConSesion("/api/ajustes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actual) }).catch(() => {});
     } catch {}
   }
   function aplicarTema(v) {
@@ -280,7 +295,7 @@ export default function ProfilePage() {
       if (permiso !== "granted") { toast.warning("Permiso de notificaciones denegado", 3500); return; }
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(VAPID_PUB) });
-      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+      const r = await fetchConSesion("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) });
       const d = await r.json();
       if (d.ok) { setPushOn(true); toast.success("Notificaciones activadas", 3500); }
       else toast.warning(d.error || "No se pudo", 4000);
@@ -293,7 +308,7 @@ export default function ProfilePage() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
-        try { await fetch("/api/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) }); } catch {}
+        try { await fetchConSesion("/api/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: sub.endpoint }) }); } catch {}
         await sub.unsubscribe();
       }
       setPushOn(false);
@@ -302,7 +317,7 @@ export default function ProfilePage() {
   }
   async function cargarAmigos() {
     try {
-      const r = await fetch("/api/friends");
+      const r = await fetchConSesion("/api/friends");
       const d = await r.json();
       if (d.amigos) { setAmigos(d.amigos); setAmigosError(""); }
       else if (d.error) setAmigosError(d.error);
@@ -313,7 +328,7 @@ export default function ProfilePage() {
     if (!texto.trim()) { setSugerencias([]); return; }
     buscaTimer.current = setTimeout(async () => {
       try {
-        const r = await fetch("/api/friends?buscar=" + encodeURIComponent(texto.trim()));
+        const r = await fetchConSesion("/api/friends?buscar=" + encodeURIComponent(texto.trim()));
         const d = await r.json();
         setSugerencias(d.usuarios || []);
       } catch {}
@@ -321,7 +336,7 @@ export default function ProfilePage() {
   }
   async function agregarAmigo(username) {
     try {
-      const r = await fetch("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }) });
+      const r = await fetchConSesion("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }) });
       const d = await r.json();
       if (d.ok) { toast.success("Amigo agregado: @" + username, 3000); cargarAmigos(); }
       else toast.warning(d.error || "No se pudo", 3500);
@@ -329,7 +344,7 @@ export default function ProfilePage() {
   }
   async function quitarAmigo(id) {
     try {
-      await fetch("/api/friends", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friend_id: id }) });
+      await fetchConSesion("/api/friends", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friend_id: id }) });
       cargarAmigos();
     } catch {}
   }
@@ -340,7 +355,7 @@ export default function ProfilePage() {
   async function verAmigo(a) {
     setAmigoCargando(true); setAmigoVista({ perfil: a, favoritos: [], playlists: [] });
     try {
-      const r = await fetch("/api/friends/perfil?id=" + encodeURIComponent(a.id));
+      const r = await fetchConSesion("/api/friends/perfil?id=" + encodeURIComponent(a.id));
       const d = await r.json();
       if (d.perfil) setAmigoVista(d);
       else { toast.warning(d.error || "No se pudo cargar", 3500); setAmigoVista(null); }
@@ -353,7 +368,7 @@ export default function ProfilePage() {
   const [buzon, setBuzon] = useState([]);
   async function cargarBuzon() {
     try {
-      const r = await fetch("/api/shares");
+      const r = await fetchConSesion("/api/shares");
       const d = await r.json();
       setBuzon(d.recibidos || []);
     } catch {}
@@ -362,7 +377,7 @@ export default function ProfilePage() {
     const it = compartirItem;
     if (!it) return;
     try {
-      const r = await fetch("/api/shares", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      const r = await fetchConSesion("/api/shares", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         to_id: amigo.id,
         item: { type: it.type || "track", name: it.title || it.name, artist: it.artist || "", cover: it.cover_url || it.cover || "", album_id: it.album_id || "", playlist_id: it.playlist_id || "", source: "itunes" },
       }) });
@@ -416,7 +431,7 @@ export default function ProfilePage() {
   }
 
   async function borrarShare(id) {
-    try { await fetch("/api/shares", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch {}
+    try { await fetchConSesion("/api/shares", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch {}
     setBuzon(prev => prev.filter(s => s.id !== id));
   }
 
