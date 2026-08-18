@@ -241,8 +241,20 @@ export default function ProfilePage() {
   const [sugerencias, setSugerencias] = useState([]);
   const buscaTimer = useRef(null);
 
+  const [sinDatos, setSinDatos] = useState(false);
+  async function aplicarSinDatos(activar) {
+    setSinDatos(activar);
+    try {
+      localStorage.setItem("aura_sin_datos", activar ? "1" : "");
+      const c = await caches.open("ml-config");
+      if (activar) await c.put("modo-sin-datos", new Response("1"));
+      else await c.delete("modo-sin-datos");
+    } catch {}
+    toast.info(activar ? "Modo sin datos ACTIVO: la app no tocará internet" : "Modo sin datos apagado", 3500);
+  }
   useEffect(() => {
     try {
+      setSinDatos(localStorage.getItem("aura_sin_datos") === "1");
       setTemaAct(localStorage.getItem("aura_tema") === "claro" ? "claro" : "oscuro");
       setAccentAct(localStorage.getItem("aura_accent") || "#7c5cfc");
       setFuenteAct(localStorage.getItem("aura_fuente") || "");
@@ -1326,6 +1338,16 @@ export default function ProfilePage() {
                 <button key={c} onClick={()=>aplicarAccent(c)} title={c} style={{width:34,height:34,borderRadius:"50%",border:accentAct===c?"3px solid var(--text-strong)":"3px solid transparent",background:c,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.25)"}}/>
               ))}
             </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>DATOS MÓVILES</div>
+            <button onClick={()=>aplicarSinDatos(!sinDatos)} style={{padding:"9px 16px",borderRadius:10,border:"1px solid var(--border)",background:sinDatos?"rgba(234,179,8,0.15)":"var(--panel2)",color:sinDatos?"#eab308":"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer"}}>
+              <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
+                <Ico d={sinDatos ? <><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></> : <><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>} size={14} stroke={sinDatos?"#eab308":"var(--text2)"}/>
+                {sinDatos ? "Modo sin datos ACTIVO (tocá para apagar)" : "Activar modo sin datos"}
+              </span>
+            </button>
+            <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:6,lineHeight:1.5}}>Activalo al salir de casa: la app no toca internet (ni datos móviles) y funciona solo con lo descargado. iOS no permite detectar WiFi vs datos automáticamente.</div>
           </div>
           <div style={{marginBottom:14}}>
             <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>NOTIFICACIONES</div>

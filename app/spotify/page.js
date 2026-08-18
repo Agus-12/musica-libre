@@ -177,8 +177,9 @@ export default function SpotifyPage() {
   }
 
   function seguirEscuchando(s) {
-    try { localStorage.setItem("aura_autoplay", String(s.key)); } catch {}
-    window.location.href = "/profile";
+    /* Reproducir AQUÍ MISMO: el toque del usuario autoriza el audio al
+       instante (navegar al perfil rompía el autoplay por política de iOS). */
+    playPreview("", String(s.key), s.name, s.artist, s.cover, 0);
   }
 
   /* Canción a RESALTAR al abrir un álbum (desde búsqueda o favoritos):
@@ -721,7 +722,7 @@ export default function SpotifyPage() {
             <div style={{ fontSize: "1.35em", fontWeight: 800, color: "var(--text-strong)" }}>
               {(() => { const h = new Date().getHours(); return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches"; })()}{profile?.display_name || profile?.username ? ", " + (profile.display_name || profile.username) : ""}
             </div>
-            <div style={{ color: "var(--text4)", fontSize: "0.85em", marginTop: 2 }}>Esto está sonando hoy</div>
+            <div style={{ color: "var(--text4)", fontSize: "0.85em", marginTop: 2 }}>{(typeof window !== "undefined" && localStorage.getItem("aura_sin_datos") === "1") ? "Modo sin datos activo · usando lo descargado" : "Esto está sonando hoy"}</div>
             </div>
             <button onClick={() => loadCharts(true)} title="Refrescar el feed" disabled={chartsLoading} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "50%", width: 40, height: 40, cursor: chartsLoading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: chartsLoading ? 0.85 : 1 }}>
               {/* Gira mientras el feed se refresca: se VE que está trabajando */}
@@ -743,16 +744,21 @@ export default function SpotifyPage() {
             <div style={{ marginBottom: 30 }}>
               <SectionHeader icon={<Ico d={<><polygon points="5 3 19 12 5 21 5 3"/></>} size={18} stroke="#22c55e" fill="#22c55e" />} title="Seguir escuchando" subtitle="Retomá donde quedaste" />
               <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
-                {recientes.map(s => (
-                  <div key={s.key} onClick={() => seguirEscuchando(s)} style={{ flex: "0 0 200px", width: 200, minWidth: 0, maxWidth: 200, display: "flex", alignItems: "center", gap: 9, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
+                {recientes.map(s => {
+                  const sonando = playingTrack === String(s.key);
+                  return (
+                  <div key={s.key} onClick={() => seguirEscuchando(s)} style={{ flex: "0 0 200px", width: 200, minWidth: 0, maxWidth: 200, display: "flex", alignItems: "center", gap: 9, background: sonando ? "rgba(34,197,94,0.12)" : "var(--panel)", border: sonando ? "1px solid rgba(34,197,94,0.4)" : "1px solid var(--border)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
                     {s.cover ? <img src={s.cover} style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} loading="lazy" /> : <div style={{ width: 44, height: 44, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "var(--text)", fontSize: "0.8em", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+                      <div style={{ color: sonando ? "#22c55e" : "var(--text)", fontSize: "0.8em", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
                       <div style={{ color: "var(--text4)", fontSize: "0.7em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}</div>
                     </div>
-                    <Ico d={<polygon points="5 3 19 12 5 21 5 3"/>} size={14} stroke="#22c55e" fill="#22c55e" />
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: sonando ? "#22c55e" : "rgba(34,197,94,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Ico d={sonando ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={12} stroke="#fff" fill="#fff" />
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
