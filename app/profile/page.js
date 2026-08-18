@@ -74,10 +74,8 @@ export default function ProfilePage() {
   const wakeRef = useRef(null);           // reanudar al volver a la app
   const audioRef = useRef(null);          // <audio> para archivos guardados (offline)
   const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
-  const SILENCIO = "data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YaAPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   const enSilencioRef = useRef(false);    // el elemento está tocando el silencio guardián
   const posPausaRef = useRef(0);          // dónde quedó la canción real
-  const srcRealRef = useRef("");
   const silTimerRef = useRef(null);
   const deteniendoRef = useRef(false);    // true mientras el usuario DETIENE del todo
   /* iOS congela la PWA ~30 s después de pausar y el play de la pantalla
@@ -87,26 +85,27 @@ export default function ProfilePage() {
      segundo elemento no sirve: iOS bloquea audios nuevos en segundo
      plano; el mismo elemento ya está "bendecido" por tu toque. */
   function pausarConGuardian() {
+    /* PLAN C (el estable): NO pausamos ni cambiamos la fuente — solo
+       MUTEAMOS. El audio sigue "sonando" en silencio, así iOS nunca
+       duerme la app y el play del dashboard siempre responde. Al
+       reanudar: desmutear y volver al segundo exacto de la pausa.
+       Cero eventos raros: sin pause(), sin src swap, sin errores. */
     const a = audioRef.current;
     if (!a || enSilencioRef.current) return;
+    enSilencioRef.current = true;
+    posPausaRef.current = a.currentTime || 0;
+    try { a.muted = true; } catch {}
+    setIsPlaying(false);
     try {
-      posPausaRef.current = a.currentTime || 0;
-      srcRealRef.current = a.src;
-      try { a.pause(); } catch {}           // PRIMERO callar, pase lo que pase
-      enSilencioRef.current = true;
-      a.src = SILENCIO;
-      a.loop = true;
-      const pr = a.play();
-      if (pr && pr.catch) pr.catch(() => {});
-      setIsPlaying(false);
-      try {
-        navigator.mediaSession.playbackState = "paused";
-        navigator.mediaSession.setPositionState({ duration: Math.max(1, finRealRef.current || duration || 1), playbackRate: 1, position: Math.min(posPausaRef.current, Math.max(1, finRealRef.current || duration || 1)) });
-      } catch {}
-      // A los 10 min soltamos el guardián (batería); reabrir la app reanuda igual
-      clearTimeout(silTimerRef.current);
-      silTimerRef.current = setTimeout(() => { try { a.pause(); } catch {} }, 10 * 60 * 1000);
+      navigator.mediaSession.playbackState = "paused";
+      const durTotal = Math.max(1, a.duration || finRealRef.current || 1);
+      navigator.mediaSession.setPositionState({ duration: durTotal, playbackRate: 1, position: Math.min(posPausaRef.current, durTotal) });
     } catch {}
+    // A los 10 min: pausa real (batería); reabrir la app reanuda igual
+    clearTimeout(silTimerRef.current);
+    silTimerRef.current = setTimeout(() => {
+      try { a.pause(); a.muted = false; } catch {}
+    }, 10 * 60 * 1000);
   }
   function reanudarDeGuardian() {
     const a = audioRef.current;
@@ -114,24 +113,16 @@ export default function ProfilePage() {
     clearTimeout(silTimerRef.current);
     if (enSilencioRef.current) {
       enSilencioRef.current = false;
-      const destino = posPausaRef.current || 0;
-      a.loop = false;
-      a.src = srcRealRef.current;
-      const alCargar = () => {
-        try { a.currentTime = destino; } catch {}
-        a.removeEventListener("loadedmetadata", alCargar);
-      };
-      a.addEventListener("loadedmetadata", alCargar);
-      const pr = a.play();
-      if (pr && pr.catch) pr.catch(() => {});
+      try { a.currentTime = posPausaRef.current || 0; } catch {}
+      try { a.muted = false; } catch {}
+      if (a.paused) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); }
     } else if (a.paused) {
       const pr = a.play();
       if (pr && pr.catch) pr.catch(() => {});
     }
     setIsPlaying(true);
     try { navigator.mediaSession.playbackState = "playing"; } catch {}
-  }
-  const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
+  }  const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
   const colaRef = useRef([]);             // cola "reproducir a continuación"
   const ordenAleatorioRef = useRef([]);   // orden pre-generado del aleatorio (visible en la cola)
   const [showCola, setShowCola] = useState(false);
@@ -806,7 +797,11 @@ export default function ProfilePage() {
         setDuration(d);
         setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
       });
-      a.addEventListener("ended", () => { if (!enSilencioRef.current) handleTrackEnd(); });
+      a.addEventListener("ended", () => {
+        if (!enSilencioRef.current) { handleTrackEnd(); return; }
+        // Terminó mientras estaba en pausa-muteada: rebobinar muteado
+        try { a.currentTime = Math.max(0, (a.duration || 2) - 2); const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); } catch {}
+      });
       a.addEventListener("play", () => {
         if (enSilencioRef.current) return;   // es el guardián, no la canción
         setIsPlaying(true);
@@ -833,6 +828,7 @@ export default function ProfilePage() {
     usingAudioRef.current = true;
     enSilencioRef.current = false;          // canción nueva: fuera guardián
     clearTimeout(silTimerRef.current);
+    try { if (audioRef.current) audioRef.current.muted = false; } catch {}
     finRealRef.current = item.duration_ms ? item.duration_ms / 1000 : 0;
     setPlayingKey(item.key); setPlayingTitle(item.title);
     setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
@@ -1113,6 +1109,7 @@ export default function ProfilePage() {
     setTimeout(() => { deteniendoRef.current = false; }, 300);
     clearTimeout(silTimerRef.current);
     enSilencioRef.current = false;
+    try { if (audioRef.current) audioRef.current.muted = false; } catch {}
     // Ojo: NO destruimos el player, solo paramos. Así sigue listo para la
     // próxima canción y el play responde al primer toque.
     if (playerRef.current && playerReadyRef.current) { try { playerRef.current.stopVideo(); } catch {} }
