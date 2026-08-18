@@ -90,6 +90,82 @@ export default function ProfilePage() {
   const [repeat, setRepeat] = useState("off");   // off | all | one
   const [expanded, setExpanded] = useState(false);
 
+  /* ── Personalización + Amigos ── */
+  const [showCustom, setShowCustom] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
+  const [temaAct, setTemaAct] = useState("oscuro");
+  const [accentAct, setAccentAct] = useState("#7c5cfc");
+  const [fuenteAct, setFuenteAct] = useState("");
+  const [amigos, setAmigos] = useState([]);
+  const [amigosError, setAmigosError] = useState("");
+  const [buscaAmigo, setBuscaAmigo] = useState("");
+  const [sugerencias, setSugerencias] = useState([]);
+  const buscaTimer = useRef(null);
+
+  useEffect(() => {
+    try {
+      setTemaAct(localStorage.getItem("aura_tema") === "claro" ? "claro" : "oscuro");
+      setAccentAct(localStorage.getItem("aura_accent") || "#7c5cfc");
+      setFuenteAct(localStorage.getItem("aura_fuente") || "");
+    } catch {}
+    cargarAmigos();
+  }, []);
+
+  function aplicarTema(v) {
+    setTemaAct(v);
+    try {
+      localStorage.setItem("aura_tema", v);
+      document.documentElement.classList.toggle("tema-claro", v === "claro");
+    } catch {}
+  }
+  function aplicarAccent(c) {
+    setAccentAct(c);
+    try {
+      localStorage.setItem("aura_accent", c);
+      document.documentElement.style.setProperty("--accent", c);
+    } catch {}
+  }
+  function aplicarFuente(f) {
+    setFuenteAct(f);
+    try {
+      if (f) { localStorage.setItem("aura_fuente", f); document.documentElement.setAttribute("data-fuente", f); }
+      else { localStorage.removeItem("aura_fuente"); document.documentElement.removeAttribute("data-fuente"); }
+    } catch {}
+  }
+  async function cargarAmigos() {
+    try {
+      const r = await fetch("/api/friends");
+      const d = await r.json();
+      if (d.amigos) { setAmigos(d.amigos); setAmigosError(""); }
+      else if (d.error) setAmigosError(d.error);
+    } catch {}
+  }
+  function buscarUsuarios(texto) {
+    if (buscaTimer.current) clearTimeout(buscaTimer.current);
+    if (!texto.trim()) { setSugerencias([]); return; }
+    buscaTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch("/api/friends?buscar=" + encodeURIComponent(texto.trim()));
+        const d = await r.json();
+        setSugerencias(d.usuarios || []);
+      } catch {}
+    }, 350);
+  }
+  async function agregarAmigo(username) {
+    try {
+      const r = await fetch("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }) });
+      const d = await r.json();
+      if (d.ok) { toast.success("Amigo agregado: @" + username, 3000); cargarAmigos(); }
+      else toast.warning(d.error || "No se pudo", 3500);
+    } catch { toast.error("Error de red", 3000); }
+  }
+  async function quitarAmigo(id) {
+    try {
+      await fetch("/api/friends", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friend_id: id }) });
+      cargarAmigos();
+    } catch {}
+  }
+
   // Espejo del estado para los callbacks del player (que se registran una vez
   // y si no, verían valores viejos).
   const liveRef = useRef({ list: [], playingKey: null, shuffle: false, repeat: "off" });
@@ -790,25 +866,25 @@ export default function ProfilePage() {
   // Mantenemos el espejo al día para los callbacks del player
   liveRef.current = { list: listaVisible, playingKey, shuffle, repeat };
 
-  if(loading) return <div style={{textAlign:"center",padding:60,color:"#7c5cfc"}}>Cargando...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:60,color:"var(--accent)"}}>Cargando...</div>;
 
   const filteredFavs = favorites.filter(f=>f.item_type===favType);
   async function openPlaylist(pl){setSelectedPlaylist(pl);const r=await fetch("/api/playlists?id="+pl.id);const d=await r.json();setPlaylistItems(d.items||[]);}
   async function deletePlaylist(id){if(!confirm("Borrar esta playlist?"))return;await fetch("/api/playlists",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({playlist_id:id})});loadPlaylists();if(selectedPlaylist?.id===id)setSelectedPlaylist(null);}
   async function removePlaylistItem(iid){await fetch("/api/playlists",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"remove-item",item_id:iid})});if(selectedPlaylist)openPlaylist(selectedPlaylist);}
 
-  const SM = {padding:"6px 14px",borderRadius:6,border:"none",color:"#fff",fontSize:"0.85em",cursor:"pointer",fontWeight:600};
+  const SM = {padding:"6px 14px",borderRadius:6,border:"none",color:"var(--text-strong)",fontSize:"0.85em",cursor:"pointer",fontWeight:600};
 
   function CoverImg({url,size="100%",r=0}) {
     const w=typeof size==="string"?size:size+"px";
     if(url) return <img src={url} style={{width:w,height:w,borderRadius:r,objectFit:"cover",display:"block"}}/>;
-    return <div style={{width:w,height:w,borderRadius:r,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={32} stroke="#444" sw={1.5}/></div>;
+    return <div style={{width:w,height:w,borderRadius:r,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={32} stroke="var(--text6)" sw={1.5}/></div>;
   }
 
   function fmt(s){if(!s||isNaN(s))return"0:00";const m=Math.floor(s/60);return m+":"+String(Math.floor(s%60)).padStart(2,"0");}
   const hp = playingKey!==null;
 
-  const iconBtn = (onClick, icon, color="#555", bg="none", title="", sz=14) => (
+  const iconBtn = (onClick, icon, color="var(--text5)", bg="none", title="", sz=14) => (
     <button onClick={onClick} title={title} style={{background:bg,border:"none",color,cursor:"pointer",padding:2,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{icon}</button>
   );
 
@@ -817,14 +893,24 @@ export default function ProfilePage() {
       <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
 
       {/* Header */}
-      <div style={{background:"#1a1a2e",borderRadius:14,padding:22,marginBottom:22,border:"1px solid #2a2a3e",display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
-        <div style={{width:64,height:64,borderRadius:"50%",background:"linear-gradient(135deg,#7c5cfc,#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2em",flexShrink:0}}>
+      <div style={{background:"var(--panel)",borderRadius:14,padding:22,marginBottom:22,border:"1px solid var(--border)",display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{width:64,height:64,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2em",flexShrink:0}}>
           {(profile?.display_name||profile?.username||"U")[0].toUpperCase()}
         </div>
         <div style={{flex:1,minWidth:120}}>
-          <h1 style={{fontSize:"1.3em",marginBottom:2}}>{profile?.display_name||profile?.username||"Usuario"}</h1>
-          <p style={{color:"#888",fontSize:"0.82em"}}>@{profile?.username||"user"}</p>
-          <div style={{display:"flex",gap:12,color:"#555",fontSize:"0.78em",marginTop:4}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <h1 style={{fontSize:"1.3em",marginBottom:2}}>{profile?.display_name||profile?.username||"Usuario"}</h1>
+            {/* Amigos */}
+            <button onClick={()=>{setShowFriends(true);cargarAmigos();}} title="Amigos" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:16,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>
+              <Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={13} stroke="var(--accent)"/> Amigos{amigos.length?` (${amigos.length})`:""}
+            </button>
+            {/* Personalizar */}
+            <button onClick={()=>setShowCustom(v=>!v)} title="Personalizar" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:16,border:"1px solid var(--border)",background:showCustom?"var(--accent)":"var(--panel2)",color:showCustom?"#fff":"var(--text2)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>
+              <Ico d={<><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>} size={13} stroke={showCustom?"#fff":"var(--accent)"}/> Personalizar
+            </button>
+          </div>
+          <p style={{color:"var(--text3)",fontSize:"0.82em"}}>@{profile?.username||"user"}</p>
+          <div style={{display:"flex",gap:12,color:"var(--text5)",fontSize:"0.78em",marginTop:4}}>
             <span>{favorites.length} favoritos</span>
             <span>{downloadedMusic.length} descargadas</span>
             <span>{playlists.length} playlists</span>
@@ -832,15 +918,92 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* ── Panel: Personalizar ── */}
+      {showCustom && (
+        <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
+          <div style={{fontWeight:800,fontSize:"0.9em",marginBottom:12,color:"var(--text)"}}>🎨 Personalizar AURA</div>
+          <div style={{marginBottom:14}}>
+            <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>TEMA</div>
+            <div style={{display:"flex",gap:8}}>
+              {[["oscuro","🌙 Oscuro"],["claro","☀️ Claro"]].map(([v,l])=>(
+                <button key={v} onClick={()=>aplicarTema(v)} style={{padding:"8px 16px",borderRadius:10,border:"1px solid var(--border)",background:temaAct===v?"var(--accent)":"var(--panel2)",color:temaAct===v?"#fff":"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer"}}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>COLOR</div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              {["#7c5cfc","#3b82f6","#22c55e","#ec4899","#f97316","#ef4444","#14b8a6","#eab308"].map(c=>(
+                <button key={c} onClick={()=>aplicarAccent(c)} title={c} style={{width:34,height:34,borderRadius:"50%",border:accentAct===c?"3px solid var(--text-strong)":"3px solid transparent",background:c,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.25)"}}/>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>FUENTE</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {[["","Normal"],["redonda","Redonda"],["clasica","Clásica"],["mono","Mono"]].map(([v,l])=>(
+                <button key={v||"normal"} onClick={()=>aplicarFuente(v)} style={{padding:"8px 14px",borderRadius:10,border:"1px solid var(--border)",background:fuenteAct===v?"var(--accent)":"var(--panel2)",color:fuenteAct===v?"#fff":"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer",fontFamily:v==="clasica"?"Georgia,serif":v==="mono"?"Menlo,monospace":"inherit"}}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Amigos ── */}
+      {showFriends && (
+        <div onClick={()=>setShowFriends(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:420,maxHeight:"75vh",overflowY:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+              <div style={{fontWeight:800,color:"var(--text)"}}>👥 Amigos</div>
+              <button onClick={()=>setShowFriends(false)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <input value={buscaAmigo} onChange={e=>{setBuscaAmigo(e.target.value);buscarUsuarios(e.target.value);}} placeholder="Buscar por @usuario..." style={{flex:1,padding:"10px 12px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text)",fontSize:"0.9em",outline:"none"}}/>
+            </div>
+            {sugerencias.length>0 && (
+              <div style={{marginBottom:14,border:"1px solid var(--border2)",borderRadius:10,overflow:"hidden"}}>
+                {sugerencias.map(u=>(
+                  <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border2)"}}>
+                    <div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:"0.8em",flexShrink:0}}>{(u.display_name||u.username||"?")[0].toUpperCase()}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600}}>{u.display_name||u.username}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.72em"}}>@{u.username}</div>
+                    </div>
+                    {amigos.some(a=>a.id===u.id)
+                      ? <span style={{color:"#22c55e",fontSize:"0.72em",fontWeight:700}}>✓ amigo</span>
+                      : <button onClick={()=>agregarAmigo(u.username)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"var(--accent)",color:"#fff",fontSize:"0.75em",fontWeight:700,cursor:"pointer"}}>Agregar</button>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {amigosError && <p style={{color:"#eab308",fontSize:"0.78em",marginBottom:10,lineHeight:1.5}}>{amigosError}</p>}
+            {amigos.length===0 && !amigosError ? (
+              <p style={{color:"var(--text4)",fontSize:"0.85em",textAlign:"center",padding:16}}>Todavía no tenés amigos. Buscá a alguien por su @usuario.</p>
+            ) : amigos.map(a=>(
+              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 4px",borderBottom:"1px solid var(--border2)"}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,flexShrink:0}}>{(a.display_name||a.username||"?")[0].toUpperCase()}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:"var(--text)",fontSize:"0.88em",fontWeight:600}}>{a.display_name||a.username}</div>
+                  <div style={{color:"var(--text4)",fontSize:"0.72em"}}>@{a.username}</div>
+                </div>
+                <button onClick={()=>quitarAmigo(a.id)} title="Quitar" style={{background:"none",border:"none",cursor:"pointer",padding:6}}>
+                  <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={13} stroke="#ef4444"/>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
-        <button onClick={()=>{setTab("downloads");setSelectedPlaylist(null);}} style={{...SM,background:tab==="downloads"?"#22c55e":"#1a1a2e",color:tab==="downloads"?"#fff":"#888",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={()=>{setTab("downloads");setSelectedPlaylist(null);}} style={{...SM,background:tab==="downloads"?"#22c55e":"var(--panel)",color:tab==="downloads"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
           <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={14}/> Descargadas ({downloadedMusic.length})
         </button>
-        <button onClick={()=>{setTab("favorites");setSelectedPlaylist(null);}} style={{...SM,background:tab==="favorites"?"#7c5cfc":"#1a1a2e",color:tab==="favorites"?"#fff":"#888",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={()=>{setTab("favorites");setSelectedPlaylist(null);}} style={{...SM,background:tab==="favorites"?"var(--accent)":"var(--panel)",color:tab==="favorites"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
           <Ico d={<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>} size={14} fill="currentColor"/> Favoritos ({favorites.length})
         </button>
-        <button onClick={()=>{setTab("playlists");setSelectedPlaylist(null);}} style={{...SM,background:tab==="playlists"?"#7c5cfc":"#1a1a2e",color:tab==="playlists"?"#fff":"#888",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={()=>{setTab("playlists");setSelectedPlaylist(null);}} style={{...SM,background:tab==="playlists"?"var(--accent)":"var(--panel)",color:tab==="playlists"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
           <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={14}/> Playlists ({playlists.length})
         </button>
       </div>
@@ -851,17 +1014,17 @@ export default function ProfilePage() {
           {/* Cola de descargas EN CURSO: antes las canciones encoladas eran
               invisibles hasta terminar y parecía que no se descargaban. */}
           {queue && queue.filter(t=>t.status!=="done").length>0 && (
-            <div style={{background:"#12121f",border:"1px solid #2a2a3e",borderRadius:10,marginBottom:14,overflow:"hidden"}}>
-              <div style={{padding:"9px 14px",fontSize:"0.72em",fontWeight:700,letterSpacing:0.4,color:"#eab308",borderBottom:"1px solid #2a2a3e",display:"flex",alignItems:"center",gap:6}}>
+            <div style={{background:"var(--panel2)",border:"1px solid var(--border)",borderRadius:10,marginBottom:14,overflow:"hidden"}}>
+              <div style={{padding:"9px 14px",fontSize:"0.72em",fontWeight:700,letterSpacing:0.4,color:"#eab308",borderBottom:"1px solid var(--border)",display:"flex",alignItems:"center",gap:6}}>
                 <span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:"#eab308",animation:"pulse 1.2s infinite"}}/>
                 DESCARGANDO ({queue.filter(t=>t.status!=="done").length})
               </div>
               {queue.filter(t=>t.status!=="done").map(t=>(
-                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"1px solid #1e1e30"}}>
+                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:"1px solid var(--border2)"}}>
                   <CoverImg url={t.cover} size={38} r={6}/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{color:"#ccc",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div>
-                    <div style={{color:"#666",fontSize:"0.72em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.artist}</div>
+                    <div style={{color:"var(--text2)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div>
+                    <div style={{color:"var(--text4)",fontSize:"0.72em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.artist}</div>
                   </div>
                   {t.status==="failed"
                     ? (t.repair
@@ -869,16 +1032,16 @@ export default function ProfilePage() {
                         : <span style={{color:"#ef4444",fontSize:"0.68em",fontWeight:700,flexShrink:0}} title={t.error||""}>falló</span>)
                     : t.status==="downloading"
                       ? <span style={{color:"#eab308",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>bajando…</span>
-                      : <span style={{color:"#666",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>en cola</span>}
+                      : <span style={{color:"var(--text4)",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>en cola</span>}
                 </div>
               ))}
             </div>
           )}
           {downloadedMusic.length===0 ? (
-            <div style={{textAlign:"center",padding:40,color:"#555"}}>
-              <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={40} stroke="#555"/>
-              <p style={{fontSize:"1.1em",color:"#888",marginBottom:8,marginTop:12}}>No tenes musica descargada</p>
-              <p style={{fontSize:"0.85em"}}>Anda a <a href="/spotify" style={{color:"#7c5cfc",fontWeight:600}}>Musica</a> y dale corazn a una cancion</p>
+            <div style={{textAlign:"center",padding:40,color:"var(--text5)"}}>
+              <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={40} stroke="var(--text5)"/>
+              <p style={{fontSize:"1.1em",color:"var(--text3)",marginBottom:8,marginTop:12}}>No tenes musica descargada</p>
+              <p style={{fontSize:"0.85em"}}>Anda a <a href="/spotify" style={{color:"var(--accent)",fontWeight:600}}>Musica</a> y dale corazn a una cancion</p>
             </div>
           ) : (
             <>
@@ -900,17 +1063,17 @@ export default function ProfilePage() {
                   con el boton verde y en celulares angostos se empalmaban. */}
               <div style={{position:"relative",width:"100%"}}>
                 <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",display:"flex",pointerEvents:"none"}}>
-                  <Ico d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} size={15} stroke="#666"/>
+                  <Ico d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} size={15} stroke="var(--text4)"/>
                 </span>
                 <input
                   value={search}
                   onChange={e=>setSearch(e.target.value)}
                   placeholder="Buscar en tus descargas..."
-                  style={{width:"100%",boxSizing:"border-box",padding:"11px 34px 11px 36px",borderRadius:10,border:"1px solid #2a2a3e",background:"#12121f",color:"#e0e0e0",fontSize:"0.9em",outline:"none"}}
+                  style={{width:"100%",boxSizing:"border-box",padding:"11px 34px 11px 36px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text)",fontSize:"0.9em",outline:"none"}}
                 />
                 {search && (
                   <button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}>
-                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="#666"/>
+                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="var(--text4)"/>
                   </button>
                 )}
               </div>
@@ -929,7 +1092,7 @@ export default function ProfilePage() {
               <button
                 onClick={()=>{ setShuffle(s=>!s); toast.info(!shuffle?"Aleatorio activado":"Aleatorio desactivado",2000); }}
                 title="Reproducción aleatoria"
-                style={{display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,flexShrink:0,borderRadius:10,cursor:"pointer",background:shuffle?"rgba(34,197,94,0.16)":"#12121f",border:shuffle?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
+                style={{display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,flexShrink:0,borderRadius:10,cursor:"pointer",background:shuffle?"rgba(34,197,94,0.16)":"var(--panel2)",border:shuffle?"1px solid rgba(34,197,94,0.5)":"1px solid var(--border)"}}>
                 <Ico d={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>} size={17} stroke={shuffle?"#22c55e":"#777"}/>
               </button>
 
@@ -937,7 +1100,7 @@ export default function ProfilePage() {
               <button
                 onClick={()=>{ const o=repeat==="off"?"all":repeat==="all"?"one":"off"; setRepeat(o); toast.info(o==="off"?"Repetir desactivado":o==="all"?"Repetir todo":"Repetir esta canción",2000); }}
                 title="Repetir"
-                style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,flexShrink:0,borderRadius:10,cursor:"pointer",background:repeat!=="off"?"rgba(34,197,94,0.16)":"#12121f",border:repeat!=="off"?"1px solid rgba(34,197,94,0.5)":"1px solid #2a2a3e"}}>
+                style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center",width:42,height:42,flexShrink:0,borderRadius:10,cursor:"pointer",background:repeat!=="off"?"rgba(34,197,94,0.16)":"var(--panel2)",border:repeat!=="off"?"1px solid rgba(34,197,94,0.5)":"1px solid var(--border)"}}>
                 <Ico d={<><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></>} size={17} stroke={repeat!=="off"?"#22c55e":"#777"}/>
                 {repeat==="one" && <span style={{position:"absolute",bottom:4,right:5,fontSize:"0.55em",fontWeight:800,color:"#22c55e"}}>1</span>}
               </button>
@@ -945,17 +1108,17 @@ export default function ProfilePage() {
             </div>
 
             {listaVisible.length===0 ? (
-              <div style={{textAlign:"center",padding:34,color:"#666",background:"#1a1a2e",borderRadius:12,border:"1px solid #2a2a3e"}}>
-                <Ico d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} size={30} stroke="#444"/>
+              <div style={{textAlign:"center",padding:34,color:"var(--text4)",background:"var(--panel)",borderRadius:12,border:"1px solid var(--border)"}}>
+                <Ico d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} size={30} stroke="var(--text6)"/>
                 <p style={{marginTop:10,fontSize:"0.9em"}}>Sin resultados para “{search}”</p>
               </div>
             ) : (
-            <div style={{background:"#1a1a2e",borderRadius:12,border:"1px solid #2a2a3e",overflow:"hidden"}}>
+            <div style={{background:"var(--panel)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden"}}>
               {listaVisible.map(item => {
                 const cp = playingKey===item.key;
                 const dl = downloadingItems[item.key];
                 return (
-                  <div key={item.key} onClick={()=>playDownloaded(item)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:"1px solid #2a2a3e",background:cp?"rgba(34,197,94,0.08)":"transparent",cursor:"pointer",transition:"background 0.2s"}}>
+                  <div key={item.key} onClick={()=>playDownloaded(item)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:"1px solid var(--border)",background:cp?"rgba(34,197,94,0.08)":"transparent",cursor:"pointer",transition:"background 0.2s"}}>
                     {/* Cover + play */}
                     <div style={{position:"relative",flexShrink:0}}>
                       <CoverImg url={item.cover_url} size={52} r={8}/>
@@ -965,9 +1128,9 @@ export default function ProfilePage() {
                     </div>
                     {/* Info */}
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{color:cp?"#22c55e":"#e0e0e0",fontSize:"0.92em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
-                      <div style={{color:"#666",fontSize:"0.78em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.artist}</div>
-                      {cp && <div style={{marginTop:4,height:3,borderRadius:2,background:"#2a2a3e",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"#22c55e",width:progress+"%",transition:"width 0.5s linear"}}/></div>}
+                      <div style={{color:cp?"#22c55e":"var(--text)",fontSize:"0.92em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.78em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.artist}</div>
+                      {cp && <div style={{marginTop:4,height:3,borderRadius:2,background:"var(--border)",overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"#22c55e",width:progress+"%",transition:"width 0.5s linear"}}/></div>}
                     </div>
                     {cp && <span style={{color:"#22c55e",fontSize:"0.72em",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{fmt(currentTime)} / {fmt(duration)}</span>}
                     {/* Estado real: verde OFF solo si hay ARCHIVO guardado
@@ -981,8 +1144,8 @@ export default function ProfilePage() {
                         : null}
                     {/* Sin internet ocultamos re-descargar y borrar: no se
                         pueden completar offline y sólo confunden. */}
-                    {isOnline && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "#555", "none", "Buscar de nuevo")}
-                    {isOnline && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "#555", "none", "Eliminar")}
+                    {isOnline && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
+                    {isOnline && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
                   </div>
                 );
               })}
@@ -998,31 +1161,31 @@ export default function ProfilePage() {
         <div>
           <div style={{display:"flex",gap:6,marginBottom:15}}>
             {["album","artist","track"].map(t=>(
-              <button key={t} onClick={()=>setFavType(t)} style={{...SM,background:favType===t?"#22c55e":"#1a1a2e",color:favType===t?"#fff":"#888"}}>
+              <button key={t} onClick={()=>setFavType(t)} style={{...SM,background:favType===t?"#22c55e":"var(--panel)",color:favType===t?"#fff":"var(--text3)"}}>
                 {t==="album"?"Albumes":t==="artist"?"Artistas":"Canciones"} ({favorites.filter(f=>f.item_type===t).length})
               </button>
             ))}
           </div>
           {filteredFavs.length===0 ? (
-            <div style={{textAlign:"center",padding:30,color:"#555"}}>
+            <div style={{textAlign:"center",padding:30,color:"var(--text5)"}}>
               <p>No tenes {favType==="album"?"albumes":favType==="artist"?"artistas":"canciones"} en favoritos</p>
-              <p style={{fontSize:"0.85em",marginTop:8}}><a href="/spotify" style={{color:"#7c5cfc",fontWeight:600}}>Buscar musica</a></p>
+              <p style={{fontSize:"0.85em",marginTop:8}}><a href="/spotify" style={{color:"var(--accent)",fontWeight:600}}>Buscar musica</a></p>
             </div>
           ) : favType==="track" ? (
             /* Canciones favoritas en LISTA (como Descargadas), con badge
                OFF verde cuando la canción ya está guardada sin internet. */
-            <div style={{background:"#12121f",border:"1px solid #2a2a3e",borderRadius:12,overflow:"hidden"}}>
+            <div style={{background:"var(--panel2)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
               {filteredFavs.map(f => {
                 let isDl=false;
                 try{const m=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=[String(f.item_id),(f.artist+" "+f.name).trim(),(f.name+" "+f.artist).trim(),f.name.trim()];for(const k of ks){if(m[k]?.audio_url){isDl=true;break;}}}catch{}
                 return (
-                  <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:"1px solid #1e1e30"}}>
+                  <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:"1px solid var(--border2)"}}>
                     <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{flexShrink:0,display:"block"}}>
                       <CoverImg url={f.cover_url} size={46} r={8}/>
                     </a>
                     <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
-                      <div style={{color:"#e0e0e0",fontSize:"0.9em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
-                      <div style={{color:"#666",fontSize:"0.76em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
+                      <div style={{color:"var(--text)",fontSize:"0.9em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.76em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
                     </a>
                     {isDl && (
                       <span style={{padding:"2px 7px",borderRadius:4,fontSize:"0.6em",fontWeight:800,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.35)"}}>OFF</span>
@@ -1040,7 +1203,7 @@ export default function ProfilePage() {
                 let isDl=false;
                 try{const m=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=[String(f.item_id),(f.artist+" "+f.name).trim(),(f.name+" "+f.artist).trim(),f.name.trim()];for(const k of ks){if(m[k]?.video_id||m[k]?.audio_url){isDl=true;break;}}}catch{}
                 return (
-                  <div key={f.id} style={{background:"#1a1a2e",borderRadius:10,overflow:"hidden",border:"1px solid #2a2a3e",position:"relative"}}>
+                  <div key={f.id} style={{background:"var(--panel)",borderRadius:10,overflow:"hidden",border:"1px solid var(--border)",position:"relative"}}>
                     <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{textDecoration:"none",display:"block",position:"relative"}}>
                       <CoverImg url={f.cover_url}/>
                       {/* Insignia dentro de la portada, abajo a la izquierda:
@@ -1056,8 +1219,8 @@ export default function ProfilePage() {
                       <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="#ef4444"/>
                     </button>
                     <div style={{padding:"7px 9px"}}>
-                      <div style={{color:"#ccc",fontSize:"0.78em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
-                      <div style={{color:"#666",fontSize:"0.68em"}}>{f.artist}</div>
+                      <div style={{color:"var(--text2)",fontSize:"0.78em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.68em"}}>{f.artist}</div>
                     </div>
                   </div>
                 );
@@ -1071,18 +1234,18 @@ export default function ProfilePage() {
       {tab==="playlists" && !selectedPlaylist && (
         <div>
           {playlists.length===0 ? (
-            <div style={{textAlign:"center",padding:30,color:"#555"}}><p>No tenes playlists</p><p style={{fontSize:"0.85em",marginTop:8}}><a href="/spotify" style={{color:"#7c5cfc",fontWeight:600}}>Buscar musica</a></p></div>
+            <div style={{textAlign:"center",padding:30,color:"var(--text5)"}}><p>No tenes playlists</p><p style={{fontSize:"0.85em",marginTop:8}}><a href="/spotify" style={{color:"var(--accent)",fontWeight:600}}>Buscar musica</a></p></div>
           ) : (
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
               {playlists.map(pl=>(
-                <div key={pl.id} onClick={()=>openPlaylist(pl)} style={{background:"#1a1a2e",borderRadius:10,padding:14,cursor:"pointer",border:"1px solid #2a2a3e",position:"relative"}}>
+                <div key={pl.id} onClick={()=>openPlaylist(pl)} style={{background:"var(--panel)",borderRadius:10,padding:14,cursor:"pointer",border:"1px solid var(--border)",position:"relative"}}>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
                     <CoverImg url={pl.cover_url} size={44} r={6}/>
-                    <div><div style={{color:"#ccc",fontWeight:600,fontSize:"0.9em"}}>{pl.name}</div>{pl.description&&<div style={{color:"#555",fontSize:"0.72em"}}>{pl.description}</div>}</div>
+                    <div><div style={{color:"var(--text2)",fontWeight:600,fontSize:"0.9em"}}>{pl.name}</div>{pl.description&&<div style={{color:"var(--text5)",fontSize:"0.72em"}}>{pl.description}</div>}</div>
                   </div>
-                  <div style={{color:"#444",fontSize:"0.7em"}}>{pl.is_public?"Publica":"Privada"} · {new Date(pl.created_at).toLocaleDateString("es")}</div>
-                  <button onClick={e=>{e.stopPropagation();deletePlaylist(pl.id);}} style={{position:"absolute",top:8,right:8,background:"none",border:"none",color:"#555",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="#555"/>
+                  <div style={{color:"var(--text6)",fontSize:"0.7em"}}>{pl.is_public?"Publica":"Privada"} · {new Date(pl.created_at).toLocaleDateString("es")}</div>
+                  <button onClick={e=>{e.stopPropagation();deletePlaylist(pl.id);}} style={{position:"absolute",top:8,right:8,background:"none",border:"none",color:"var(--text5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="var(--text5)"/>
                   </button>
                 </div>
               ))}
@@ -1094,21 +1257,21 @@ export default function ProfilePage() {
       {/* Playlist detail */}
       {tab==="playlists" && selectedPlaylist && (
         <div>
-          <button onClick={()=>setSelectedPlaylist(null)} style={{...SM,background:"#333",marginBottom:15,color:"#7c5cfc",display:"flex",alignItems:"center",gap:6}}>
-            <Ico d={<polyline points="15 18 9 12 15 6"/>} size={14} stroke="#7c5cfc"/> Volver
+          <button onClick={()=>setSelectedPlaylist(null)} style={{...SM,background:"#333",marginBottom:15,color:"var(--accent)",display:"flex",alignItems:"center",gap:6}}>
+            <Ico d={<polyline points="15 18 9 12 15 6"/>} size={14} stroke="var(--accent)"/> Volver
           </button>
-          <div style={{background:"#1a1a2e",borderRadius:10,padding:16,marginBottom:15,border:"1px solid #2a2a3e",display:"flex",gap:12,alignItems:"center"}}>
+          <div style={{background:"var(--panel)",borderRadius:10,padding:16,marginBottom:15,border:"1px solid var(--border)",display:"flex",gap:12,alignItems:"center"}}>
             <CoverImg url={selectedPlaylist.cover_url} size={56} r={8}/>
-            <div><h2 style={{fontSize:"1.2em",marginBottom:2}}>{selectedPlaylist.name}</h2><p style={{color:"#888",fontSize:"0.8em"}}>{selectedPlaylist.description||"Sin descripcion"} · {playlistItems.length} items</p></div>
+            <div><h2 style={{fontSize:"1.2em",marginBottom:2}}>{selectedPlaylist.name}</h2><p style={{color:"var(--text3)",fontSize:"0.8em"}}>{selectedPlaylist.description||"Sin descripcion"} · {playlistItems.length} items</p></div>
           </div>
-          {playlistItems.length===0 ? <p style={{textAlign:"center",color:"#555",padding:20}}>Playlist vacia</p> : (
-            <div style={{background:"#1a1a2e",borderRadius:10,border:"1px solid #2a2a3e",overflow:"hidden"}}>
+          {playlistItems.length===0 ? <p style={{textAlign:"center",color:"var(--text5)",padding:20}}>Playlist vacia</p> : (
+            <div style={{background:"var(--panel)",borderRadius:10,border:"1px solid var(--border)",overflow:"hidden"}}>
               {playlistItems.map(item=>(
-                <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid #2a2a3e"}}>
+                <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--border)"}}>
                   <CoverImg url={item.cover_url} size={40} r={6}/>
-                  <div style={{flex:1,minWidth:0}}><div style={{color:"#e0e0e0",fontSize:"0.88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div><div style={{color:"#666",fontSize:"0.75em"}}>{item.artist}</div></div>
-                  <button onClick={()=>removePlaylistItem(item.id)} style={{background:"none",border:"none",color:"#555",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="#555"/>
+                  <div style={{flex:1,minWidth:0}}><div style={{color:"var(--text)",fontSize:"0.88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div><div style={{color:"var(--text4)",fontSize:"0.75em"}}>{item.artist}</div></div>
+                  <button onClick={()=>removePlaylistItem(item.id)} style={{background:"none",border:"none",color:"var(--text5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="var(--text5)"/>
                   </button>
                 </div>
               ))}
@@ -1133,8 +1296,8 @@ export default function ProfilePage() {
             <div style={{maxWidth:900,margin:"0 auto",padding:"9px 14px calc(9px + env(safe-area-inset-bottom))",display:"flex",alignItems:"center",gap:12}}>
               {playingCover
                 ? <img src={playingCover} alt="" style={{width:46,height:46,borderRadius:8,objectFit:"cover",flexShrink:0,boxShadow:"0 3px 12px rgba(0,0,0,0.5)"}}/>
-                : <div style={{width:46,height:46,borderRadius:8,flexShrink:0,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={20} stroke="#555" sw={1.5}/>
+                : <div style={{width:46,height:46,borderRadius:8,flexShrink:0,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={20} stroke="var(--text5)" sw={1.5}/>
                   </div>}
               <div style={{flex:1,minWidth:0}}>
                 <div style={{color:"#f0f0f0",fontSize:"0.88em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
@@ -1155,13 +1318,13 @@ export default function ProfilePage() {
 
           {/* ── Pantalla completa (desplegada) ── */}
           <div
-            style={{position:"fixed",top:0,left:0,right:0,bottom:0,height:"100dvh",zIndex:9999,background:"linear-gradient(180deg,#1a1a2e 0%,#12121f 45%,#0a0a14 100%)",display:"flex",flexDirection:"column",transform:expanded?"translateY(0)":"translateY(100%)",transition:"transform 0.38s cubic-bezier(0.32,0.72,0,1)",overflow:"hidden"}}>
+            style={{position:"fixed",top:0,left:0,right:0,bottom:0,height:"100dvh",zIndex:9999,background:"linear-gradient(180deg,var(--panel) 0%,var(--panel2) 45%,var(--bg) 100%)",display:"flex",flexDirection:"column",transform:expanded?"translateY(0)":"translateY(100%)",transition:"transform 0.38s cubic-bezier(0.32,0.72,0,1)",overflow:"hidden"}}>
 
             {/* Fondo difuminado con la portada */}
             {playingCover && (
               <div style={{position:"absolute",inset:0,backgroundImage:`url(${playingCover})`,backgroundSize:"cover",backgroundPosition:"center",filter:"blur(70px) saturate(1.5)",opacity:0.32,transform:"scale(1.3)",pointerEvents:"none"}}/>
             )}
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(10,10,20,0.35),rgba(10,10,20,0.85))",pointerEvents:"none"}}/>
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(180deg,rgba(var(--bg-rgb),0.35),rgba(var(--bg-rgb),0.85))",pointerEvents:"none"}}/>
 
             <div style={{position:"relative",flex:1,minHeight:0,display:"flex",flexDirection:"column",boxSizing:"border-box",padding:"max(8px,env(safe-area-inset-top)) 22px calc(14px + env(safe-area-inset-bottom))",maxWidth:520,width:"100%",margin:"0 auto",overflow:"hidden"}}>
 
@@ -1185,14 +1348,14 @@ export default function ProfilePage() {
               <div style={{flex:"1 1 auto",minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",margin:"10px 0 14px"}}>
                 {playingCover
                   ? <img src={playingCover} alt="" style={{height:"100%",width:"auto",maxWidth:"100%",aspectRatio:"1",borderRadius:16,objectFit:"cover",boxShadow:isPlaying?"0 22px 60px rgba(0,0,0,0.65)":"0 12px 34px rgba(0,0,0,0.5)",transform:isPlaying?"scale(1)":"scale(0.92)",transition:"transform 0.4s cubic-bezier(0.32,0.72,0,1), box-shadow 0.4s"}}/>
-                  : <div style={{height:"100%",width:"auto",maxWidth:"100%",aspectRatio:"1",borderRadius:16,background:"linear-gradient(135deg,#1a1a2e,#2a2a3e)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 18px 50px rgba(0,0,0,0.55)"}}>
+                  : <div style={{height:"100%",width:"auto",maxWidth:"100%",aspectRatio:"1",borderRadius:16,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 18px 50px rgba(0,0,0,0.55)"}}>
                       <Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={76} stroke="#3a3a4e" sw={1.2}/>
                     </div>}
               </div>
 
               {/* Título + artista */}
               <div style={{marginBottom:10,flexShrink:0,textAlign:"center"}}>
-                <div style={{color:"#fff",fontSize:"1.3em",fontWeight:700,lineHeight:1.25,marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{playingTitle}</div>
+                <div style={{color:"var(--text-strong)",fontSize:"1.3em",fontWeight:700,lineHeight:1.25,marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{playingTitle}</div>
                 <div style={{color:"#a0a0b5",fontSize:"0.98em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingArtist}</div>
               </div>
 

@@ -51,7 +51,7 @@ export default function Navbar({ children }) {
         position: "sticky", top: 0, zIndex: 100,
         background: "rgba(15,15,26,0.95)",
         backdropFilter: "blur(10px)",
-        borderBottom: "1px solid rgba(42,42,62,0.5)",
+        borderBottom: "1px solid rgba(var(--border-rgb),0.5)",
         padding: "0 16px",
         paddingTop: "env(safe-area-inset-top)",
         paddingLeft: "max(16px, env(safe-area-inset-left))",
@@ -80,9 +80,20 @@ export default function Navbar({ children }) {
 
           {/* User info + logout */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 12 }}>
+            {/* Tema claro/oscuro: siempre a la vista, junto al avatar */}
+            <button onClick={toggleTema} aria-label="Cambiar tema" style={{
+              background: "none", border: "none", cursor: "pointer",
+              width: 38, height: 38, display: "flex", alignItems: "center",
+              justifyContent: "center", flexShrink: 0, borderRadius: "50%",
+            }}>
+              <Ico d={temaClaro
+                ? <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                : <><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>}
+                size={19} stroke="#eab308" />
+            </button>
             <div style={{
               width: 32, height: 32, borderRadius: "50%",
-              background: "linear-gradient(135deg, #7c5cfc, #1ed760)",
+              background: "linear-gradient(135deg, var(--accent), #1ed760)",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: "0.85em", fontWeight: 700, color: "#fff", flexShrink: 0,
             }}>
@@ -111,17 +122,17 @@ export default function Navbar({ children }) {
         {menuOpen && (
           <div style={{
             padding: "8px 16px calc(16px + env(safe-area-inset-bottom))",
-            borderTop: "1px solid rgba(42,42,62,0.5)",
+            borderTop: "1px solid rgba(var(--border-rgb),0.5)",
             display: "flex", flexDirection: "column", gap: 4,
             maxHeight: "70vh", overflowY: "auto",
           }} className="mobile-dropdown">
             {links.map(l => (
               <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)} style={{
                 padding: "12px 14px", borderRadius: 8, textDecoration: "none",
-                color: "#ccc", fontSize: "0.95em", display: "flex", alignItems: "center", gap: 11,
-                background: "rgba(26,26,46,0.5)",
+                color: "var(--text2)", fontSize: "0.95em", display: "flex", alignItems: "center", gap: 11,
+                background: "rgba(var(--panel-rgb),0.5)",
               }}>
-                <Ico d={l.icon} size={18} stroke="#7c5cfc" /> {l.label}
+                <Ico d={l.icon} size={18} stroke="var(--accent)" /> {l.label}
               </a>
             ))}
               <button onClick={toggleTema} style={{

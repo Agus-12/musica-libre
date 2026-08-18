@@ -143,7 +143,7 @@ export default function PWASetup() {
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 300,
           paddingTop: "env(safe-area-inset-top)",
           background: "linear-gradient(135deg,#22c55e,#16a34a)",
-          color: "#fff", boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+          color: "var(--text-strong)", boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
         }}>
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -155,7 +155,7 @@ export default function PWASetup() {
             <button
               onClick={handleUpdate}
               style={{
-                background: "rgba(255,255,255,0.25)", border: "none", color: "#fff",
+                background: "rgba(255,255,255,0.25)", border: "none", color: "var(--text-strong)",
                 padding: "8px 18px", borderRadius: 8, fontWeight: 700,
                 cursor: "pointer", fontSize: "0.95em", whiteSpace: "nowrap",
                 transition: "background 0.15s",
@@ -183,8 +183,8 @@ export default function PWASetup() {
       {isOffline && (
         <div style={{
           position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200,
-          background: "linear-gradient(135deg, #7c5cfc, #5a3fd6)",
-          color: "#fff", padding: "10px 16px",
+          background: "linear-gradient(135deg, var(--accent), #5a3fd6)",
+          color: "var(--text-strong)", padding: "10px 16px",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           fontSize: "0.85em", fontWeight: 600,
           boxShadow: "0 -4px 20px rgba(124,92,252,0.3)",
@@ -198,28 +198,28 @@ export default function PWASetup() {
       {showInstall && !isInstalled && (
         <div style={{
           position: "fixed", bottom: isOffline ? 44 : 0, left: 0, right: 0, zIndex: 199,
-          background: "#1a1a2e", borderTop: "2px solid #7c5cfc",
+          background: "var(--panel)", borderTop: "2px solid var(--accent)",
           padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
           boxShadow: "0 -4px 20px rgba(0,0,0,0.4)",
         }}>
           <div style={{
             width: 40, height: 40, borderRadius: 10,
-            background: "linear-gradient(135deg, #7c5cfc, #1ed760)",
+            background: "linear-gradient(135deg, var(--accent), #1ed760)",
             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
           }}>
             <IcMusic size={22} stroke="#fff" strokeWidth="2.2" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: "#e0e0e0", fontSize: "0.9em", fontWeight: 600 }}>Instalar AURA</div>
-            <div style={{ color: "#888", fontSize: "0.75em" }}>Funciona sin internet como una app</div>
+            <div style={{ color: "var(--text)", fontSize: "0.9em", fontWeight: 600 }}>Instalar AURA</div>
+            <div style={{ color: "var(--text3)", fontSize: "0.75em" }}>Funciona sin internet como una app</div>
           </div>
           <button onClick={handleInstall} style={{
             padding: "8px 16px", borderRadius: 8, border: "none",
-            background: "#7c5cfc", color: "#fff", fontSize: "0.85em",
+            background: "var(--accent)", color: "#fff", fontSize: "0.85em",
             cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap",
           }}>Instalar</button>
           <button onClick={() => setShowInstall(false)} style={{
-            background: "none", border: "none", color: "#555",
+            background: "none", border: "none", color: "var(--text5)",
             cursor: "pointer", fontSize: "1.4em", padding: 0, lineHeight: 1,
           }}>×</button>
         </div>

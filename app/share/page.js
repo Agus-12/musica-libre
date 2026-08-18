@@ -149,8 +149,8 @@ export default function SharePage() {
   // ── Styles ──
   const bg = {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #0f0c29 0%, #1a1a2e 50%, #24243e 100%)",
-    color: "#fff",
+    background: "linear-gradient(135deg, #0f0c29 0%, var(--panel) 50%, #24243e 100%)",
+    color: "var(--text-strong)",
     fontFamily: "'Segoe UI', system-ui, sans-serif",
     display: "flex",
     flexDirection: "column",
@@ -163,8 +163,8 @@ export default function SharePage() {
     return (
       <div style={bg}>
         <div style={{ textAlign: "center" }}>
-          <div style={{ width: 40, height: 40, border: "3px solid #333", borderTopColor: "#7c5cfc", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 16px" }}></div>
-          <p style={{ color: "#888" }}>Cargando...</p>
+          <div style={{ width: 40, height: 40, border: "3px solid #333", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 16px" }}></div>
+          <p style={{ color: "var(--text3)" }}>Cargando...</p>
           <style>{"@keyframes spin{to{transform:rotate(360deg)}}"}</style>
         </div>
       </div>
@@ -175,10 +175,10 @@ export default function SharePage() {
     return (
       <div style={bg}>
         <div style={{ textAlign: "center", maxWidth: 400 }}>
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="1.5" style={{ margin: "0 auto 16px", display: "block" }}><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" style={{ margin: "0 auto 16px", display: "block" }}><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
           <h2 style={{ marginBottom: 8 }}>No encontrado</h2>
-          <p style={{ color: "#888", marginBottom: 20 }}>{error}</p>
-          <a href="/spotify" style={{ color: "#7c5cfc", textDecoration: "underline" }}>← Ir a buscar música</a>
+          <p style={{ color: "var(--text3)", marginBottom: 20 }}>{error}</p>
+          <a href="/spotify" style={{ color: "var(--accent)", textDecoration: "underline" }}>← Ir a buscar música</a>
         </div>
       </div>
     );
@@ -189,7 +189,7 @@ export default function SharePage() {
       <div style={{ maxWidth: 480, width: "100%", textAlign: "center" }}>
         {/* Logo */}
         <div style={{ marginBottom: 24 }}>
-          <span style={{ fontSize: "1.4em", fontWeight: 800, background: "linear-gradient(135deg, #7c5cfc, #e040fb)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AURA</span>
+          <span style={{ fontSize: "1.4em", fontWeight: 800, background: "linear-gradient(135deg, var(--accent), #e040fb)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>AURA</span>
         </div>
 
         {/* Cover Art */}
@@ -204,7 +204,7 @@ export default function SharePage() {
             <button
               onClick={handleDownloadCover}
               disabled={downloading}
-              style={{ position: "absolute", bottom: 10, right: 10, background: downloading ? "#555" : "#7c5cfc", border: "none", borderRadius: "50%", width: 44, height: 44, cursor: downloading ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 15px rgba(124,92,252,0.4)" }}
+              style={{ position: "absolute", bottom: 10, right: 10, background: downloading ? "var(--text5)" : "var(--accent)", border: "none", borderRadius: "50%", width: 44, height: 44, cursor: downloading ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 15px rgba(124,92,252,0.4)" }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 18h16"/></svg>
             </button>
@@ -213,7 +213,7 @@ export default function SharePage() {
 
         {/* Fallback if no cover */}
         {!data.cover_url && (
-          <div style={{ width: 280, height: 280, borderRadius: 16, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          <div style={{ width: 280, height: 280, borderRadius: 16, background: "var(--panel)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
             <svg width="64" height="64" viewBox="0 0 24 24" fill="#333"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55C7.67 13 5 14.67 5 17s2.67 4 5 4 5-1.67 5-4V7h4V3h-7z"/></svg>
           </div>
         )}
@@ -221,7 +221,7 @@ export default function SharePage() {
         {/* Song Info */}
         <h1 style={{ fontSize: "1.4em", marginBottom: 4, fontWeight: 700 }}>{data.name}</h1>
         {data.artist && <p style={{ color: "#aaa", fontSize: "1em", marginBottom: 8 }}>{data.artist}</p>}
-        {data.source && <p style={{ color: "#666", fontSize: "0.8em", textTransform: "uppercase", letterSpacing: 1, marginBottom: 20 }}>Fuente: {sourceLabel(data.source)}</p>}
+        {data.source && <p style={{ color: "var(--text4)", fontSize: "0.8em", textTransform: "uppercase", letterSpacing: 1, marginBottom: 20 }}>Fuente: {sourceLabel(data.source)}</p>}
 
         {/* Action Buttons */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 300, margin: "0 auto" }}>
@@ -229,7 +229,7 @@ export default function SharePage() {
           <button
             onClick={handleDownloadCover}
             disabled={downloading}
-            style={{ padding: "14px 20px", borderRadius: 12, border: "none", background: downloading ? "#555" : "linear-gradient(135deg, #7c5cfc, #e040fb)", color: "#fff", fontSize: "1em", fontWeight: 700, cursor: downloading ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 20px rgba(124,92,252,0.3)" }}
+            style={{ padding: "14px 20px", borderRadius: 12, border: "none", background: downloading ? "var(--text5)" : "linear-gradient(135deg, var(--accent), #e040fb)", color: "#fff", fontSize: "1em", fontWeight: 700, cursor: downloading ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 4px 20px rgba(124,92,252,0.3)" }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 18h16"/></svg>
             {downloading ? "Descargando..." : "Descargar portada"}
@@ -241,9 +241,9 @@ export default function SharePage() {
               href={data.source_url}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ padding: "14px 20px", borderRadius: 12, border: "1px solid #444", background: "transparent", color: "#7c5cfc", fontSize: "0.95em", fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              style={{ padding: "14px 20px", borderRadius: 12, border: "1px solid var(--text6)", background: "transparent", color: "var(--accent)", fontSize: "0.95em", fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
               Abrir en {sourceLabel(data.source)}
             </a>
           )}
@@ -251,7 +251,7 @@ export default function SharePage() {
           {/* Go to app */}
           <a
             href="/spotify"
-            style={{ color: "#666", fontSize: "0.85em", textDecoration: "underline", marginTop: 8 }}
+            style={{ color: "var(--text4)", fontSize: "0.85em", textDecoration: "underline", marginTop: 8 }}
           >
             Explorar más música en AURA →
           </a>
@@ -260,15 +260,15 @@ export default function SharePage() {
         {/* Tracks list if available */}
         {data.tracks && data.tracks.length > 0 && (
           <div style={{ marginTop: 24, textAlign: "left" }}>
-            <h3 style={{ color: "#888", fontSize: "0.85em", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Canciones ({data.tracks.length})</h3>
+            <h3 style={{ color: "var(--text3)", fontSize: "0.85em", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Canciones ({data.tracks.length})</h3>
             {data.tracks.map((t, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #1a1a2e" }}>
-                <span style={{ color: "#555", fontSize: "0.8em", width: 20, textAlign: "right" }}>{t.number || i + 1}</span>
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--panel)" }}>
+                <span style={{ color: "var(--text5)", fontSize: "0.8em", width: 20, textAlign: "right" }}>{t.number || i + 1}</span>
                 <div style={{ flex: 1, overflow: "hidden" }}>
-                  <div style={{ color: "#ccc", fontSize: "0.9em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
-                  {t.artist && <div style={{ color: "#666", fontSize: "0.75em" }}>{t.artist}</div>}
+                  <div style={{ color: "var(--text2)", fontSize: "0.9em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</div>
+                  {t.artist && <div style={{ color: "var(--text4)", fontSize: "0.75em" }}>{t.artist}</div>}
                 </div>
-                {t.duration && <span style={{ color: "#555", fontSize: "0.8em" }}>{t.duration}</span>}
+                {t.duration && <span style={{ color: "var(--text5)", fontSize: "0.8em" }}>{t.duration}</span>}
               </div>
             ))}
           </div>

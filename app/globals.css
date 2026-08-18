@@ -1,7 +1,57 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; }
-a { color: #7c5cfc; text-decoration: none; font-weight: 600; }
+
+/* ═══ TEMA (variables): oscuro por defecto, claro con html.tema-claro.
+   El acento (--accent) es personalizable desde el Perfil. ═══ */
+:root {
+  --bg: #0a0a14;
+  --bg-rgb: 10,10,20;
+  --panel: #1a1a2e;
+  --panel-rgb: 26,26,46;
+  --panel2: #12121f;
+  --border: #2a2a3e;
+  --border-rgb: 42,42,62;
+  --border2: #1e1e30;
+  --text-strong: #ffffff;
+  --text: #e0e0e0;
+  --text2: #cccccc;
+  --text3: #888888;
+  --text4: #666677;
+  --text5: #555566;
+  --text6: #444455;
+  --accent: #7c5cfc;
+}
+html.tema-claro {
+  --bg: #f4f4f9;
+  --bg-rgb: 244,244,249;
+  --panel: #ffffff;
+  --panel-rgb: 255,255,255;
+  --panel2: #eef0f6;
+  --border: #d9dbe6;
+  --border-rgb: 217,219,230;
+  --border2: #e7e9f0;
+  --text-strong: #14141c;
+  --text: #23232e;
+  --text2: #3a3a46;
+  --text3: #6b6b78;
+  --text4: #83838f;
+  --text5: #9494a0;
+  --text6: #ababb6;
+}
+
+body {
+  font-family: var(--fuente, 'Segoe UI', system-ui, sans-serif);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+a { color: var(--accent); text-decoration: none; font-weight: 600; }
 a:hover { text-decoration: underline; }
+
+/* Fuentes personalizables (Perfil → Personalizar) */
+html[data-fuente="clasica"]  { --fuente: Georgia, 'Times New Roman', serif; }
+html[data-fuente="redonda"]  { --fuente: 'Avenir Next', 'Nunito', 'Segoe UI', sans-serif; }
+html[data-fuente="mono"]     { --fuente: 'SF Mono', Menlo, Consolas, monospace; }
 
 /* Puntito animado de la cola de descargas (perfil) */
 @keyframes pulse {
@@ -9,17 +59,7 @@ a:hover { text-decoration: underline; }
   50% { opacity: 0.25; }
 }
 
-/* ── MODO CLARO ─────────────────────────────────────────────────
-   La app entera usa colores oscuros en estilos inline, así que el
-   modo claro se logra invirtiendo los colores del documento raíz
-   (el filtro en <html> NO rompe los position:fixed, por spec) y
-   re-invirtiendo las imágenes/videos para que se vean normales. */
-html.tema-claro {
-  filter: invert(1) hue-rotate(180deg);
-  background: #ffffff;
-}
-html.tema-claro img,
-html.tema-claro video,
-html.tema-claro iframe {
-  filter: invert(1) hue-rotate(180deg);
-}
+/* Los SVG reciben el acento como atributo (donde var() no resuelve);
+   estas reglas lo aplican vía CSS, que sí lo resuelve. */
+svg[stroke="var(--accent)"] { stroke: var(--accent); }
+svg[fill="var(--accent)"] { fill: var(--accent); }

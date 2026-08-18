@@ -83,7 +83,7 @@ export default function DownloadsPage() {
       <h1 style={{ fontSize: "2em", marginBottom: 8 }}>
         ⬇️ Descargas <span style={{ color: "#22c55e" }}>Manuales</span>
       </h1>
-      <p style={{ color: "#888", marginBottom: 25 }}>
+      <p style={{ color: "var(--text3)", marginBottom: 25 }}>
         Agrega enlaces uno por uno y descárgalos.
       </p>
 
@@ -98,9 +98,9 @@ export default function DownloadsPage() {
             flex: 1,
             padding: "14px 16px",
             borderRadius: 10,
-            border: "1px solid #333",
-            background: "#1a1a2e",
-            color: "#fff",
+            border: "1px solid var(--border)",
+            background: "var(--panel)",
+            color: "var(--text-strong)",
             fontSize: "1em",
           }}
         />
@@ -111,7 +111,7 @@ export default function DownloadsPage() {
             borderRadius: 10,
             border: "none",
             background: "#22c55e",
-            color: "#fff",
+            color: "var(--text-strong)",
             fontSize: "1em",
             cursor: "pointer",
             fontWeight: 600,
@@ -136,7 +136,7 @@ export default function DownloadsPage() {
                 borderRadius: 10,
                 border: "none",
                 background: "#22c55e",
-                color: "#fff",
+                color: "var(--text-strong)",
                 cursor: "pointer",
                 fontWeight: 600,
                 marginBottom: 20,
@@ -167,7 +167,7 @@ export default function DownloadsPage() {
               padding: "4px 12px",
               borderRadius: 6,
               border: "none",
-              color: "#fff",
+              color: "var(--text-strong)",
               cursor: "pointer",
               fontSize: "0.8em",
             }}
@@ -177,7 +177,7 @@ export default function DownloadsPage() {
           <div style={{ color: "#22c55e", wordBreak: "break-all", fontSize: "0.95em" }}>
             {link.url}
           </div>
-          <div style={{ color: "#666", fontSize: "0.8em", marginTop: 6, display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ color: "var(--text4)", fontSize: "0.8em", marginTop: 6, display: "flex", gap: 8, alignItems: "center" }}>
             <span
               style={{
                 padding: "2px 10px",
@@ -214,7 +214,7 @@ export default function DownloadsPage() {
                 borderRadius: 8,
                 border: "none",
                 background: "#22c55e",
-                color: "#fff",
+                color: "var(--text-strong)",
                 cursor: "pointer",
                 fontWeight: 600,
                 fontSize: "0.85em",
@@ -227,7 +227,7 @@ export default function DownloadsPage() {
       ))}
 
       {links.length === 0 && (
-        <p style={{ textAlign: "center", color: "#555", padding: 40 }}>
+        <p style={{ textAlign: "center", color: "var(--text5)", padding: 40 }}>
           No hay enlaces. Agrega uno arriba 👆 o usa el <a href="/">🪞 Espejo</a>
         </p>
       )}
@@ -249,7 +249,7 @@ function Stat({ num, label, color }) {
       }}
     >
       <div style={{ fontSize: "1.5em", fontWeight: 700, color }}>{num}</div>
-      <div style={{ fontSize: "0.75em", color: "#888" }}>{label}</div>
+      <div style={{ fontSize: "0.75em", color: "var(--text3)" }}>{label}</div>
     </div>
   );
 }

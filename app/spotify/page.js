@@ -562,9 +562,9 @@ export default function SpotifyPage() {
   }
 
   // ── Styles ──
-  const IS = { padding: "12px 14px", borderRadius: 10, border: "1px solid #333", background: "#1a1a2e", color: "#fff", fontSize: "1em", outline: "none", width: "100%", boxSizing: "border-box" };
-  const BS = { padding: "10px 18px", borderRadius: 10, border: "none", background: "#7c5cfc", color: "#fff", fontSize: "0.9em", cursor: "pointer", fontWeight: 600 };
-  const TabS = (active) => ({ padding: "8px 16px", borderRadius: 8, border: "none", background: active ? "#7c5cfc" : "#1a1a2e", color: active ? "#fff" : "#888", fontSize: "0.85em", cursor: "pointer", fontWeight: active ? 700 : 400 });
+  const IS = { padding: "12px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text-strong)", fontSize: "1em", outline: "none", width: "100%", boxSizing: "border-box" };
+  const BS = { padding: "10px 18px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontSize: "0.9em", cursor: "pointer", fontWeight: 600 };
+  const TabS = (active) => ({ padding: "8px 16px", borderRadius: 8, border: "none", background: active ? "var(--accent)" : "var(--panel)", color: active ? "#fff" : "var(--text3)", fontSize: "0.85em", cursor: "pointer", fontWeight: active ? 700 : 400 });
 
   const albums = results?.albums || [];
   const artists = results?.artists || [];
@@ -576,7 +576,7 @@ export default function SpotifyPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={() => { setTab("discover"); setAlbum(null); setArtist(null); setResults(null); }} style={TabS(tab === "discover" && !album && !artist)}><Ico d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />} size={16} stroke="#7c5cfc" fill="#7c5cfc" /> Descubrir</button>
+        <button onClick={() => { setTab("discover"); setAlbum(null); setArtist(null); setResults(null); setQuery(""); setError(""); }} style={TabS(tab === "discover" && !album && !artist)}><Ico d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />} size={16} stroke="var(--accent)" fill="var(--accent)" /> Descubrir</button>
         <button onClick={() => { setTab("search"); setAlbum(null); setArtist(null); }} style={TabS(tab === "search" && !album && !artist)}>Buscar</button>
       </div>
 
@@ -599,7 +599,7 @@ export default function SpotifyPage() {
 
           {/* Charts */}
           {chartsLoading ? (
-            <div style={{ textAlign: "center", padding: 30, color: "#7c5cfc" }}>Cargando recomendaciones...</div>
+            <div style={{ textAlign: "center", padding: 30, color: "var(--accent)" }}>Cargando recomendaciones...</div>
           ) : charts && (
             <>
               {charts.latin?.length > 0 && (
@@ -636,13 +636,13 @@ export default function SpotifyPage() {
           {!loading && !results && recentSearches.length > 0 && (
             <div style={{ marginBottom: 25 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <span style={{ color: "#888", fontSize: "0.85em", fontWeight: 700 }}>Búsquedas recientes</span>
-                <button onClick={borrarRecientes} style={{ background: "none", border: "none", color: "#555", fontSize: "0.75em", cursor: "pointer", textDecoration: "underline" }}>Borrar</button>
+                <span style={{ color: "var(--text3)", fontSize: "0.85em", fontWeight: 700 }}>Búsquedas recientes</span>
+                <button onClick={borrarRecientes} style={{ background: "none", border: "none", color: "var(--text5)", fontSize: "0.75em", cursor: "pointer", textDecoration: "underline" }}>Borrar</button>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {recentSearches.map(t => (
-                  <button key={t} onClick={() => search(t)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 20, border: "1px solid #2a2a3e", background: "#1a1a2e", color: "#ccc", fontSize: "0.85em", cursor: "pointer" }}>
-                    <Ico d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} size={13} stroke="#7c5cfc" /> {t}
+                  <button key={t} onClick={() => search(t)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text2)", fontSize: "0.85em", cursor: "pointer" }}>
+                    <Ico d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} size={13} stroke="var(--accent)" /> {t}
                   </button>
                 ))}
               </div>
@@ -658,10 +658,10 @@ export default function SpotifyPage() {
                   <SectionHeader icon="" title="Artistas" subtitle="" />
                   <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10 }}>
                     {artists.map(a => (
-                      <div key={a.id} onClick={() => loadArtist(a.id)} style={{ flex: "0 0 110px", background: "#1a1a2e", borderRadius: 12, padding: 10, textAlign: "center", cursor: "pointer", border: "1px solid #2a2a3e", position: "relative" }}>
+                      <div key={a.id} onClick={() => loadArtist(a.id)} style={{ flex: "0 0 110px", background: "var(--panel)", borderRadius: 12, padding: 10, textAlign: "center", cursor: "pointer", border: "1px solid var(--border)", position: "relative" }}>
                         <ActionBtn pos="top-right" active={isFavorite("artist", a.id)} onClick={e => handleFavorite(e, "artist", a.id, a.name, "", a.picture_medium, a.source || "itunes")} type="fav" />
-                        {a.picture_medium ? <img src={a.picture_medium} style={{ width: 70, height: 70, borderRadius: "50%", objectFit: "cover", marginBottom: 6 }} /> : <div style={{ width: 70, height: 70, borderRadius: "50%", background: "#2a2a3e", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center" }}>?</div>}
-                        <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
+                        {a.picture_medium ? <img src={a.picture_medium} style={{ width: 70, height: 70, borderRadius: "50%", objectFit: "cover", marginBottom: 6 }} /> : <div style={{ width: 70, height: 70, borderRadius: "50%", background: "var(--border)", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center" }}>?</div>}
+                        <div style={{ color: "var(--text2)", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
                       </div>
                     ))}
                   </div>
@@ -673,7 +673,7 @@ export default function SpotifyPage() {
                   <AlbumGrid albums={albums} source={src} onSelect={(id) => loadAlbum(id, src)} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
                 </div>
               )}
-              {!loading && results && albums.length === 0 && artists.length === 0 && <p style={{ textAlign: "center", color: "#555", padding: 40 }}>No se encontraron resultados</p>}
+              {!loading && results && albums.length === 0 && artists.length === 0 && <p style={{ textAlign: "center", color: "var(--text5)", padding: 40 }}>No se encontraron resultados</p>}
             </div>
           )}
         </div>
@@ -682,7 +682,7 @@ export default function SpotifyPage() {
       {/* ── TAB: URL ── */}
       {tab === "url" && !album && !artist && (
         <div>
-          <p style={{ color: "#888", fontSize: "0.9em", marginBottom: 15 }}>Pegá cualquier URL de Spotify (álbum, canción, playlist):</p>
+          <p style={{ color: "var(--text3)", fontSize: "0.9em", marginBottom: 15 }}>Pegá cualquier URL de Spotify (álbum, canción, playlist):</p>
           <div style={{ display: "flex", gap: 8, marginBottom: 15, flexWrap: "wrap" }}>
             <input value={oembedUrl} onChange={e => setOembedUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && resolveOEmbed()} placeholder="https://open.spotify.com/album/..." style={{ ...IS, flex: 1, minWidth: 200 }} />
             <button onClick={resolveOEmbed} disabled={loading} style={BS}>{loading ? "..." : "Obtener"}</button>
@@ -690,7 +690,7 @@ export default function SpotifyPage() {
           {loading && <Spinner />}
           {error && <ErrorMsg error={error} />}
           {oembedResult && !loading && (
-            <div style={{ background: "#1a1a2e", borderRadius: 16, padding: 20, border: "1px solid #2a2a3e" }}>
+            <div style={{ background: "var(--panel)", borderRadius: 16, padding: 20, border: "1px solid var(--border)" }}>
               <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", marginBottom: 15 }}>
                 <img src={oembedResult.thumbnail_large || oembedResult.thumbnail} style={{ width: 160, height: 160, borderRadius: 12, objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} />
                 <div style={{ flex: 1, minWidth: 150 }}>
@@ -711,7 +711,7 @@ export default function SpotifyPage() {
       {album && !loading && (
         <div>
           <BackBtn onClick={() => setAlbum(null)} />
-          <div style={{ background: "#1a1a2e", borderRadius: 16, padding: 20, marginBottom: 20, border: "1px solid #2a2a3e", display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ background: "var(--panel)", borderRadius: 16, padding: 20, marginBottom: 20, border: "1px solid var(--border)", display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ position: "relative" }}>
               <img src={album.cover_xl || album.cover_big || album.cover_medium} style={{ width: 220, height: 220, borderRadius: 12, objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} />
               <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4 }}>
@@ -725,34 +725,34 @@ export default function SpotifyPage() {
               {album.artist_id && album.source === "itunes" ? (
                 <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { setAlbum(null); loadArtist(album.artist_id); }}>{album.artist}</p>
               ) : <p style={{ color: "#1ed760", marginBottom: 4 }}>{album.artist}</p>}
-              <p style={{ color: "#888", marginBottom: 2, fontSize: "0.9em" }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""} {album.track_count ? `— ${album.track_count} canciones` : ""}</p>
-              {album.label && <p style={{ color: "#555", fontSize: "0.8em" }}>Sello: {album.label}</p>}
-              {album.genre && <p style={{ color: "#555", fontSize: "0.8em" }}>Género: {album.genre}</p>}
+              <p style={{ color: "var(--text3)", marginBottom: 2, fontSize: "0.9em" }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""} {album.track_count ? `— ${album.track_count} canciones` : ""}</p>
+              {album.label && <p style={{ color: "var(--text5)", fontSize: "0.8em" }}>Sello: {album.label}</p>}
+              {album.genre && <p style={{ color: "var(--text5)", fontSize: "0.8em" }}>Género: {album.genre}</p>}
               {/* Ítem 8: ya no se descargan portadas (Grande/Mini) en el álbum */}
             </div>
           </div>
           {album.tracks?.length > 0 && (
             <div>
               <SectionHeader icon="" title="Canciones" subtitle="" />
-              <div style={{ background: "#1a1a2e", borderRadius: 12, border: "1px solid #2a2a3e", overflow: "hidden" }}>
+              <div style={{ background: "var(--panel)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
                 {album.tracks.map((track, i) => {
                   const trackKey = String(track.id || `${album.id}-${i}`);
                   const isPlaying = playingTrack === trackKey;
                   return (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "1px solid #2a2a3e" }}>
-                      <span style={{ color: "#555", width: 22, textAlign: "right", fontSize: "0.82em" }}>{track.number || i + 1}</span>
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--border)" }}>
+                      <span style={{ color: "var(--text5)", width: 22, textAlign: "right", fontSize: "0.82em" }}>{track.number || i + 1}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: "#e0e0e0", fontSize: "0.9em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{track.name}</div>
-                        {track.artist && track.artist !== album.artist && <div style={{ color: "#666", fontSize: "0.75em" }}>{track.artist}</div>}
+                        <div style={{ color: "var(--text)", fontSize: "0.9em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{track.name}</div>
+                        {track.artist && track.artist !== album.artist && <div style={{ color: "var(--text4)", fontSize: "0.75em" }}>{track.artist}</div>}
                       </div>
-                      {track.duration && <span style={{ color: "#555", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
+                      {track.duration && <span style={{ color: "var(--text5)", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
                       <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "", duration_ms: track.duration_ms || 0 })} type="fav" size="sm" />
                       <ActionBtn active={false} onClick={e => handleAddToPlaylist(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source)} type="add" size="sm" />
                       <ShareBtn onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} saved={isFavorite("track", trackKey)} size="sm" />
 
                       {track.preview_url && (
-                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, track.duration_ms || 0)} style={{ background: isPlaying ? "#7c5cfc" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "rgba(34,197,94,0.2)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
-                          <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "#22c55e" : "#7c5cfc"}>
+                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, track.duration_ms || 0)} style={{ background: isPlaying ? "var(--accent)" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "rgba(34,197,94,0.2)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
+                          <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "#22c55e" : "var(--accent)"}>
                             {isPlaying ? <><rect x="0" y="1" width="3" height="10" rx="1"/><rect x="6" y="1" width="3" height="10" rx="1"/></> : <polygon points="0,0 10,6 0,12"/>}
                           </svg>
                           {hasFullMp3(trackKey, track.name, track.artist || album.artist) && !isPlaying && (
@@ -773,16 +773,16 @@ export default function SpotifyPage() {
       {artist && !loading && (
         <div>
           <BackBtn onClick={() => setArtist(null)} />
-          <div style={{ background: "#1a1a2e", borderRadius: 16, padding: 20, marginBottom: 20, border: "1px solid #2a2a3e", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ background: "var(--panel)", borderRadius: 16, padding: 20, marginBottom: 20, border: "1px solid var(--border)", display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ position: "relative" }}>
-              {artist.picture_xl ? <img src={artist.picture_xl} style={{ width: 150, height: 150, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} /> : <div style={{ width: 150, height: 150, borderRadius: "50%", background: "#2a2a3e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "3em" }}>?</div>}
+              {artist.picture_xl ? <img src={artist.picture_xl} style={{ width: 150, height: 150, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 30px rgba(0,0,0,0.4)" }} /> : <div style={{ width: 150, height: 150, borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "3em" }}>?</div>}
               <div style={{ position: "absolute", bottom: 4, right: 4 }}>
                 <ActionBtn active={isFavorite("artist", artist.id)} onClick={e => handleFavorite(e, "artist", artist.id, artist.name, "", artist.picture_xl, "itunes")} type="fav" size="lg" />
               </div>
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
               <h2 style={{ fontSize: "1.4em", marginBottom: 4 }}>{artist.name}</h2>
-              {artist.nb_fans > 0 && <p style={{ color: "#888", marginBottom: 8 }}>{artist.nb_fans.toLocaleString()} fans</p>}
+              {artist.nb_fans > 0 && <p style={{ color: "var(--text3)", marginBottom: 8 }}>{artist.nb_fans.toLocaleString()} fans</p>}
               {/* Ítem 8: botones de portada en artista quitados */}
             </div>
           </div>
@@ -848,7 +848,7 @@ function DlBtn({ onClick, color, label, style }) {
 
 function BackBtn({ onClick }) {
   return (
-    <button onClick={onClick} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", fontSize: "0.9em", marginBottom: 15, padding: 0, display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
+    <button onClick={onClick} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "0.9em", marginBottom: 15, padding: 0, display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       Volver
     </button>
@@ -858,8 +858,8 @@ function BackBtn({ onClick }) {
 function SectionHeader({ icon, title, subtitle }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <h3 style={{ color: "#e0e0e0", fontSize: "1.1em", marginBottom: 2 }}>{icon} {title}</h3>
-      {subtitle && <p style={{ color: "#555", fontSize: "0.8em" }}>{subtitle}</p>}
+      <h3 style={{ color: "var(--text)", fontSize: "1.1em", marginBottom: 2 }}>{icon} {title}</h3>
+      {subtitle && <p style={{ color: "var(--text5)", fontSize: "0.8em" }}>{subtitle}</p>}
     </div>
   );
 }
@@ -868,14 +868,14 @@ function HorizontalAlbumRow({ albums, onSelect, onFavorite, onPlaylist, isFavori
   return (
     <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
       {albums.map(a => (
-        <div key={a.id} onClick={() => onSelect(a.id)} style={{ flex: "0 0 140px", background: "#1a1a2e", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid #2a2a3e", position: "relative" }}>
+        <div key={a.id} onClick={() => onSelect(a.id)} style={{ flex: "0 0 140px", background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)", position: "relative" }}>
           <img src={a.cover_big || a.cover_xl || a.cover_medium} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} loading="lazy" />
           <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 2 }}>
             <ActionBtn active={isFavorite("album", a.id)} onClick={e => onFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl, a.source || source)} type="fav" size="sm" />
           </div>
           <div style={{ padding: "6px 8px" }}>
-            <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
-            <div style={{ color: "#666", fontSize: "0.68em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.artist}</div>
+            <div style={{ color: "var(--text2)", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
+            <div style={{ color: "var(--text4)", fontSize: "0.68em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.artist}</div>
           </div>
         </div>
       ))}
@@ -890,11 +890,11 @@ function RecommendationRow({ favorites, onSelect, onFavorite, onPlaylist, isFavo
   return (
     <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
       {favAlbums.map(f => (
-        <div key={f.id} onClick={() => onSelect(f.item_id, f.source || "itunes")} style={{ flex: "0 0 140px", background: "#1a1a2e", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid #2a2a3e" }}>
-          {f.cover_url ? <img src={f.cover_url} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", aspectRatio: 1, background: "#2a2a3e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2em" }}>?</div>}
+        <div key={f.id} onClick={() => onSelect(f.item_id, f.source || "itunes")} style={{ flex: "0 0 140px", background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)" }}>
+          {f.cover_url ? <img src={f.cover_url} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", aspectRatio: 1, background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2em" }}>?</div>}
           <div style={{ padding: "6px 8px" }}>
-            <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
-            <div style={{ color: "#666", fontSize: "0.68em" }}>{f.artist}</div>
+            <div style={{ color: "var(--text2)", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+            <div style={{ color: "var(--text4)", fontSize: "0.68em" }}>{f.artist}</div>
           </div>
         </div>
       ))}
@@ -906,7 +906,7 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(145px, 1fr))", gap: 10 }}>
       {albums.map(a => (
-        <div key={a.id} onClick={() => onSelect(a.id)} style={{ background: "#1a1a2e", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid #2a2a3e", position: "relative", transition: "transform 0.15s" }}
+        <div key={a.id} onClick={() => onSelect(a.id)} style={{ background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)", position: "relative", transition: "transform 0.15s" }}
           onMouseOver={e => e.currentTarget.style.transform = "scale(1.03)"} onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}
         >
           <img src={a.cover_big || a.cover_xl || a.cover_medium} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} loading="lazy" />
@@ -916,8 +916,8 @@ function AlbumGrid({ albums, source, onSelect, onFavorite, onPlaylist, isFavorit
             <ShareBtn onClick={e => handleFavorite(e, "album", a.id, a.name, a.artist, a.cover_big || a.cover_xl || a.cover_medium, a.source || source)} saved={isFavorite("album", String(a.id))} size="sm" />
           </div>
           <div style={{ padding: "7px 9px" }}>
-            <div style={{ color: "#ccc", fontSize: "0.78em", fontWeight: 600, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
-            <div style={{ color: "#666", fontSize: "0.68em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.artist}</div>
+            <div style={{ color: "var(--text2)", fontSize: "0.78em", fontWeight: 600, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
+            <div style={{ color: "var(--text4)", fontSize: "0.68em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.artist}</div>
           </div>
         </div>
       ))}
@@ -934,5 +934,5 @@ function ErrorMsg({ error }) {
 }
 
 function Spinner() {
-  return <div style={{ textAlign: "center", padding: 30, color: "#7c5cfc" }}>Cargando...</div>;
+  return <div style={{ textAlign: "center", padding: 30, color: "var(--accent)" }}>Cargando...</div>;
 }

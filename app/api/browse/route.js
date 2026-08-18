@@ -508,21 +508,21 @@ function injectInterceptorAndToolbar(html, currentUrl, originalUrl) {
 </script>
 
 <!-- ═══ TOOLBAR ═══ -->
-<div id="__mt__" style="position:fixed!important;top:0!important;left:0!important;right:0!important;z-index:2147483647!important;background:linear-gradient(135deg,#1a1a2e,#0a2a1a)!important;border-bottom:2px solid #22c55e!important;padding:8px 15px!important;display:flex!important;align-items:center!important;gap:10px!important;font-family:'Segoe UI',sans-serif!important;font-size:13px!important;color:#e0e0e0!important;box-shadow:0 4px 20px rgba(0,0,0,.5)!important">
+<div id="__mt__" style="position:fixed!important;top:0!important;left:0!important;right:0!important;z-index:2147483647!important;background:linear-gradient(135deg,var(--panel),#0a2a1a)!important;border-bottom:2px solid #22c55e!important;padding:8px 15px!important;display:flex!important;align-items:center!important;gap:10px!important;font-family:'Segoe UI',sans-serif!important;font-size:13px!important;color:var(--text)!important;box-shadow:0 4px 20px rgba(0,0,0,.5)!important">
   <div style="font-weight:700!important;color:#22c55e!important;font-size:14px!important;flex-shrink:0!important">🪞 ESPEJO</div>
-  <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#888;font-size:12px" title="${esc}">${originalUrl.length>60?originalUrl.substring(0,60)+"...":originalUrl}</div>
+  <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text3);font-size:12px" title="${esc}">${originalUrl.length>60?originalUrl.substring(0,60)+"...":originalUrl}</div>
   <button onclick="__mirrorScan()" style="padding:5px 12px!important;border-radius:6px!important;border:none!important;background:#22c55e!important;color:#fff!important;cursor:pointer!important;font-size:12px!important;font-weight:600!important;flex-shrink:0!important">⬇️ Descargar</button>
-  <button onclick="location.href='/'" style="padding:5px 12px!important;border-radius:6px!important;border:none!important;background:#555!important;color:#fff!important;cursor:pointer!important;font-size:12px!important;font-weight:600!important;flex-shrink:0!important">🏠</button>
+  <button onclick="location.href='/'" style="padding:5px 12px!important;border-radius:6px!important;border:none!important;background:var(--text5)!important;color:#fff!important;cursor:pointer!important;font-size:12px!important;font-weight:600!important;flex-shrink:0!important">🏠</button>
 </div>
 <div style="height:40px!important"></div>
 
 <!-- Download panel -->
-<div id="__mdp__" style="position:fixed!important;top:40px!important;right:0!important;bottom:0!important;width:380px!important;z-index:2147483646!important;background:#1a1a2e!important;border-left:2px solid #22c55e!important;display:none!important;overflow-y:auto!important;padding:15px!important;font-family:'Segoe UI',sans-serif!important;color:#e0e0e0!important;box-shadow:-5px 0 30px rgba(0,0,0,.5)!important">
+<div id="__mdp__" style="position:fixed!important;top:40px!important;right:0!important;bottom:0!important;width:380px!important;z-index:2147483646!important;background:var(--panel)!important;border-left:2px solid #22c55e!important;display:none!important;overflow-y:auto!important;padding:15px!important;font-family:'Segoe UI',sans-serif!important;color:var(--text)!important;box-shadow:-5px 0 30px rgba(0,0,0,.5)!important">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
     <h3 style="margin:0;color:#22c55e;font-size:16px">⬇️ Descargar recursos</h3>
-    <button onclick="document.getElementById('__mdp__').style.display='none'" style="background:none;border:none;color:#888;cursor:pointer;font-size:18px">✕</button>
+    <button onclick="document.getElementById('__mdp__').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">✕</button>
   </div>
-  <div id="__mdl__" style="font-size:12px;color:#888">Escaneando página...</div>
+  <div id="__mdl__" style="font-size:12px;color:var(--text3)">Escaneando página...</div>
 </div>
 
 <script>
@@ -577,7 +577,7 @@ function injectInterceptorAndToolbar(html, currentUrl, originalUrl) {
     });
 
     if (resources.length === 0) {
-      list.innerHTML = '<p style="color:#666">No se encontraron recursos descargables.</p><p style="color:#555;font-size:0.9em;margin-top:10px">Tip: navegá a una página con imágenes y presioná ⬇️ de nuevo.</p>';
+      list.innerHTML = '<p style="color:var(--text4)">No se encontraron recursos descargables.</p><p style="color:var(--text5);font-size:0.9em;margin-top:10px">Tip: navegá a una página con imágenes y presioná ⬇️ de nuevo.</p>';
       return;
     }
 
@@ -595,10 +595,10 @@ function injectInterceptorAndToolbar(html, currentUrl, originalUrl) {
 
     for (var type in grouped) {
       var items = grouped[type];
-      html += '<div style="color:' + (colors[type]||'#888') + ';font-weight:600;margin:12px 0 5px;font-size:13px">' + (icons[type]||'📎') + ' ' + (names[type]||type) + ' (' + items.length + ')</div>';
+      html += '<div style="color:' + (colors[type]||'var(--text3)') + ';font-weight:600;margin:12px 0 5px;font-size:13px">' + (icons[type]||'📎') + ' ' + (names[type]||type) + ' (' + items.length + ')</div>';
       items.forEach(function(r) {
-        html += '<div style="background:#2a2a3e;border-radius:6px;padding:8px;margin-bottom:4px;display:flex;gap:6px;align-items:center">';
-        html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ccc;font-size:11px" title="' + r.url.replace(/"/g,'&quot;') + '">' + r.filename.substring(0,32) + '</span>';
+        html += '<div style="background:var(--border);border-radius:6px;padding:8px;margin-bottom:4px;display:flex;gap:6px;align-items:center">';
+        html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text2);font-size:11px" title="' + r.url.replace(/"/g,'&quot;') + '">' + r.filename.substring(0,32) + '</span>';
         html += '<a href="/api/download?url=' + encodeURIComponent(r.url) + '&filename=' + encodeURIComponent(r.filename) + '" download style="padding:3px 8px;border-radius:4px;background:#22c55e;color:#fff;font-size:10px;text-decoration:none;flex-shrink:0;font-weight:600">⬇</a>';
         html += '<a href="' + r.url + '" target="_blank" style="padding:3px 8px;border-radius:4px;background:#3b82f6;color:#fff;font-size:10px;text-decoration:none;flex-shrink:0;font-weight:600">🔗</a>';
         html += '</div>';
@@ -654,5 +654,5 @@ function injectInterceptorAndToolbar(html, currentUrl, originalUrl) {
 
 function errorPage(status, msg) {
   msg = msg || `Error ${status}`;
-  return new NextResponse(`<!DOCTYPE html><html><body style="background:#0f0f1a;color:#e0e0e0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><div style="font-size:3em;margin-bottom:15px">\u274c</div><h1>Error</h1><p style="color:#888;margin-top:10px;line-height:1.5">${msg}</p><a href="/" style="color:#22c55e;margin-top:20px;display:inline-block">← Volver</a></div></body></html>`, { status: 200, headers: { "Content-Type": "text/html" } });
+  return new NextResponse(`<!DOCTYPE html><html><body style="background:#0f0f1a;color:var(--text);font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><div style="font-size:3em;margin-bottom:15px">\u274c</div><h1>Error</h1><p style="color:var(--text3);margin-top:10px;line-height:1.5">${msg}</p><a href="/" style="color:#22c55e;margin-top:20px;display:inline-block">← Volver</a></div></body></html>`, { status: 200, headers: { "Content-Type": "text/html" } });
 }

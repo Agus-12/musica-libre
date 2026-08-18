@@ -56,9 +56,9 @@ export async function GET(req) {
 
 function createPlaceholderSvg(status) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180">
-    <rect fill="#1a1a2e" width="300" height="180"/>
-    <text fill="#555" font-family="sans-serif" font-size="14" x="150" y="80" text-anchor="middle">🚫 No se pudo cargar</text>
-    <text fill="#444" font-family="sans-serif" font-size="11" x="150" y="105" text-anchor="middle">Error ${status}</text>
+    <rect fill="var(--panel)" width="300" height="180"/>
+    <text fill="var(--text5)" font-family="sans-serif" font-size="14" x="150" y="80" text-anchor="middle">🚫 No se pudo cargar</text>
+    <text fill="var(--text6)" font-family="sans-serif" font-size="11" x="150" y="105" text-anchor="middle">Error ${status}</text>
   </svg>`;
   return svg;
 }

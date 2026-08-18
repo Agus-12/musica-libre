@@ -93,7 +93,7 @@ function ToastItem({ toast, onDismiss }) {
 
   const colors = {
     success: { bg: "rgba(34,197,94,0.95)", border: "#22c55e", glow: "rgba(34,197,94,0.3)" },
-    info: { bg: "rgba(124,92,252,0.95)", border: "#7c5cfc", glow: "rgba(124,92,252,0.3)" },
+    info: { bg: "rgba(124,92,252,0.95)", border: "var(--accent)", glow: "rgba(124,92,252,0.3)" },
     warning: { bg: "rgba(234,179,8,0.95)", border: "#eab308", glow: "rgba(234,179,8,0.3)" },
     error: { bg: "rgba(239,68,68,0.95)", border: "#ef4444", glow: "rgba(239,68,68,0.3)" },
     download: { bg: "rgba(30,215,96,0.95)", border: "#1ed760", glow: "rgba(30,215,96,0.3)" },
@@ -105,7 +105,7 @@ function ToastItem({ toast, onDismiss }) {
       onClick={onDismiss}
       style={{
         background: c.bg,
-        color: "#fff",
+        color: "var(--text-strong)",
         padding: "12px 16px",
         borderRadius: 12,
         boxShadow: `0 8px 28px ${c.glow}, 0 2px 8px rgba(0,0,0,0.4)`,

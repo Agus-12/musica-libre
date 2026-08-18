@@ -19,7 +19,7 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#0a0a14",
+  themeColor: "var(--bg)",
 };
 
 export default function RootLayout({ children }) {
@@ -29,8 +29,10 @@ export default function RootLayout({ children }) {
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="icon" href="/favicon-64.png" sizes="64x64" />
+        {/* Aplica tema/acento/fuente ANTES del primer pintado (sin parpadeo) */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement;if(localStorage.getItem("aura_tema")==="claro")d.classList.add("tema-claro");var a=localStorage.getItem("aura_accent");if(a)d.style.setProperty("--accent",a);var f=localStorage.getItem("aura_fuente");if(f)d.setAttribute("data-fuente",f);}catch(e){}` }} />
       </head>
-      <body style={{ margin: 0, background: "#0a0a14", color: "#e0e0e0", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <body style={{ margin: 0, background: "var(--bg)", color: "var(--text)", fontFamily: "var(--fuente, 'Segoe UI', system-ui, sans-serif)" }}>
         <Providers>{children}</Providers>
         <PWASetup />
       </body>
