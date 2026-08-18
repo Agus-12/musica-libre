@@ -63,15 +63,18 @@ async function manejarGET(req) {
     /* ── FEED VIVO: charts y lanzamientos REALES (Deezer los
        actualiza a diario) + Latin Hits de iTunes ── */
     if (action === "feed") {
-      const [chartAlb, releases, chartTracks, latin] = await Promise.all([
+      const [chartAlb, releases, seleccion, chartTracks, latin] = await Promise.all([
         fetchJSON(DEEZER_BASE + "/chart/0/albums?limit=12").catch(() => ({ data: [] })),
         fetchJSON(DEEZER_BASE + "/editorial/0/releases?limit=12").catch(() => ({ data: [] })),
+        // Respaldo: la selección curada de Deezer (releases suele venir vacío)
+        fetchJSON(DEEZER_BASE + "/editorial/0/selection").catch(() => ({ data: [] })),
         fetchJSON(DEEZER_BASE + "/chart/0/tracks?limit=14").catch(() => ({ data: [] })),
         fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent("latin hits") + "&entity=album&limit=10").catch(() => ({ results: [] })),
       ]);
+      const nuevosData = (releases.data || []).length ? releases.data : (seleccion.data || []);
       const resp = NextResponse.json({
         top: (chartAlb.data || []).map(normalizeDeezerAlbum),
-        nuevos: (releases.data || []).map(normalizeDeezerAlbum),
+        nuevos: nuevosData.map(normalizeDeezerAlbum).filter(a => a.id && a.name),
         momento: (chartTracks.data || []).filter(t => t.id && t.album).map(t => ({
           id: String(t.id),
           name: t.title || "",
@@ -91,16 +94,22 @@ async function manejarGET(req) {
     /* ── SUGERENCIAS: autocompletado estilo Spotify mientras tecleás ── */
     if (action === "sugerir") {
       if (!query || query.length < 2) return NextResponse.json({ sugerencias: [] });
-      const [art, trk] = await Promise.all([
-        fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent(query) + "&limit=3").catch(() => ({ data: [] })),
-        fetchJSON(DEEZER_BASE + "/search?q=" + encodeURIComponent(query) + "&limit=6").catch(() => ({ data: [] })),
-      ]);
+      /* Un solo viaje: las canciones top para lo tecleado. Los ARTISTAS
+         salen de esas canciones (ordenadas por popularidad real): así
+         "ari" sugiere a Ariana Grande y no a un "Ari" desconocido. */
+      const trk = await fetchJSON(DEEZER_BASE + "/search?q=" + encodeURIComponent(query) + "&limit=12").catch(() => ({ data: [] }));
       const sugerencias = [];
-      for (const a of (art.data || [])) {
-        sugerencias.push({ tipo: "artista", texto: a.name || "", cover: a.picture_medium || "" });
+      const artVistos = new Set();
+      for (const t of (trk.data || [])) {
+        const a = t.artist;
+        if (!a || !a.name || artVistos.has(a.name.toLowerCase())) continue;
+        artVistos.add(a.name.toLowerCase());
+        sugerencias.push({ tipo: "artista", texto: a.name, cover: a.picture_medium || a.picture || "" });
+        if (artVistos.size >= 3) break;
       }
       const vistas = new Set();
       for (const t of (trk.data || [])) {
+        if (vistas.size >= 5) break;
         const k = claveDedupe(t.artist?.name, t.title);
         if (vistas.has(k)) continue;
         vistas.add(k);
