@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "prebuild": "node scripts/version-sw.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
