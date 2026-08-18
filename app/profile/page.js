@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
+import { useDownloads } from "../components/DownloadManager";
 
 let ytApiLoaded = false;
 let ytApiPromise = null;
@@ -53,6 +54,7 @@ export default function ProfilePage() {
   const [playlistItems, setPlaylistItems] = useState([]);
   const [downloadingItems, setDownloadingItems] = useState({});
   const toast = useToast();
+  const { queue } = useDownloads();
 
   const [playingKey, setPlayingKey] = useState(null);
   const [playingTitle, setPlayingTitle] = useState("");
@@ -97,7 +99,11 @@ export default function ProfilePage() {
       const offline = JSON.parse(localStorage.getItem("ml_offline") || "{}");
       const items = [];
       for (const [key, entry] of Object.entries(mp3s)) {
-        if (!entry.video_id && !entry.apple_url && !entry.audio_url) continue;
+        // Antes descartabamos entradas vacias, pero si Vercel rechazaba
+        // todos los candidatos (ej: Karol G sin video oficial en YouTube),
+        // la cancion nunca aparecia en Descargadas. La mostramos aunque
+        // este vacia para que el usuario sepa que se intento.
+        if (!entry.video_id && !entry.apple_url && !entry.audio_url && !entry.title) continue;
         let coverUrl = "", artistName = "", trackName = entry.title || key;
         const oe = offline[key];
         if (oe) { coverUrl = oe.cover_url || ""; artistName = oe.artist || ""; trackName = oe.name || trackName; }
@@ -139,7 +145,7 @@ export default function ProfilePage() {
     } catch { setDownloadedMusic([]); }
   }
 
-  useEffect(() => { refreshDownloads(); }, [favorites]);
+  useEffect(() => { refreshDownloads(); }, [favorites, queue]);
 
   /* CLAVE PARA EL AUTOPLAY: creamos el reproductor apenas carga la página,
      NO cuando tocás una canción. Antes el iframe nacía dentro del click y
