@@ -138,6 +138,44 @@ export default function PWASetup() {
      Un toque en "Actualizar ahora" y listo: nada de reinstalar. ── */
   const [novedades, setNovedades] = useState(null);
   const [showNovedades, setShowNovedades] = useState(false);
+
+  /* ── Modo sin datos CONSCIENTE ──────────────────────────────────
+     Si está activo pero detectamos internet (ping de <1 KB al abrir
+     la app o volver a ella), avisamos: nadie se queda "atrapado" en
+     modo offline por olvidarlo encendido. */
+  const [avisoDatos, setAvisoDatos] = useState(false);
+  useEffect(() => {
+    let ultimoPing = 0;
+    const revisar = async () => {
+      try {
+        if (localStorage.getItem("aura_sin_datos") !== "1") { setAvisoDatos(false); return; }
+        if (sessionStorage.getItem("aura_ping_snooze") === "1") return;
+        if (Date.now() - ultimoPing < 60000) return;
+        ultimoPing = Date.now();
+        const r = await fetch("/manifest.json?aura-ping=" + Date.now(), { cache: "no-store", signal: AbortSignal.timeout(4000) });
+        if (r.ok) setAvisoDatos(true);
+      } catch {}
+    };
+    const alVolver = () => { if (document.visibilityState === "visible") revisar(); };
+    setTimeout(revisar, 2500);
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("aura-sin-datos", (e) => { if (!e.detail) setAvisoDatos(false); else setTimeout(revisar, 1500); });
+    return () => document.removeEventListener("visibilitychange", alVolver);
+  }, []);
+  async function salirDeSinDatos() {
+    try {
+      localStorage.setItem("aura_sin_datos", "");
+      const c = await caches.open("ml-config");
+      await c.delete("modo-sin-datos");
+      window.dispatchEvent(new CustomEvent("aura-sin-datos", { detail: false }));
+    } catch {}
+    setAvisoDatos(false);
+    window.location.reload();
+  }
+  function seguirSinDatos() {
+    try { sessionStorage.setItem("aura_ping_snooze", "1"); } catch {}
+    setAvisoDatos(false);
+  }
   useEffect(() => {
     if (!hayUpdate) return;
     fetch("/novedades.json?v=" + Date.now())
@@ -165,6 +203,20 @@ export default function PWASetup() {
 
   return (
     <>
+      {/* ── Aviso: modo sin datos activo PERO hay internet ── */}
+      {avisoDatos && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 350, padding: "12px 16px calc(14px + env(safe-area-inset-bottom))", background: "rgba(10,10,20,0.85)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(234,179,8,0.35)" }}>
+          <div style={{ maxWidth: 500, margin: "0 auto" }}>
+            <div style={{ color: "#eab308", fontWeight: 800, fontSize: "0.88em", marginBottom: 4 }}>Hay internet disponible</div>
+            <div style={{ color: "rgba(230,230,240,0.7)", fontSize: "0.78em", marginBottom: 10, lineHeight: 1.45 }}>El modo sin datos sigue activo. ¿Lo apagamos para usar la conexión?</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={salirDeSinDatos} style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "none", background: "#eab308", color: "#141414", fontWeight: 800, fontSize: "0.85em", cursor: "pointer" }}>Usar internet</button>
+              <button onClick={seguirSinDatos} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "rgba(230,230,240,0.7)", fontWeight: 700, fontSize: "0.85em", cursor: "pointer" }}>Seguir sin datos</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal de NOVEDADES: qué trae la versión nueva ── */}
       {showNovedades && hayUpdate && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>

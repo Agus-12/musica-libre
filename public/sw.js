@@ -68,6 +68,14 @@ self.addEventListener('fetch', (event) => {
   // Skip chrome-extension and other non-http
   if (!url.protocol.startsWith('http')) return;
 
+  /* Ping de red (~500 bytes): único request que puede salir aunque el
+     modo sin datos esté activo. Sirve para avisarle al usuario
+     "hay internet disponible, ¿querés desactivar el modo?" */
+  if (url.searchParams.has('aura-ping')) {
+    event.respondWith(fetch(request, { cache: 'no-store' }).catch(() => new Response('', { status: 503 })));
+    return;
+  }
+
   // Portadas servidas por nuestro proxy: cache primero, así se ven sin
   // internet (incluida la carátula de la pantalla de bloqueo).
   if (url.pathname.startsWith('/api/proxy')) {
