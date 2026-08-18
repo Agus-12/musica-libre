@@ -61,6 +61,10 @@ export default function SpotifyPage() {
   const [charts, setCharts] = useState(null);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [playingTrack, setPlayingTrack] = useState(null);
+  /* Mini-reproductor de la sección Música */
+  const [nowPlaying, setNowPlaying] = useState(null);   // {key,name,artist,cover}
+  const [prevSonando, setPrevSonando] = useState(false);
+  const [prevProg, setPrevProg] = useState(0);
   const [savedOfflineIds, setSavedOfflineIds] = useState(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -221,7 +225,13 @@ export default function SpotifyPage() {
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
-      audioRef.current.addEventListener("ended", () => { setPlayingTrack(null); if(navigator.mediaSession){ navigator.mediaSession.playbackState = "none"; navigator.mediaSession.metadata = null; } });
+      audioRef.current.addEventListener("ended", () => { setPlayingTrack(null); setNowPlaying(null); if(navigator.mediaSession){ navigator.mediaSession.playbackState = "none"; navigator.mediaSession.metadata = null; } });
+      audioRef.current.addEventListener("play", () => setPrevSonando(true));
+      audioRef.current.addEventListener("pause", () => setPrevSonando(false));
+      audioRef.current.addEventListener("timeupdate", () => {
+        const a = audioRef.current;
+        if (a && a.duration > 0) setPrevProg((a.currentTime / a.duration) * 100);
+      });
     }
   }, []);
 
@@ -251,11 +261,13 @@ export default function SpotifyPage() {
       audio.pause();
       audio.currentTime = 0;
       setPlayingTrack(null);
+      setNowPlaying(null);
       if ("mediaSession" in navigator) {
         navigator.mediaSession.playbackState = "none";
       }
       return;
     }
+    setNowPlaying({ key: trackId, name: trackName, artist: trackArtist, cover: trackCover });
     // Stop current and play new
     audio.pause();
     audio.currentTime = 0;
@@ -673,7 +685,27 @@ export default function SpotifyPage() {
   const src = results?.source || "";
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "15px 20px", minHeight: "100vh", position: "relative" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "15px 20px", paddingBottom: nowPlaying ? "calc(95px + env(safe-area-inset-bottom))" : undefined, minHeight: "100vh", position: "relative" }}>
+
+      {/* ── Mini-reproductor de Música (canción completa o preview) ── */}
+      {nowPlaying && (
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 90, background: "linear-gradient(180deg, rgba(24,24,40,0.98), rgba(12,12,22,0.99))", borderTop: "1px solid rgba(124,92,252,0.18)", backdropFilter: "blur(20px)", boxShadow: "0 -8px 32px rgba(0,0,0,0.5)" }}>
+          <div style={{ height: 2.5, background: "rgba(255,255,255,0.07)" }}>
+            <div style={{ height: "100%", width: prevProg + "%", background: "linear-gradient(90deg,#22c55e,#4ade80)", transition: "width 0.25s linear" }} />
+          </div>
+          <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", gap: 12, padding: "10px 16px calc(10px + env(safe-area-inset-bottom))" }}>
+            {nowPlaying.cover ? <img src={nowPlaying.cover} style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 46, height: 46, borderRadius: 8, background: "var(--border)", flexShrink: 0 }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: "#f0f0f0", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nowPlaying.name}</div>
+              <div style={{ color: "#8a8a9a", fontSize: "0.74em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nowPlaying.artist}</div>
+            </div>
+            <button onClick={() => { const a = audioRef.current; if (!a) return; if (a.paused) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); } else a.pause(); }} style={{ background: "linear-gradient(135deg,#22c55e,#16a34a)", border: "none", borderRadius: "50%", width: 46, height: 46, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: "0 4px 16px rgba(34,197,94,0.4)" }}>
+              <Ico d={prevSonando ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={18} stroke="#fff" fill="#fff" />
+            </button>
+            <button onClick={() => { const a = audioRef.current; if (a) { try { a.pause(); a.currentTime = 0; } catch {} } setPlayingTrack(null); setNowPlaying(null); }} title="Cerrar" style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "50%", width: 34, height: 34, cursor: "pointer", color: "#8a8a9a", fontSize: "0.9em", flexShrink: 0 }}>✕</button>
+          </div>
+        </div>
+      )}
       {playlistModal && <AddToPlaylistModal item={playlistModal} onClose={() => setPlaylistModal(null)} />}
 
       {/* Visor de playlist del chart */}
@@ -702,7 +734,7 @@ export default function SpotifyPage() {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={() => { setTab("discover"); setAlbum(null); setArtist(null); setResults(null); setQuery(""); setError(""); }} style={TabS(tab === "discover" && !album && !artist)}><Ico d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />} size={16} stroke="var(--accent)" fill="var(--accent)" /> Descubrir</button>
+        <button onClick={() => { setTab("discover"); setAlbum(null); setArtist(null); setResults(null); setQuery(""); setError(""); }} style={TabS(tab === "discover" && !album && !artist)}><Ico d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />} size={16} stroke="currentColor" fill="currentColor" /> Descubrir</button>
         <button onClick={() => { setTab("search"); setAlbum(null); setArtist(null); }} style={TabS(tab === "search" && !album && !artist)}>Buscar</button>
       </div>
 

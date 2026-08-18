@@ -1,12 +1,12 @@
 {
-  "version": "18 de agosto, 2026 · v10",
+  "version": "18 de agosto, 2026 · v11",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🎚 Mini-reproductor en la sección Música: controlá lo que suena sin salir de Descubrir",
+    "👁 El icono de Descubrir ya se ve con cualquier tema y color de acento",
     "▶️ Seguir escuchando ahora suena AL TOQUE, ahí mismo en Descubrir",
     "📵 Nuevo Modo sin datos (Perfil → Personalizar): actívalo al salir y la app no toca internet, solo tu música descargada",
     "🎛 Chips de mood: Fiesta, Chill, Gym, Corazón roto... un toque y a buscar",
-    "📜 Playlists del momento: las listas que el mundo escucha, abribles canción por canción",
-    "❤️ De tus favoritos: un recorrido aleatorio por lo tuyo en cada visita",
-    "🔄 Botón de refrescar: re-baraja los géneros del feed al instante"
+    "📜 Playlists del momento: las listas que el mundo escucha, abribles canción por canción"
   ]
 }
