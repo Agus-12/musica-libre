@@ -81,12 +81,15 @@ self.addEventListener('fetch', (event) => {
     /* download-mp3 NUNCA se cachea: es el polling de descargas y una
        respuesta vieja ("pendiente") rompería el estado real. */
     if (url.pathname.startsWith('/api/download-mp3')) {
-      event.respondWith(
-        fetch(request).catch(() => new Response(
+      event.respondWith((async () => {
+        if (await modoSinDatos()) {
+          return new Response(JSON.stringify({ error: 'Modo sin datos activo', offline: true }), { headers: { 'Content-Type': 'application/json' }, status: 503 });
+        }
+        return fetch(request).catch(() => new Response(
           JSON.stringify({ error: 'Sin conexión', offline: true }),
           { headers: { 'Content-Type': 'application/json' }, status: 503 }
-        ))
-      );
+        ));
+      })());
       return;
     }
     /* Feed y búsquedas: caché primero + refresco por detrás. La pantalla
@@ -115,6 +118,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith((async () => {
       try {
+        if (await modoSinDatos()) throw new Error('modo-sin-datos');
         const fresca = await conTimeout(fetch(request), 4000);
         if (fresca && fresca.ok) {
           const cache = await caches.open(STATIC_CACHE);
@@ -155,6 +159,16 @@ self.addEventListener('fetch', (event) => {
 /* Red con LÍMITE de tiempo: si la conexión está caída o inservible
    (wifi muerto, datos sin señal real), no nos quedamos colgados
    esperando: a los pocos segundos caemos al modo offline (caché). */
+/* "Modo sin datos": interruptor manual del usuario (Personalizar).
+   iOS no deja a las webs distinguir WiFi de datos móviles, así que
+   cuando está activo NO tocamos la red para nada: todo del caché. */
+async function modoSinDatos() {
+  try {
+    const c = await caches.open('ml-config');
+    return Boolean(await c.match('modo-sin-datos'));
+  } catch { return false; }
+}
+
 function conTimeout(promesa, ms) {
   return Promise.race([
     promesa,
@@ -164,6 +178,7 @@ function conTimeout(promesa, ms) {
 
 async function networkFirstWithCache(event, cacheName) {
   try {
+    if (await modoSinDatos()) throw new Error('modo-sin-datos');
     const response = await conTimeout(fetch(event.request), 5000);
     if (response.ok) {
       const cache = await caches.open(cacheName);
@@ -184,6 +199,7 @@ async function cacheFirstWithNetwork(event, cacheName) {
   const cached = await caches.match(event.request);
   if (cached) return cached;
   try {
+    if (await modoSinDatos()) return new Response('', { status: 404 });
     const response = await fetch(event.request);
     if (response.ok) {
       const cache = await caches.open(cacheName);
@@ -197,6 +213,11 @@ async function cacheFirstWithNetwork(event, cacheName) {
 
 async function staleWhileRevalidate(event, cacheName) {
   const cached = await caches.match(event.request);
+  if (await modoSinDatos()) {
+    return cached || new Response(JSON.stringify({ error: 'Modo sin datos activo', offline: true }), {
+      headers: { 'Content-Type': 'application/json' }, status: 503,
+    });
+  }
   const fetchPromise = fetch(event.request).then((response) => {
     if (response.ok) {
       const cache = caches.open(cacheName);
@@ -230,6 +251,9 @@ async function audioConRange(event) {
   let completa = await cache.match(request, { ignoreVary: true, ignoreSearch: false });
 
   if (!completa) {
+    if (await modoSinDatos()) {
+      return new Response('Modo sin datos activo', { status: 504, statusText: 'Sin datos' });
+    }
     // No la tenemos: la pedimos entera (sin Range) para poder guardarla.
     try {
       const limpia = new Request(request.url, {
