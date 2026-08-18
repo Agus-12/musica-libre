@@ -723,8 +723,11 @@ export default function SpotifyPage() {
             </div>
             <div style={{ color: "var(--text4)", fontSize: "0.85em", marginTop: 2 }}>Esto está sonando hoy</div>
             </div>
-            <button onClick={() => loadCharts(true)} title="Refrescar el feed" disabled={chartsLoading} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "50%", width: 40, height: 40, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Ico d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></>} size={17} stroke="var(--accent)" />
+            <button onClick={() => loadCharts(true)} title="Refrescar el feed" disabled={chartsLoading} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: "50%", width: 40, height: 40, cursor: chartsLoading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: chartsLoading ? 0.85 : 1 }}>
+              {/* Gira mientras el feed se refresca: se VE que está trabajando */}
+              <span style={{ display: "flex", animation: chartsLoading ? "girar 0.7s linear infinite" : "none" }}>
+                <Ico d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></>} size={17} stroke="var(--accent)" />
+              </span>
             </button>
           </div>
 

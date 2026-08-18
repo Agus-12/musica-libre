@@ -67,3 +67,8 @@ svg[fill="var(--accent)"] { fill: var(--accent); }
 /* Candado anti-desborde horizontal: ningún contenido largo puede
    volver a ensanchar la página entera hacia los lados. */
 html, body { overflow-x: hidden; max-width: 100%; }
+
+/* Giro del botón de refrescar el feed */
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
