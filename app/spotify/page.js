@@ -117,9 +117,28 @@ export default function SpotifyPage() {
     }
   }, []);
 
-  async function playPreview(url, trackId, trackName, trackArtist, trackCover) {
+  async function playPreview(url, trackId, trackName, trackArtist, trackCover, trackDurMs) {
     const audio = audioRef.current;
     if (!audio) return;
+    /* Corte de seguridad: si el archivo trae cola de más (silencio/ruido
+       al final), lo terminamos en la duración real de iTunes + 12 s. */
+    try {
+      if (audio._auraCap) { audio.removeEventListener("timeupdate", audio._auraCap); audio._auraCap = null; }
+      if (trackDurMs && trackDurMs > 0) {
+        const fin = trackDurMs / 1000 + 12;
+        const cap = () => {
+          if (audio.currentTime >= fin) {
+            audio.removeEventListener("timeupdate", cap);
+            audio._auraCap = null;
+            try { audio.pause(); } catch {}
+            setPlayingTrack(null);
+            if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "none";
+          }
+        };
+        audio._auraCap = cap;
+        audio.addEventListener("timeupdate", cap);
+      }
+    } catch {}
     if (playingTrack === trackId) {
       audio.pause();
       audio.currentTime = 0;
@@ -697,7 +716,7 @@ export default function SpotifyPage() {
                       <ShareBtn onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} saved={isFavorite("track", trackKey)} size="sm" />
 
                       {track.preview_url && (
-                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium)} style={{ background: isPlaying ? "#7c5cfc" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "rgba(34,197,94,0.2)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
+                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, track.duration_ms || 0)} style={{ background: isPlaying ? "#7c5cfc" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "rgba(34,197,94,0.2)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
                           <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "#22c55e" : "#7c5cfc"}>
                             {isPlaying ? <><rect x="0" y="1" width="3" height="10" rx="1"/><rect x="6" y="1" width="3" height="10" rx="1"/></> : <polygon points="0,0 10,6 0,12"/>}
                           </svg>
