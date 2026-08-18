@@ -196,17 +196,33 @@ async function manejarGET(req) {
           for (const d of (dzData.data || [])) {
             if (d.name) fotos.set(d.name.toLowerCase().trim(), d.picture_medium || d.picture || "");
           }
+          const artistas = (artistData.results || []).map(a => ({
+            id: String(a.artistId || ""),
+            name: a.artistName || "",
+            picture_medium: fotos.get((a.artistName || "").toLowerCase().trim()) || "",
+            nb_album: 0,
+            source: "itunes",
+            type: "artist",
+            source_url: a.artistLinkUrl || "",
+          })).filter(a => a.id);
+          /* Los que quedaron sin foto se buscan POR SU NOMBRE en Deezer
+             (en paralelo). Antes solo había foto si Deezer devolvía al
+             artista para el texto buscado — por eso salían con "?". */
+          await Promise.all(artistas.filter(a => !a.picture_medium).slice(0, 6).map(async (a) => {
+            try {
+              const d = await fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent('"' + a.name + '"') + "&limit=1");
+              const hit = (d.data || [])[0];
+              if (hit && hit.name) {
+                const n1 = hit.name.toLowerCase().trim(), n2 = a.name.toLowerCase().trim();
+                if (n1 === n2 || n1.includes(n2) || n2.includes(n1)) {
+                  a.picture_medium = hit.picture_medium || hit.picture || "";
+                }
+              }
+            } catch {}
+          }));
           return NextResponse.json({
             albums: (data.results || []).map(normalizeITunesAlbum),
-            artists: (artistData.results || []).map(a => ({
-              id: String(a.artistId || ""),
-              name: a.artistName || "",
-              picture_medium: fotos.get((a.artistName || "").toLowerCase().trim()) || "",
-              nb_album: 0,
-              source: "itunes",
-              type: "artist",
-              source_url: a.artistLinkUrl || "",
-            })).filter(a => a.id),
+            artists: artistas,
             songs: (songData.results || []).filter(s => s.wrapperType === "track").map(s => ({
               id: String(s.trackId || ""),
               name: s.trackName || "",
