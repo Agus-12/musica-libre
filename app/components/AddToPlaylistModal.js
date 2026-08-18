@@ -44,14 +44,14 @@ export default function AddToPlaylistModal({ item, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }} onClick={onClose}>
       <div style={{ background: "#0f0f1a", borderRadius: 16, padding: 25, maxWidth: 400, width: "100%", border: "1px solid var(--border)", position: "relative" }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ fontSize: "1.2em", marginBottom: 5 }}>➕ Agregar a playlist</h3>
+        <h3 style={{ fontSize: "1.2em", marginBottom: 5 }}>Agregar a playlist</h3>
         <p style={{ color: "var(--text3)", fontSize: "0.85em", marginBottom: 15 }}>
           {item.name} — {item.artist}
         </p>
 
         {added ? (
           <div style={{ textAlign: "center", padding: 20 }}>
-            <div style={{ fontSize: "2em", marginBottom: 10 }}>✅</div>
+            <div style={{ fontSize: "2em", marginBottom: 10, color: "#22c55e", fontWeight: 800 }}>✓</div>
             <p style={{ color: "#22c55e" }}>Agregado a &quot;{added}&quot;</p>
             <button onClick={onClose} style={{ marginTop: 10, padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer" }}>OK</button>
           </div>
@@ -59,7 +59,7 @@ export default function AddToPlaylistModal({ item, onClose }) {
           <>
             {/* Create new playlist */}
             <button onClick={() => setShowNew(!showNew)} style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px dashed var(--accent)", background: "transparent", color: "var(--accent)", cursor: "pointer", marginBottom: 12, fontSize: "0.9em" }}>
-              ✨ Crear nueva playlist
+              + Crear nueva playlist
             </button>
 
             {showNew && (
@@ -94,7 +94,7 @@ export default function AddToPlaylistModal({ item, onClose }) {
               </div>
             )}
 
-            {error && <div style={{ color: "#ef4444", fontSize: "0.85em", marginTop: 8 }}>❌ {error}</div>}
+            {error && <div style={{ color: "#ef4444", fontSize: "0.85em", marginTop: 8 }}>{error}</div>}
           </>
         )}
 

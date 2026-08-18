@@ -1,13 +1,13 @@
 {
   "version": "18 de agosto, 2026 · v5",
-  "titulo": "🎉 AURA se puso mejor",
+  "titulo": "AURA se puso mejor",
   "cambios": [
-    "⏭ Nueva vista de cola: mirá qué va a sonar (tu cola + el orden aleatorio real) y deslizá ← para quitar",
-    "⬇️ Descargá playlists COMPLETAS con un botón (modo avión total)",
-    "📊 Estadísticas: tus más escuchadas y tus artistas top (pestaña Stats)",
-    "⏭ Cola de reproducción: marcá canciones para que suenen a continuación",
-    "📃 Compartí playlists enteras con tus amigos (les llegan al buzón)",
-    "🔔 Notificaciones push: te avisamos aunque la app esté cerrada (actívalas en Perfil → Personalizar)",
-    "🎤 Arreglado: la letra karaoke ya no empuja la pantalla hacia arriba"
+    "Nueva vista de cola: mirá qué va a sonar (tu cola + el orden aleatorio real) y deslizá ← para quitar",
+    "Descargá playlists COMPLETAS con un botón (modo avión total)",
+    "Estadísticas: tus más escuchadas y tus artistas top (pestaña Stats)",
+    "Cola de reproducción: marcá canciones para que suenen a continuación",
+    "Compartí playlists enteras con tus amigos (les llegan al buzón)",
+    "Notificaciones push: te avisamos aunque la app esté cerrada (actívalas en Perfil → Personalizar)",
+    "Arreglado: la letra karaoke ya no empuja la pantalla hacia arriba"
   ]
 }

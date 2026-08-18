@@ -55,7 +55,7 @@ export default function AuthModal({ onClose }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }} onClick={onClose}>
       <div style={{ background: "#0f0f1a", borderRadius: 16, padding: 30, maxWidth: 420, width: "100%", border: "1px solid #2a2a3e" }} onClick={e => e.stopPropagation()}>
         <h2 style={{ fontSize: "1.5em", marginBottom: 5, textAlign: "center" }}>
-          🎵 {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+          {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
         </h2>
         <p style={{ color: "#888", textAlign: "center", marginBottom: 20, fontSize: "0.9em" }}>
           {mode === "login" ? "Entrá a tu cuenta para guardar favoritos y playlists" : "Creá tu cuenta gratis"}

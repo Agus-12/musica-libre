@@ -282,7 +282,7 @@ export default function ProfilePage() {
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64aBytes(VAPID_PUB) });
       const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) });
       const d = await r.json();
-      if (d.ok) { setPushOn(true); toast.success("Notificaciones activadas 🔔", 3500); }
+      if (d.ok) { setPushOn(true); toast.success("Notificaciones activadas", 3500); }
       else toast.warning(d.error || "No se pudo", 4000);
     } catch (e) {
       toast.error("No se pudo activar: " + String(e.message || e).slice(0, 60), 4000);
@@ -1236,11 +1236,11 @@ export default function ProfilePage() {
       {/* ── Panel: Personalizar ── */}
       {showCustom && (
         <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
-          <div style={{fontWeight:800,fontSize:"0.9em",marginBottom:12,color:"var(--text)"}}>🎨 Personalizar AURA</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:800,fontSize:"0.9em",marginBottom:12,color:"var(--text)"}}><Ico d={<><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>} size={16} stroke="var(--accent)"/> Personalizar AURA</div>
           <div style={{marginBottom:14}}>
             <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>TEMA</div>
             <div style={{display:"flex",gap:8}}>
-              {[["oscuro","🌙 Oscuro"],["claro","☀️ Claro"]].map(([v,l])=>(
+              {[["oscuro","Oscuro"],["claro","Claro"]].map(([v,l])=>(
                 <button key={v} onClick={()=>aplicarTema(v)} style={{padding:"8px 16px",borderRadius:10,border:"1px solid var(--border)",background:temaAct===v?"var(--accent)":"var(--panel2)",color:temaAct===v?"#fff":"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer"}}>{l}</button>
               ))}
             </div>
@@ -1256,7 +1256,7 @@ export default function ProfilePage() {
           <div style={{marginBottom:14}}>
             <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>NOTIFICACIONES</div>
             <button onClick={pushOn?desactivarPush:activarPush} style={{padding:"9px 16px",borderRadius:10,border:"1px solid var(--border)",background:pushOn?"rgba(34,197,94,0.15)":"var(--panel2)",color:pushOn?"#22c55e":"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer"}}>
-              {pushOn ? "🔔 Activadas ✓ (tocá para apagar)" : "🔕 Activar notificaciones"}
+              <span style={{display:"inline-flex",alignItems:"center",gap:7}}><Ico d={<><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></>} size={14} stroke={pushOn?"#22c55e":"var(--text2)"}/> {pushOn ? "Activadas (tocá para apagar)" : "Activar notificaciones"}</span>
             </button>
             <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:6,lineHeight:1.5}}>Te avisamos de versiones nuevas y cuando un amigo te manda una canción, aunque la app esté cerrada.</div>
           </div>
@@ -1279,7 +1279,7 @@ export default function ProfilePage() {
               <div style={{fontWeight:800,color:"var(--text)"}}>
                 {amigoVista ? (
                   <button onClick={()=>setAmigoVista(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--accent)",fontWeight:800,fontSize:"1em",padding:0}}>← Amigos</button>
-                ) : "👥 Amigos"}
+                ) : <span style={{display:"inline-flex",alignItems:"center",gap:8}}><Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={16} stroke="var(--accent)"/> Amigos</span>}
               </div>
               <button onClick={()=>{setShowFriends(false);setAmigoVista(null);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
             </div>
@@ -1331,13 +1331,13 @@ export default function ProfilePage() {
             {/* ── Buzón: canciones que te mandaron ── */}
             {buzon.length>0 && (
               <div style={{marginBottom:16,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
-                <div style={{padding:"8px 12px",fontSize:"0.7em",fontWeight:800,color:"var(--accent)",borderBottom:"1px solid var(--border2)"}}>📥 TE MANDARON ({buzon.length})</div>
+                <div style={{padding:"8px 12px",fontSize:"0.7em",fontWeight:800,color:"var(--accent)",borderBottom:"1px solid var(--border2)"}} ><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico d={<><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></>} size={13} stroke="var(--accent)"/> TE MANDARON ({buzon.length})</span></div>
                 {buzon.map(s=>(
                   <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border2)"}}>
                     <CoverImg url={s.item?.cover} size={38} r={6}/>
                     {s.item?.type === "playlist" ? (
                       <div onClick={()=>verPlaylistCompartida(s)} style={{flex:1,minWidth:0,cursor:"pointer"}}>
-                        <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📃 {s.item?.name}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={13} stroke="var(--accent)"/> {s.item?.name}</div>
                         <div style={{color:"var(--text4)",fontSize:"0.7em"}}>playlist · de @{s.de?.username} · tocá para verla</div>
                       </div>
                     ) : (
@@ -1398,7 +1398,7 @@ export default function ProfilePage() {
         <div onClick={()=>setCompartirItem(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:310,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:380,maxHeight:"70vh",overflowY:"auto"}}>
             <div style={{fontWeight:800,color:"var(--text)",marginBottom:4}}>Enviar a un amigo</div>
-            <div style={{color:"var(--text4)",fontSize:"0.78em",marginBottom:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🎵 {compartirItem.title||compartirItem.name} — {compartirItem.artist}</div>
+            <div style={{color:"var(--text4)",fontSize:"0.78em",marginBottom:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} ><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={13} stroke="var(--accent)"/> {compartirItem.title||compartirItem.name} — {compartirItem.artist}</span></div>
             {amigos.length===0 ? (
               <p style={{color:"var(--text4)",fontSize:"0.85em"}}>Primero agregá amigos (botón Amigos junto a tu nombre).</p>
             ) : amigos.map(a=>(
@@ -1420,7 +1420,7 @@ export default function ProfilePage() {
         <div onClick={()=>setPlCompartida(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:320,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:420,maxHeight:"75vh",overflowY:"auto"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-              <div style={{fontWeight:800,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📃 {plCompartida.nombre}</div>
+              <div style={{fontWeight:800,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} ><span style={{display:"inline-flex",alignItems:"center",gap:7}}><Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={15} stroke="var(--accent)"/> {plCompartida.nombre}</span></div>
               <button onClick={()=>setPlCompartida(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
             </div>
             {plCompartida.cargando ? <p style={{color:"var(--text4)",textAlign:"center",padding:20}}>Cargando...</p> : (
@@ -1475,7 +1475,7 @@ export default function ProfilePage() {
           <div>
             {total === 0 ? (
               <div style={{textAlign:"center",padding:40,color:"var(--text5)"}}>
-                <p style={{fontSize:"1.05em",color:"var(--text3)"}}>Todavía no hay datos 📊</p>
+                <p style={{fontSize:"1.05em",color:"var(--text3)"}}>Todavía no hay datos</p>
                 <p style={{fontSize:"0.82em",marginTop:8}}>Reproducí canciones desde Descargadas y acá aparecerán tus más escuchadas.</p>
               </div>
             ) : (
@@ -1490,7 +1490,7 @@ export default function ProfilePage() {
                   ))}
                 </div>
                 {/* Top canciones */}
-                <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,marginBottom:10}}>🔥 TUS MÁS ESCUCHADAS</div>
+                <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,marginBottom:10}} ><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico d={<path d="M12 2s4 4 4 9a4 4 0 01-8 0c0-1 .5-2 1-3-2 1-4 3-4 6a6 6 0 0012 0c0-5-5-9-5-9z"/>} size={13} stroke="#f97316"/> TUS MÁS ESCUCHADAS</span></div>
                 <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden",marginBottom:18}}>
                   {topCanciones.map((c, i) => (
                     <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--border2)"}}>
@@ -1508,7 +1508,7 @@ export default function ProfilePage() {
                   ))}
                 </div>
                 {/* Top artistas */}
-                <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,marginBottom:10}}>🎤 TUS ARTISTAS</div>
+                <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:800,marginBottom:10}} ><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico d={<><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>} size={13} stroke="var(--accent)"/> TUS ARTISTAS</span></div>
                 <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
                   {topArtistas.map(([a, n], i) => (
                     <div key={a} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid var(--border2)"}}>
@@ -2025,7 +2025,7 @@ export default function ProfilePage() {
                 <div ref={letraContRef} style={{flex:1,overflowY:"auto",position:"relative",padding:"10px 24px calc(120px + env(safe-area-inset-bottom))"}}>
                   {letraCargando && <p style={{color:"var(--accent)",textAlign:"center",padding:30}}>Buscando la letra...</p>}
                   {!letraCargando && letra && !letra.encontrada && (
-                    <p style={{color:"#8a8a9a",textAlign:"center",padding:30,lineHeight:1.6}}>No encontramos la letra de esta canción 😔</p>
+                    <p style={{color:"#8a8a9a",textAlign:"center",padding:30,lineHeight:1.6}}>No encontramos la letra de esta canción</p>
                   )}
                   {/* Sincronizada: karaoke con línea activa + tocar para saltar */}
                   {!letraCargando && letra && letra.lineas.length > 0 && letra.lineas.map((l, i) => (

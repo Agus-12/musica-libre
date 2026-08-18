@@ -248,7 +248,7 @@ export default function SpotifyPage() {
     
     // Show notification if playing full MP3 vs preview
     if (isFullMp3) {
-      toast.success("🎵 Reproduciendo MP3 completo: " + trackName, 3000);
+      toast.success("Reproduciendo canción completa: " + trackName, 3000);
     }
     
     audio.src = playUrl;
@@ -431,7 +431,7 @@ export default function SpotifyPage() {
         // Refrescar palomitas
         setSavedOfflineIds(new Set(Object.keys(saved)));
       } catch {}
-      toast.error("💔 Eliminada de favoritos y offline", 3000);
+      toast.error("Eliminada de favoritos y offline", 3000);
     } else {
       // Se puso el ❤️ → también guardar offline
       if (coverUrl) {
@@ -518,7 +518,7 @@ export default function SpotifyPage() {
     e.stopPropagation();
     // Si ya está guardado offline, solo mostrar mensaje
     if (isSavedOffline(itemId)) {
-      toast.info("🎵 Ya está disponible offline", 3000);
+      toast.info("Ya está disponible offline", 3000);
       return;
     }
     // 1) Guardar en favoritos (perfil)
@@ -587,7 +587,7 @@ export default function SpotifyPage() {
       saved[String(itemId)] = entry;
       localStorage.setItem("ml_offline", JSON.stringify(saved));
     } catch {}
-    const msg = itemType === "album" ? "✅ Álbum guardado offline con todas sus canciones" : "✅ Guardada para ver sin internet";
+    const msg = itemType === "album" ? "Álbum guardado offline con todas sus canciones" : "Guardada para ver sin internet";
     toast.success(msg, 4000);
     addSavedOfflineId(itemId);
   }

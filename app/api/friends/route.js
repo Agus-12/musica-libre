@@ -71,7 +71,7 @@ export async function POST(req) {
     .eq("username", username.trim().replace(/^@/, ""))
     .single();
   if (!perfil) return NextResponse.json({ error: "No existe ese usuario" }, { status: 404 });
-  if (perfil.id === user.id) return NextResponse.json({ error: "Ese sos vos 😄" }, { status: 400 });
+  if (perfil.id === user.id) return NextResponse.json({ error: "Ese es tu propio usuario" }, { status: 400 });
 
   const { error } = await supabase.from("friendships").insert({ user_id: user.id, friend_id: perfil.id });
   if (error) {

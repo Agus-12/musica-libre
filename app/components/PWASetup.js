@@ -154,7 +154,7 @@ export default function PWASetup() {
     }).catch(() => {});
     try {
       if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("AURA se actualizó 🎉", {
+        new Notification("AURA se actualizó", {
           body: "Hay una versión nueva lista. Abrí la app y tocá Actualizar.",
           icon: "/icon-192.png",
           badge: "/icon-192.png",
@@ -169,7 +169,7 @@ export default function PWASetup() {
       {showNovedades && hayUpdate && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div style={{background:"var(--panel, #1a1a2e)",border:"1px solid var(--border, #2a2a3e)",borderRadius:18,padding:24,width:"100%",maxWidth:420,maxHeight:"80vh",overflowY:"auto",boxShadow:"0 24px 80px rgba(0,0,0,0.6)"}}>
-            <div style={{fontSize:"1.15em",fontWeight:800,color:"var(--text, #e0e0e0)",marginBottom:4}}>{novedades?.titulo || "🎉 Versión nueva de AURA"}</div>
+            <div style={{fontSize:"1.15em",fontWeight:800,color:"var(--text, #e0e0e0)",marginBottom:4}}>{novedades?.titulo || "Versión nueva de AURA"}</div>
             {novedades?.version && <div style={{color:"var(--text4, #666)",fontSize:"0.75em",marginBottom:14}}>{novedades.version}</div>}
             <div style={{marginBottom:18}}>
               {(novedades?.cambios || ["Mejoras y correcciones"]).map((c, i) => (
