@@ -78,20 +78,33 @@ export function DownloadProvider({ children }) {
     } catch { return; }
     if (!candidatos.length) return;
     setQueue(prev => {
-      /* Reintentos automáticos en cada ciclo:
-         - reparaciones fallidas → vuelven a pending (la Mac pudo terminar)
-         - descargas normales fallidas → hasta 4 reintentos (antes un
-           fallo por parpadeo de red era definitivo) */
+      /* Limpieza + reintentos automáticos en cada ciclo:
+         - reparaciones cuya canción YA tiene archivo → terminadas
+           (antes se quedaban en "esperando…" aunque la canción ya
+           estuviera en OFF)
+         - reparaciones fallidas → vuelven a pending
+         - descargas normales fallidas → hasta 4 reintentos */
+      let mp3sNow = {};
+      try { mp3sNow = JSON.parse(localStorage.getItem("ml_mp3") || "{}"); } catch {}
+      const yaTieneAudio = (t) => {
+        const e = mp3sNow[String(t.key)];
+        return Boolean(e && e.audio_url);
+      };
       const base = prev.map(t => {
+        if (t.repair && t.status !== "done" && yaTieneAudio(t)) return { ...t, status: "done", savedAt: Date.now() };
         if (t.status !== "failed") return t;
         if (t.repair) return { ...t, status: "pending" };
         if ((t.intentos || 0) < 4) return { ...t, status: "pending", intentos: (t.intentos || 0) + 1 };
         return t;
       });
       const enCola = new Set(base.filter(t => t.status !== "done").map(t => t.key));
+      const enColaNombre = new Set(base.filter(t => t.status !== "done")
+        .map(t => ((t.name || "") + "|" + (t.artist || "")).toLowerCase()).filter(n => n !== "|"));
       const nuevos = [];
       for (const { key, e } of candidatos.slice(0, 6)) {
         if (enCola.has(key)) continue;
+        const nombreCand = ((e.name || "") + "|" + (e.artist || "")).toLowerCase();
+        if (nombreCand !== "|" && enColaNombre.has(nombreCand)) continue;
         nuevos.push({
           id: `fix_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${nuevos.length}`,
           key,
@@ -187,8 +200,24 @@ export function DownloadProvider({ children }) {
 }
 
 async function processOne(track, currentQueue, setQueue) {
-  setQueue(prev => prev.map(t => t.id === track.id ? { ...t, status: "downloading" } : t));
   const sq = ((track.artist + " " + track.name).trim() || track.query || String(track.key || "")).trim();
+
+  /* Reparación que ya no hace falta: si la canción ya tiene archivo
+     (el usuario la re-descargó a mano con ⟳, u otro item duplicado la
+     completó), la marcamos lista al instante en vez de dejarla en
+     "esperando…" media hora. */
+  if (track.repair) {
+    try {
+      const ya = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const e = ya[String(track.key)] || (sq ? ya[sq] : null);
+      if (e && e.audio_url) {
+        setQueue(prev => prev.map(t => t.id === track.id ? { ...t, status: "done", savedAt: Date.now() } : t));
+        return;
+      }
+    } catch {}
+  }
+
+  setQueue(prev => prev.map(t => t.id === track.id ? { ...t, status: "downloading" } : t));
   const params = new URLSearchParams();
   params.set("q", sq);
   /* Reparación: ya sabemos el video exacto → Vercel no busca en YouTube
@@ -283,13 +312,24 @@ async function processOne(track, currentQueue, setQueue) {
   } catch {}
 
   /* Una reparación solo "termina" si consiguió el archivo; si no, queda
-     como fallida y se vuelve a intentar en la próxima apertura o ciclo. */
+     como fallida y se vuelve a intentar en la próxima apertura o ciclo.
+     Si SÍ conseguimos el archivo, también damos por terminados los
+     items duplicados de la misma canción (adiós "esperando…" eternos). */
   const exito = guardadoOffline || !track.repair;
-  setQueue(prev => prev.map(t => t.id === track.id
-    ? { ...t, status: exito ? "done" : "failed",
+  const nombreDe = (t) => ((t.name || "") + "|" + (t.artist || "")).toLowerCase();
+  const esMismaCancion = (t) => t.id !== track.id && t.status !== "done" &&
+    (String(t.key) === String(track.key) || (nombreDe(t) !== "|" && nombreDe(t) === nombreDe(track)));
+  setQueue(prev => prev.map(t => {
+    if (t.id === track.id) {
+      return { ...t, status: exito ? "done" : "failed",
         error: exito ? undefined : "la Mac aún la está bajando; se reintenta solo",
-        savedAt: Date.now(), bytes: data.bytes || 0 }
-    : t));
+        savedAt: Date.now(), bytes: data.bytes || 0 };
+    }
+    if (guardadoOffline && esMismaCancion(t)) {
+      return { ...t, status: "done", savedAt: Date.now() };
+    }
+    return t;
+  }));
 
   if (track.repair) {
     if (guardadoOffline) {

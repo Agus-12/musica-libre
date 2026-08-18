@@ -121,7 +121,7 @@ export default function ProfilePage() {
           const fm = favorites.find(f => [String(f.item_id), (f.artist+" "+f.name).trim(), (f.name+" "+f.artist).trim(), f.name.trim()].includes(key));
           if (fm) { coverUrl = fm.cover_url || ""; artistName = fm.artist || ""; trackName = fm.name || trackName; }
         }
-        items.push({ key, title: trackName, artist: artistName, cover_url: coverUrl, video_id: entry.video_id || "", audio_url: entry.audio_url || "", apple_url: entry.apple_url || "", method: entry.method || (entry.video_id ? "youtube" : "apple"), saved_at: entry.saved_at || 0 });
+        items.push({ key, title: trackName, artist: artistName, cover_url: coverUrl, video_id: entry.video_id || "", audio_url: entry.audio_url || "", apple_url: entry.apple_url || "", method: entry.method || (entry.video_id ? "youtube" : "apple"), duration_ms: entry.duration_ms || null, saved_at: entry.saved_at || 0 });
       }
 
       /* Cada canción se guarda con DOS claves ("artista titulo" y el id de la
@@ -658,6 +658,12 @@ export default function ProfilePage() {
     try {
       const params = new URLSearchParams();
       params.set("q", (item.artist+" "+item.title).trim()||item.key);
+      /* Los mismos datos que usa la descarga normal: sin la duración
+         esperada, la re-descarga podía traer una versión doble (6-7 min
+         con silencio al final). */
+      if (item.duration_ms) params.set("expected_duration", String(Math.round(item.duration_ms/1000)));
+      if (item.artist) params.set("expected_artist", item.artist);
+      if (item.title) params.set("expected_song", item.title);
       let data = {};
       for (let intento = 0; intento < 13; intento++) {
         const res = await fetch("/api/download-mp3?"+params.toString());
