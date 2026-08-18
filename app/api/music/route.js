@@ -422,8 +422,14 @@ async function manejarGET(req) {
              álbum en Deezer y servimos su versión completa. */
           if (songs.length === 0) {
             try {
-              const q = ((main.artistName || "") + " " + (main.collectionName || "")).trim();
-              const b = await fetchJSON(DEEZER_BASE + "/search/album?q=" + encodeURIComponent(q) + "&limit=3");
+              /* Limpiar "- Single"/"- EP"/paréntesis: con el sufijo literal
+                 Deezer no encontraba nada y el rescate fallaba. */
+              const tituloLimpio = (main.collectionName || "")
+                .replace(/-\s*(single|ep)\s*$/i, "")
+                .replace(/\(.*?\)|\[.*?\]/g, "")
+                .trim();
+              const q = ((main.artistName || "") + " " + tituloLimpio).trim();
+              const b = await fetchJSON(DEEZER_BASE + "/search/album?q=" + encodeURIComponent(q) + "&limit=5");
               const kIt = claveDedupe(main.artistName, main.collectionName);
               const cand = (b.data || []).find(x => claveDedupe(x.artist?.name, x.title) === kIt) || (b.data || [])[0];
               if (cand) {
@@ -433,6 +439,19 @@ async function manejarGET(req) {
                 ]);
                 if ((trs.data || []).length) {
                   return NextResponse.json(normalizeDeezerAlbumDetail(det, trs.data || []));
+                }
+              }
+              // Plan B del rescate: buscarla como CANCIÓN suelta
+              const tLimpio = (main.collectionName || "").replace(/-\s*(single|ep)\s*$/i, "").replace(/\(.*?\)|\[.*?\]/g, "").trim();
+              const bt = await fetchJSON(DEEZER_BASE + "/search?q=" + encodeURIComponent(((main.artistName || "") + " " + tLimpio).trim()) + "&limit=5").catch(() => ({ data: [] }));
+              const pista = (bt.data || []).find(x => claveDedupe(x.artist?.name, x.title) === claveDedupe(main.artistName, tLimpio)) || (bt.data || [])[0];
+              if (pista && pista.album) {
+                const [det2, trs2] = await Promise.all([
+                  fetchJSON(DEEZER_BASE + "/album/" + pista.album.id),
+                  fetchJSON(DEEZER_BASE + "/album/" + pista.album.id + "/tracks?limit=100").catch(() => ({ data: [] })),
+                ]);
+                if ((trs2.data || []).length) {
+                  return NextResponse.json(normalizeDeezerAlbumDetail(det2, trs2.data || []));
                 }
               }
             } catch {}

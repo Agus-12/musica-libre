@@ -371,7 +371,7 @@ export default function SpotifyPage() {
     if (typeof qOverride === "string") setQuery(qOverride);
     setLoading(true); setError(""); setResults(null); setAlbum(null); setArtist(null);
     try {
-      const res = await fetch("/api/music?action=search&q=" + encodeURIComponent(q) + "&source=auto&limit=20");
+      const res = await fetch("/api/music?action=search&q=" + encodeURIComponent(q) + "&source=auto&limit=20&v=3");
       const data = await res.json();
       if (data.error) setError(data.error);
       else {
@@ -393,8 +393,8 @@ export default function SpotifyPage() {
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try {
       const endpoint = source === "deezer"
-        ? "/api/music?action=album&id=" + albumId + "&source=deezer"
-        : "/api/music?action=lookup&id=" + albumId + "&source=itunes";
+        ? "/api/music?action=album&id=" + albumId + "&source=deezer&v=3"
+        : "/api/music?action=lookup&id=" + albumId + "&source=itunes&v=3";
       const res = await fetch(endpoint);
       const data = await res.json();
       if (data.error) setError(data.error);
@@ -682,7 +682,7 @@ export default function SpotifyPage() {
                   <SectionHeader icon={<Ico d={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>} size={18} stroke="#22c55e" />} title="Éxitos del momento" subtitle="El top mundial de hoy" />
                   <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
                     {charts.momento.map((s, i) => (
-                      <div key={s.id} onClick={() => loadAlbum(s.album_id, "deezer", s.name)} style={{ flex: "0 0 120px", cursor: "pointer" }}>
+                      <div key={s.id} onClick={() => loadAlbum(s.album_id, "deezer", s.name)} style={{ flex: "0 0 120px", width: 120, minWidth: 0, maxWidth: 120, overflow: "hidden", cursor: "pointer" }}>
                         <div style={{ position: "relative" }}>
                           {s.cover ? <img src={s.cover} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", borderRadius: 10, display: "block" }} loading="lazy" /> : <div style={{ width: "100%", aspectRatio: 1, borderRadius: 10, background: "var(--border)" }} />}
                           <span style={{ position: "absolute", top: 6, left: 6, background: "rgba(8,10,14,0.8)", color: "#22c55e", fontWeight: 800, fontSize: "0.68em", padding: "2px 7px", borderRadius: 6 }}>#{i + 1}</span>
