@@ -74,6 +74,7 @@ export default function ProfilePage() {
   const wakeRef = useRef(null);           // reanudar al volver a la app
   const audioRef = useRef(null);          // <audio> para archivos guardados (offline)
   const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
+  const historialRef = useRef([]);        // memoria del aleatorio (no repetir)
   const usingAudioRef = useRef(false);    // ¿estamos usando el archivo o YouTube?
   const seekingRef = useRef(false);       // espejo de `seeking` para los eventos
   const [isOnline, setIsOnline] = useState(true);
@@ -589,8 +590,17 @@ export default function ProfilePage() {
         setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
       });
       a.addEventListener("ended", () => handleTrackEnd());
-      a.addEventListener("play", () => setIsPlaying(true));
-      a.addEventListener("pause", () => setIsPlaying(false));
+      a.addEventListener("play", () => {
+        setIsPlaying(true);
+        /* Avisar a iOS el estado REAL: sin esto, tras pausar desde la
+           pantalla bloqueada iOS daba la sesión por muerta y el botón
+           de reanudar no hacía nada. */
+        try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing"; } catch {}
+      });
+      a.addEventListener("pause", () => {
+        setIsPlaying(false);
+        try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused"; } catch {}
+      });
       a.addEventListener("error", () => {
         // El archivo cacheado falló: probamos con YouTube si hay conexión
         if (item.video_id && navigator.onLine) { usingAudioRef.current = false; startTrack(item); }
@@ -618,6 +628,8 @@ export default function ProfilePage() {
   }
 
   function startTrack(item) {
+    // Memoria del aleatorio: registrar lo que va sonando
+    try { historialRef.current = [...historialRef.current.filter(k => k !== item.key), item.key].slice(-25); } catch {}
     // Si la canción tiene archivo guardado, preferimos ese (funciona offline)
     if (item.audio_url) { startAudioFile(item); return; }
     usingAudioRef.current = false;
@@ -654,9 +666,19 @@ export default function ProfilePage() {
 
     if (liveRef.current.shuffle) {
       if (lista.length === 1) return lista[0];
-      let r = i;
-      while (r === i) r = Math.floor(Math.random() * lista.length);
-      return lista[r];
+      /* Aleatorio CON MEMORIA: una canción no se repite hasta que hayan
+         sonado otras (hasta 20, o todas menos una si tenés menos).
+         Antes era puro azar y repetía las mismas una y otra vez. */
+      const max = Math.max(1, Math.min(lista.length - 1, 20));
+      const recientes = new Set(historialRef.current.slice(-max));
+      let candidatos = lista.filter(x => !recientes.has(x.key) && x.key !== actual);
+      if (candidatos.length === 0) {
+        // Ya sonaron todas: reiniciamos la memoria (menos la actual)
+        historialRef.current = actual ? [actual] : [];
+        candidatos = lista.filter(x => x.key !== actual);
+        if (candidatos.length === 0) candidatos = lista;
+      }
+      return candidatos[Math.floor(Math.random() * candidatos.length)];
     }
     if (i === -1) return lista[0];
     const sig = i + dir;
@@ -722,21 +744,37 @@ export default function ProfilePage() {
       } catch {}
       if (usingAudioRef.current && audioRef.current) {
         const p = audioRef.current;
-        if (p.paused) { const pr = p.play(); if (pr && pr.catch) pr.catch(() => {}); }
+        if (p.paused) {
+          const t = p.currentTime || 0;
+          const pr = p.play();
+          /* Si iOS congeló el elemento mientras estaba pausado, el play()
+             puede fallar: lo recargamos en el mismo punto y reintentamos. */
+          if (pr && pr.catch) pr.catch(() => {
+            try {
+              p.load();
+              p.currentTime = t;
+              const pr2 = p.play();
+              if (pr2 && pr2.catch) pr2.catch(() => {});
+            } catch {}
+          });
+        }
       } else {
         try { playerRef.current?.playVideo(); } catch {}
         kickPlay();
       }
       setIsPlaying(true);
+      try { navigator.mediaSession.playbackState = "playing"; } catch {}
     });
     navigator.mediaSession.setActionHandler("pause", () => {
       if (usingAudioRef.current && audioRef.current) {
         try { audioRef.current.pause(); } catch {}
         setIsPlaying(false);
+        try { navigator.mediaSession.playbackState = "paused"; } catch {}
         return;
       }
       try { playerRef.current?.pauseVideo(); } catch {}
       setIsPlaying(false);
+      try { navigator.mediaSession.playbackState = "paused"; } catch {}
     });
     try { navigator.mediaSession.setActionHandler("stop", () => stopPlayback()); } catch {}
     try { navigator.mediaSession.setActionHandler("seekto", (d) => { if (d.seekTime != null) seekTo(d.seekTime); }); } catch {}

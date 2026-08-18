@@ -1,7 +1,9 @@
 {
-  "version": "18 de agosto, 2026",
+  "version": "18 de agosto, 2026 · v2",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🔀 Aleatorio de verdad: no repite una canción hasta que suenen hasta 20 distintas",
+    "🔒 Arreglado: reanudar desde la pantalla bloqueada ya funciona",
     "🎤 Letras de canciones en el reproductor, sincronizadas tipo karaoke",
     "🧬 'Para ti' ahora está vivo: te recomienda artistas de tu mismo estilo",
     "👥 Amigos: agregá por @usuario y mirá sus favoritos",
