@@ -478,7 +478,7 @@ export default function ProfilePage() {
     const s = pickNext(-1); if (s) startTrack(s);
   }
 
-  function setupMediaSession(item) {
+  async function setupMediaSession(item) {
     if (!("mediaSession" in navigator)) return;
     // Usamos /api/proxy para servir la portada desde nuestro dominio: así el
     // sistema la puede leer y además queda cacheada para offline.
