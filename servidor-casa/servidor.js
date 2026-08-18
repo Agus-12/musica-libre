@@ -150,13 +150,30 @@ async function buscarCandidatos(query, cuantos = 5) {
 }
 
 // Errores que significan "este video no sirve, probá con otro".
-const VIDEO_INSERVIBLE = /DRM|requested format is not available|members-only|premium|age.?restricted|sign in to confirm your age/i;
+const VIDEO_INSERVIBLE = /DRM|members-only|premium|age.?restricted|sign in to confirm your age/i;
+
+/* "Requested format is not available" merece trato aparte: cuando lo
+   dice el cliente web (o con cookies) el video de verdad no tiene audio
+   descargable. Pero cuando lo dicen android/ios/tv suele ser que ESE
+   cliente no recibió formatos (PO token, SABR), y otro cliente sí puede.
+   Antes esto descartaba el video sin probar ios/tv. */
+const FORMATO_NO_DISPONIBLE = /requested format is not available/i;
 
 // Errores que significan "no insistas con ningún cliente".
 const NO_INSISTIR = /unavailable|private|removed|copyright|no video/i;
 
 // Evita bajar dos veces lo mismo si llegan pedidos simultáneos.
 const enProceso = new Map();
+
+/* Cola global: UNA descarga a la vez. El log mostró dos yt-dlp corriendo
+   en paralelo (dos canciones pedidas a la vez): eso duplica el tráfico
+   hacia YouTube y es el disparador más rápido del 403/check de bot. */
+let colaGlobal = Promise.resolve();
+function enColaGlobal(fn) {
+  const turno = colaGlobal.then(fn, fn);
+  colaGlobal = turno.then(() => {}, () => {});
+  return turno;
+}
 
 /* Fallos recientes: si una canción acaba de fallar, NO la reintentamos
    en cada poll del cliente (sería martillar a YouTube). Guardamos el
@@ -175,7 +192,7 @@ async function obtenerAudio({ videoId, query }) {
 
   if (enProceso.has(id)) return enProceso.get(id);
 
-  const tarea = (async () => {
+  const tarea = enColaGlobal(async () => {
     const destino = path.join(CARPETA, id + ".%(ext)s");
 
     /* Candidatos a descargar.
@@ -268,10 +285,12 @@ async function obtenerAudio({ videoId, query }) {
           const msg = String(e.message || "");
           log(`  falló (${est.nombre}):`, msg.slice(0, 120));
 
-          /* DRM o formato inexistente = este video no sirve con ningún
-             cliente. Pasamos al siguiente candidato en vez de gastar
-             tres intentos más en el mismo. */
-          if (VIDEO_INSERVIBLE.test(msg)) {
+          /* DRM real = este video no sirve con ningún cliente.
+             "Formato no disponible" solo cuenta como inservible si lo
+             dice el cliente web/cookies; si lo dice android/ios/tv es
+             problema de ESE cliente y seguimos probando los demás. */
+          const esWeb = est.nombre === "web" || est.nombre === "cookies";
+          if (VIDEO_INSERVIBLE.test(msg) || (FORMATO_NO_DISPONIBLE.test(msg) && esWeb)) {
             log(`  ${vid} no se puede bajar (DRM o sin audio), pruebo otro`);
             saltarVideo = true;
             break;
@@ -296,7 +315,7 @@ async function obtenerAudio({ videoId, query }) {
       log("⚠ 3 fallos seguidos. Configurá MUSICA_COOKIES: es la solución al check de bot.");
     }
     throw ultimoError || new Error("no se pudo descargar");
-  })();
+  });
 
   enProceso.set(id, tarea);
   try { return await tarea; }
