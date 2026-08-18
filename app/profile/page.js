@@ -1505,7 +1505,7 @@ export default function ProfilePage() {
                 {/* Resumen */}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:18}}>
                   {[["Reproducciones",total],["Canciones",arr.length],["Artista top",topArtistas[0]?.[0]||"—"]].map(([l,v])=>(
-                    <div key={l} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,padding:"14px 10px",textAlign:"center"}}>
+                    <div key={l} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,padding:"14px 10px",textAlign:"center",minWidth:0,overflow:"hidden"}}>
                       <div style={{color:"var(--accent)",fontWeight:800,fontSize:typeof v==="number"?"1.5em":"0.9em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</div>
                       <div style={{color:"var(--text4)",fontSize:"0.68em",fontWeight:700,marginTop:3}}>{l}</div>
                     </div>

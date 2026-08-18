@@ -63,3 +63,7 @@ html[data-fuente="mono"]     { --fuente: 'SF Mono', Menlo, Consolas, monospace; 
    estas reglas lo aplican vía CSS, que sí lo resuelve. */
 svg[stroke="var(--accent)"] { stroke: var(--accent); }
 svg[fill="var(--accent)"] { fill: var(--accent); }
+
+/* Candado anti-desborde horizontal: ningún contenido largo puede
+   volver a ensanchar la página entera hacia los lados. */
+html, body { overflow-x: hidden; max-width: 100%; }
