@@ -691,8 +691,10 @@ export default function ProfilePage() {
       let guardado = false;
       if (data.audio_url && "caches" in window) {
         try {
+          // URL única: ningún caché viejo puede resucitar la copia corrupta.
+          data.audio_url += (data.audio_url.includes("?") ? "&" : "?") + "r=" + Date.now();
           const c = await caches.open("ml-saved-v1");
-          try { await c.delete(data.audio_url); } catch {}   // fuera la copia vieja
+          try { await c.delete(data.audio_url); } catch {}
           const r = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" }, cache: "no-store" });
           if (r.ok && r.status === 200) { await c.put(data.audio_url, r.clone()); guardado = true; }
         } catch {}

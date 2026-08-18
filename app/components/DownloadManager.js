@@ -264,11 +264,12 @@ async function processOne(track, currentQueue, setQueue) {
   let guardadoOffline = false;
   if (data.audio_url && "caches" in window) {
     try {
+      /* CACHE-BUSTING: le agregamos un parámetro único a la URL. Con URL
+         nueva, NINGÚN caché viejo (el del service worker anterior o el
+         caché HTTP de Safari, que guardaba los audios corruptos hasta
+         por un año) puede resucitar la copia con ruido. */
+      data.audio_url += (data.audio_url.includes("?") ? "&" : "?") + "r=" + Date.now();
       const c = await caches.open("ml-saved-v1");
-      /* CLAVE: primero borramos cualquier copia vieja de esa URL. Sin
-         esto, el service worker servía desde su caché el archivo
-         corrupto anterior (el del ruido blanco) en vez de bajar el
-         nuevo, y ni borrando y re-descargando se arreglaba. */
       try { await c.delete(data.audio_url); } catch {}
       const r = await fetch(data.audio_url, { headers: { Accept: "audio/*,*/*" }, cache: "no-store" });
       if (r.ok && r.status === 200) {
