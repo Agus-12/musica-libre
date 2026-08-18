@@ -599,6 +599,7 @@ export default function SpotifyPage() {
 
   const albums = results?.albums || [];
   const artists = results?.artists || [];
+  const songResults = results?.songs || [];
   const src = results?.source || "";
 
   return (
@@ -705,6 +706,27 @@ export default function SpotifyPage() {
                         <ActionBtn pos="top-right" active={isFavorite("artist", a.id)} onClick={e => handleFavorite(e, "artist", a.id, a.name, "", a.picture_medium, a.source || "itunes")} type="fav" />
                         {a.picture_medium ? <img src={a.picture_medium} style={{ width: 70, height: 70, borderRadius: "50%", objectFit: "cover", marginBottom: 6 }} /> : <div style={{ width: 70, height: 70, borderRadius: "50%", background: "var(--border)", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center" }}>?</div>}
                         <div style={{ color: "var(--text2)", fontSize: "0.78em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {songResults.length > 0 && (
+                <div style={{ marginBottom: 25 }}>
+                  <SectionHeader icon="" title="Canciones" subtitle="" />
+                  <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                    {songResults.map(s => (
+                      <div key={s.id} onClick={() => loadAlbum(s.album_id, "itunes")} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
+                        {s.cover ? <img src={s.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ color: "var(--text)", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+                          <div style={{ color: "var(--text4)", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}{s.album ? " · " + s.album : ""}</div>
+                        </div>
+                        {s.preview_url && (
+                          <button onClick={(e) => { e.stopPropagation(); playPreview(s.preview_url, s.id, s.name, s.artist, s.cover, s.duration_ms); }} style={{ background: playingTrack === s.id ? "var(--accent)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Ico d={playingTrack === s.id ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

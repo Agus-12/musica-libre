@@ -29,7 +29,7 @@ export async function GET(req) {
      minuto a minuto. Con esto, el feed y las búsquedas repetidas salen
      de la CDN en milisegundos en vez de pegarle a iTunes cada vez. */
   try {
-    if (resp && resp.ok) {
+    if (resp && resp.ok && !resp.headers.get("Cache-Control")) {
       resp.headers.set(
         "Cache-Control",
         "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
@@ -184,10 +184,13 @@ async function manejarGET(req) {
              y la sección "Artistas" del buscador quedaba siempre vacía.
              Las fotos de artista no existen en iTunes: las tomamos de
              Deezer emparejando por nombre (si falla, sin foto y ya). */
-          const [data, artistData, dzData] = await Promise.all([
+          const [data, artistData, dzData, songData] = await Promise.all([
             fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=album&limit=" + limit),
             fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=musicArtist&limit=6").catch(() => ({ results: [] })),
             fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent(query) + "&limit=10").catch(() => ({ data: [] })),
+            /* Canciones sueltas: sin esto, una canción cuyo nombre no
+               titula su álbum era imposible de encontrar. */
+            fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(query) + "&entity=song&limit=12").catch(() => ({ results: [] })),
           ]);
           const fotos = new Map();
           for (const d of (dzData.data || [])) {
@@ -204,6 +207,16 @@ async function manejarGET(req) {
               type: "artist",
               source_url: a.artistLinkUrl || "",
             })).filter(a => a.id),
+            songs: (songData.results || []).filter(s => s.wrapperType === "track").map(s => ({
+              id: String(s.trackId || ""),
+              name: s.trackName || "",
+              artist: s.artistName || "",
+              album: s.collectionName || "",
+              album_id: String(s.collectionId || ""),
+              cover: (s.artworkUrl100 || "").replace("100x100", "300x300"),
+              duration_ms: s.trackTimeMillis || 0,
+              preview_url: s.previewUrl || "",
+            })).filter(s => s.id && s.album_id),
             source: "itunes",
           });
         }
@@ -227,13 +240,25 @@ async function manejarGET(req) {
 
       if (action === "lookup") {
         if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
-        const data = await fetchJSON(ITUNES_BASE + "/lookup?id=" + id + "&entity=album,song");
+        let data = await fetchJSON(ITUNES_BASE + "/lookup?id=" + id + "&entity=album,song");
         // Separate albums and songs
-        const albums = (data.results || []).filter(r => r.collectionType || r.wrapperType === "collection");
-        const songs = (data.results || []).filter(r => r.wrapperType === "track");
+        let albums = (data.results || []).filter(r => r.collectionType || r.wrapperType === "collection");
+        let songs = (data.results || []).filter(r => r.wrapperType === "track");
+        /* iTunes a veces responde "flaco" (el álbum sin sus pistas).
+           Reintentamos con entity=song, que es más confiable para las
+           pistas de una colección. */
+        if (albums.length > 0 && songs.length === 0) {
+          try {
+            const d2 = await fetchJSON(ITUNES_BASE + "/lookup?id=" + id + "&entity=song&limit=200");
+            const s2 = (d2.results || []).filter(r => r.wrapperType === "track");
+            if (s2.length) songs = s2;
+            const a2 = (d2.results || []).filter(r => r.collectionType || r.wrapperType === "collection");
+            if (!albums.length && a2.length) albums = a2;
+          } catch {}
+        }
         if (albums.length > 0) {
           const main = albums[0];
-          return NextResponse.json({
+          const resp = NextResponse.json({
             id: String(main.collectionId),
             name: main.collectionName || "",
             artist: main.artistName || "",
@@ -261,8 +286,14 @@ async function manejarGET(req) {
             source: "itunes",
             type: "album",
           });
+          /* Si aún así quedó sin pistas, NO se cachea: era esto lo que
+             dejaba álbumes "vacíos" pegados horas en el edge y el SW. */
+          if (songs.length === 0) resp.headers.set("Cache-Control", "no-store");
+          return resp;
         }
-        return NextResponse.json({ results: data.results || [] });
+        const respVacia = NextResponse.json({ results: data.results || [] });
+        respVacia.headers.set("Cache-Control", "no-store");
+        return respVacia;
       }
     }
 
