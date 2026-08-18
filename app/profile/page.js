@@ -109,14 +109,28 @@ export default function ProfilePage() {
       setFuenteAct(localStorage.getItem("aura_fuente") || "");
     } catch {}
     cargarAmigos();
+    cargarBuzon();
   }, []);
 
+  function sincronizarAjustes(cambios) {
+    // Guarda tema/color/fuente en tu cuenta (te siguen a otros dispositivos)
+    try {
+      const actual = {
+        tema: localStorage.getItem("aura_tema") || "oscuro",
+        accent: localStorage.getItem("aura_accent") || "#7c5cfc",
+        fuente: localStorage.getItem("aura_fuente") || "",
+        ...cambios,
+      };
+      fetch("/api/ajustes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(actual) }).catch(() => {});
+    } catch {}
+  }
   function aplicarTema(v) {
     setTemaAct(v);
     try {
       localStorage.setItem("aura_tema", v);
       document.documentElement.classList.toggle("tema-claro", v === "claro");
     } catch {}
+    sincronizarAjustes({ tema: v });
   }
   function aplicarAccent(c) {
     setAccentAct(c);
@@ -124,6 +138,7 @@ export default function ProfilePage() {
       localStorage.setItem("aura_accent", c);
       document.documentElement.style.setProperty("--accent", c);
     } catch {}
+    sincronizarAjustes({ accent: c });
   }
   function aplicarFuente(f) {
     setFuenteAct(f);
@@ -131,6 +146,7 @@ export default function ProfilePage() {
       if (f) { localStorage.setItem("aura_fuente", f); document.documentElement.setAttribute("data-fuente", f); }
       else { localStorage.removeItem("aura_fuente"); document.documentElement.removeAttribute("data-fuente"); }
     } catch {}
+    sincronizarAjustes({ fuente: f });
   }
   async function cargarAmigos() {
     try {
@@ -164,6 +180,49 @@ export default function ProfilePage() {
       await fetch("/api/friends", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ friend_id: id }) });
       cargarAmigos();
     } catch {}
+  }
+
+  /* ── Perfil de un amigo (sus favoritos + playlists públicas) ── */
+  const [amigoVista, setAmigoVista] = useState(null);      // {perfil, favoritos, playlists}
+  const [amigoCargando, setAmigoCargando] = useState(false);
+  async function verAmigo(a) {
+    setAmigoCargando(true); setAmigoVista({ perfil: a, favoritos: [], playlists: [] });
+    try {
+      const r = await fetch("/api/friends/perfil?id=" + encodeURIComponent(a.id));
+      const d = await r.json();
+      if (d.perfil) setAmigoVista(d);
+      else { toast.warning(d.error || "No se pudo cargar", 3500); setAmigoVista(null); }
+    } catch { setAmigoVista(null); }
+    setAmigoCargando(false);
+  }
+
+  /* ── Compartir canciones con amigos + buzón ── */
+  const [compartirItem, setCompartirItem] = useState(null); // item a enviar
+  const [buzon, setBuzon] = useState([]);
+  async function cargarBuzon() {
+    try {
+      const r = await fetch("/api/shares");
+      const d = await r.json();
+      setBuzon(d.recibidos || []);
+    } catch {}
+  }
+  async function enviarShare(amigo) {
+    const it = compartirItem;
+    if (!it) return;
+    try {
+      const r = await fetch("/api/shares", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        to_id: amigo.id,
+        item: { type: "track", name: it.title || it.name, artist: it.artist || "", cover: it.cover_url || it.cover || "", album_id: it.album_id || "", source: "itunes" },
+      }) });
+      const d = await r.json();
+      if (d.ok) toast.success("Enviada a @" + amigo.username, 3000);
+      else toast.warning(d.error || "No se pudo enviar", 3500);
+    } catch { toast.error("Error de red", 3000); }
+    setCompartirItem(null);
+  }
+  async function borrarShare(id) {
+    try { await fetch("/api/shares", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch {}
+    setBuzon(prev => prev.filter(s => s.id !== id));
   }
 
   // Espejo del estado para los callbacks del player (que se registran una vez
@@ -901,7 +960,7 @@ export default function ProfilePage() {
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <h1 style={{fontSize:"1.3em",marginBottom:2}}>{profile?.display_name||profile?.username||"Usuario"}</h1>
             {/* Amigos */}
-            <button onClick={()=>{setShowFriends(true);cargarAmigos();}} title="Amigos" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:16,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>
+            <button onClick={()=>{setShowFriends(true);cargarAmigos();cargarBuzon();}} title="Amigos" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:16,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>
               <Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={13} stroke="var(--accent)"/> Amigos{amigos.length?` (${amigos.length})`:""}
             </button>
             {/* Personalizar */}
@@ -954,9 +1013,76 @@ export default function ProfilePage() {
         <div onClick={()=>setShowFriends(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:420,maxHeight:"75vh",overflowY:"auto"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-              <div style={{fontWeight:800,color:"var(--text)"}}>👥 Amigos</div>
-              <button onClick={()=>setShowFriends(false)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
+              <div style={{fontWeight:800,color:"var(--text)"}}>
+                {amigoVista ? (
+                  <button onClick={()=>setAmigoVista(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--accent)",fontWeight:800,fontSize:"1em",padding:0}}>← Amigos</button>
+                ) : "👥 Amigos"}
+              </div>
+              <button onClick={()=>{setShowFriends(false);setAmigoVista(null);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
             </div>
+
+            {/* ── Vista: perfil de un amigo ── */}
+            {amigoVista ? (
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+                  <div style={{width:52,height:52,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:"1.4em",flexShrink:0}}>{(amigoVista.perfil?.display_name||amigoVista.perfil?.username||"?")[0].toUpperCase()}</div>
+                  <div>
+                    <div style={{color:"var(--text)",fontWeight:800}}>{amigoVista.perfil?.display_name||amigoVista.perfil?.username}</div>
+                    <div style={{color:"var(--text4)",fontSize:"0.78em"}}>@{amigoVista.perfil?.username}</div>
+                  </div>
+                </div>
+                {amigoCargando && <p style={{color:"var(--text4)",fontSize:"0.85em"}}>Cargando...</p>}
+                {!amigoCargando && (
+                  <>
+                    <div style={{color:"var(--text3)",fontSize:"0.72em",fontWeight:800,marginBottom:8}}>SUS FAVORITOS ({(amigoVista.favoritos||[]).length})</div>
+                    {(amigoVista.favoritos||[]).length===0 ? (
+                      <p style={{color:"var(--text4)",fontSize:"0.8em",marginBottom:14}}>Todavía no tiene favoritos.</p>
+                    ) : (
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
+                        {(amigoVista.favoritos||[]).slice(0,12).map((f,i)=>(
+                          <a key={i} href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source||"itunes"}`} style={{textDecoration:"none"}}>
+                            <CoverImg url={f.cover_url} size="100%" r={8}/>
+                            <div style={{color:"var(--text2)",fontSize:"0.66em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{f.name}</div>
+                            <div style={{color:"var(--text4)",fontSize:"0.6em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{color:"var(--text3)",fontSize:"0.72em",fontWeight:800,marginBottom:8}}>SUS PLAYLISTS PÚBLICAS ({(amigoVista.playlists||[]).length})</div>
+                    {(amigoVista.playlists||[]).length===0 ? (
+                      <p style={{color:"var(--text4)",fontSize:"0.8em"}}>No tiene playlists públicas.</p>
+                    ) : (amigoVista.playlists||[]).map(pl=>(
+                      <div key={pl.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 4px",borderBottom:"1px solid var(--border2)"}}>
+                        <CoverImg url={pl.cover_url} size={36} r={6}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600}}>{pl.name}</div>
+                          {pl.description && <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{pl.description}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ) : (
+            <>
+            {/* ── Buzón: canciones que te mandaron ── */}
+            {buzon.length>0 && (
+              <div style={{marginBottom:16,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"8px 12px",fontSize:"0.7em",fontWeight:800,color:"var(--accent)",borderBottom:"1px solid var(--border2)"}}>📥 TE MANDARON ({buzon.length})</div>
+                {buzon.map(s=>(
+                  <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border2)"}}>
+                    <CoverImg url={s.item?.cover} size={38} r={6}/>
+                    <a href={s.item?.album_id?`/spotify?album=${s.item.album_id}&source=${s.item.source||"itunes"}`:`/spotify?buscar=${encodeURIComponent((s.item?.artist||"")+" "+(s.item?.name||""))}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
+                      <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.item?.name}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{s.item?.artist} · de @{s.de?.username}</div>
+                    </a>
+                    <button onClick={()=>borrarShare(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:5}} title="Quitar">
+                      <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="var(--text4)"/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{display:"flex",gap:8,marginBottom:12}}>
               <input value={buscaAmigo} onChange={e=>{setBuscaAmigo(e.target.value);buscarUsuarios(e.target.value);}} placeholder="Buscar por @usuario..." style={{flex:1,padding:"10px 12px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text)",fontSize:"0.9em",outline:"none"}}/>
             </div>
@@ -980,16 +1106,40 @@ export default function ProfilePage() {
             {amigos.length===0 && !amigosError ? (
               <p style={{color:"var(--text4)",fontSize:"0.85em",textAlign:"center",padding:16}}>Todavía no tenés amigos. Buscá a alguien por su @usuario.</p>
             ) : amigos.map(a=>(
-              <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 4px",borderBottom:"1px solid var(--border2)"}}>
+              <div key={a.id} onClick={()=>verAmigo(a)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 4px",borderBottom:"1px solid var(--border2)",cursor:"pointer"}}>
                 <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,flexShrink:0}}>{(a.display_name||a.username||"?")[0].toUpperCase()}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{color:"var(--text)",fontSize:"0.88em",fontWeight:600}}>{a.display_name||a.username}</div>
-                  <div style={{color:"var(--text4)",fontSize:"0.72em"}}>@{a.username}</div>
+                  <div style={{color:"var(--text4)",fontSize:"0.72em"}}>@{a.username} · tocá para ver su música</div>
                 </div>
-                <button onClick={()=>quitarAmigo(a.id)} title="Quitar" style={{background:"none",border:"none",cursor:"pointer",padding:6}}>
+                <button onClick={(e)=>{e.stopPropagation();quitarAmigo(a.id);}} title="Quitar" style={{background:"none",border:"none",cursor:"pointer",padding:6}}>
                   <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={13} stroke="#ef4444"/>
                 </button>
               </div>
+            ))}
+            </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: elegir amigo para enviarle una canción ── */}
+      {compartirItem && (
+        <div onClick={()=>setCompartirItem(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:310,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:380,maxHeight:"70vh",overflowY:"auto"}}>
+            <div style={{fontWeight:800,color:"var(--text)",marginBottom:4}}>Enviar a un amigo</div>
+            <div style={{color:"var(--text4)",fontSize:"0.78em",marginBottom:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🎵 {compartirItem.title||compartirItem.name} — {compartirItem.artist}</div>
+            {amigos.length===0 ? (
+              <p style={{color:"var(--text4)",fontSize:"0.85em"}}>Primero agregá amigos (botón Amigos junto a tu nombre).</p>
+            ) : amigos.map(a=>(
+              <button key={a.id} onClick={()=>enviarShare(a)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 8px",borderRadius:10,border:"none",background:"transparent",cursor:"pointer",textAlign:"left"}}>
+                <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,flexShrink:0}}>{(a.display_name||a.username||"?")[0].toUpperCase()}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:"var(--text)",fontSize:"0.88em",fontWeight:600}}>{a.display_name||a.username}</div>
+                  <div style={{color:"var(--text4)",fontSize:"0.7em"}}>@{a.username}</div>
+                </div>
+                <span style={{color:"var(--accent)",fontSize:"0.75em",fontWeight:800}}>Enviar →</span>
+              </button>
             ))}
           </div>
         </div>
@@ -1144,6 +1294,7 @@ export default function ProfilePage() {
                         : null}
                     {/* Sin internet ocultamos re-descargar y borrar: no se
                         pueden completar offline y sólo confunden. */}
+                    {isOnline && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
                     {isOnline && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
                     {isOnline && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
                   </div>

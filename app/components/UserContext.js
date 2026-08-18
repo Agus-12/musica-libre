@@ -46,6 +46,26 @@ export function UserProvider({ children }) {
         // Save for offline
         saveOffline("user", data.user);
         saveOffline("profile", data.profile);
+        /* Ajustes sincronizados con la cuenta: si el perfil trae tema/
+           color/fuente, se aplican en este dispositivo también. */
+        try {
+          const aj = data.profile?.ajustes;
+          if (aj && typeof aj === "object") {
+            const d = document.documentElement;
+            if (aj.tema) {
+              localStorage.setItem("aura_tema", aj.tema);
+              d.classList.toggle("tema-claro", aj.tema === "claro");
+            }
+            if (aj.accent) {
+              localStorage.setItem("aura_accent", aj.accent);
+              d.style.setProperty("--accent", aj.accent);
+            }
+            if (aj.fuente !== undefined) {
+              if (aj.fuente) { localStorage.setItem("aura_fuente", aj.fuente); d.setAttribute("data-fuente", aj.fuente); }
+              else { localStorage.removeItem("aura_fuente"); d.removeAttribute("data-fuente"); }
+            }
+          }
+        } catch {}
         loadFavorites();
         loadPlaylists();
       } else {

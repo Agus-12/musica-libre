@@ -48,6 +48,55 @@ async function manejarGET(req) {
   const limit = parseInt(p.get("limit") || "20");
 
   try {
+    /* ── RECOMENDACIONES: el "Para ti" vivo ─────────────────────
+       Recibe los artistas que el usuario más escucha (favoritos +
+       descargas) y arma recomendaciones REALES:
+       1. Deezer: para cada artista semilla → artistas relacionados
+          (mismo estilo/género, curado por Deezer)
+       2. iTunes: álbumes recientes de esos artistas similares
+       Cuanto más agregue el usuario, más cambian las semillas y
+       más se mueve la sección. */
+    if (action === "recomendaciones") {
+      const semillas = (p.get("artistas") || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 3);
+      if (!semillas.length) return NextResponse.json({ albums: [], similares: [] });
+
+      // 1. Artistas relacionados de cada semilla (en paralelo)
+      const relacionados = await Promise.all(semillas.map(async (nombre) => {
+        try {
+          const b = await fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent(nombre) + "&limit=1");
+          const art = (b.data || [])[0];
+          if (!art) return [];
+          const rel = await fetchJSON(DEEZER_BASE + "/artist/" + art.id + "/related?limit=6");
+          return (rel.data || []).map(a => a.name).filter(Boolean);
+        } catch { return []; }
+      }));
+
+      // 2. Ranking: los que se repiten entre semillas van primero
+      const bajas = new Set(semillas.map(s => s.toLowerCase()));
+      const conteo = new Map();
+      for (const lista of relacionados) {
+        for (const n of lista) {
+          if (bajas.has(n.toLowerCase())) continue;
+          conteo.set(n, (conteo.get(n) || 0) + 1);
+        }
+      }
+      const similares = [...conteo.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n).slice(0, 6);
+
+      // 3. Un álbum reciente de cada artista similar (iTunes, en paralelo)
+      const porArtista = await Promise.all(similares.map(async (nombre) => {
+        try {
+          const d = await fetchJSON(ITUNES_BASE + "/search?term=" + encodeURIComponent(nombre) + "&entity=album&limit=2");
+          return (d.results || []).slice(0, 2).map(normalizeITunesAlbum);
+        } catch { return []; }
+      }));
+
+      // Intercalamos para que no salgan 2 seguidos del mismo artista
+      const albums = [];
+      for (let i = 0; i < 2; i++) for (const lista of porArtista) if (lista[i]) albums.push(lista[i]);
+
+      return NextResponse.json({ albums: albums.slice(0, 12), similares, basado_en: semillas, source: "itunes" });
+    }
+
     // ── OEMBED: get info from a Spotify URL ──
     if (action === "oembed") {
       const url = p.get("url") || "";

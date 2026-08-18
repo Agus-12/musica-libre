@@ -113,9 +113,40 @@ export default function SpotifyPage() {
     const albumId = params.get("album");
     const artistId = params.get("artist");
     const source = params.get("source") || "itunes";
+    const buscarParam = params.get("buscar");
     if (albumId) loadAlbum(albumId, source);
     else if (artistId) loadArtist(artistId);
+    else if (buscarParam) { setTab("search"); search(buscarParam); }
   }, []);
+
+  /* ── "Para ti" VIVO ──────────────────────────────────────────
+     Semillas = los artistas que más se repiten en favoritos y
+     descargas. Con ellas, el server busca artistas del mismo estilo
+     (relacionados de Deezer) y trae sus álbumes. Cada canción que
+     agregás puede cambiar las semillas → la sección se mueve sola. */
+  const [recs, setRecs] = useState(null);
+  const [recsDe, setRecsDe] = useState([]);
+  useEffect(() => {
+    try {
+      const conteo = new Map();
+      const sumar = (nombre, peso) => {
+        const n = (nombre || "").trim();
+        if (!n) return;
+        conteo.set(n, (conteo.get(n) || 0) + peso);
+      };
+      // Favoritos (los más nuevos pesan más)
+      (favorites || []).forEach((f, i) => sumar(f.artist || (f.item_type === "artist" ? f.name : ""), 2 + Math.max(0, 10 - i) * 0.1));
+      // Descargas
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      for (const e of Object.values(mp3s)) if (e && e.artist) sumar(e.artist, 3);
+      const semillas = [...conteo.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n).slice(0, 3);
+      if (!semillas.length) { setRecs(null); return; }
+      fetch("/api/music?action=recomendaciones&artistas=" + encodeURIComponent(semillas.join(",")))
+        .then(r => r.json())
+        .then(d => { setRecs(d.albums || []); setRecsDe(d.similares || []); })
+        .catch(() => setRecs(null));
+    } catch { setRecs(null); }
+  }, [favorites]);
 
   // Single audio element for previews
   useEffect(() => {
@@ -585,12 +616,18 @@ export default function SpotifyPage() {
         <div>
           {/* Quick search */}
           <div style={{ display: "flex", gap: 8, marginBottom: 25, flexWrap: "wrap" }}>
-            <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Buscar álbumes, artistas..." style={{ ...IS, flex: 1, minWidth: 200 }} />
+            {/* Tocar la barra te lleva DIRECTO a Buscar */}
+            <input value={query} onFocus={() => setTab("search")} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Buscar álbumes, artistas..." style={{ ...IS, flex: 1, minWidth: 200 }} />
             <button onClick={() => { setTab("search"); search(); }} disabled={loading} style={BS}>{loading ? "..." : "Buscar"}</button>
           </div>
 
-          {/* For You - based on favorites */}
-          {favorites.length > 0 && (
+          {/* Para ti: artistas del mismo estilo que lo que escuchás */}
+          {recs && recs.length > 0 ? (
+            <div style={{ marginBottom: 30 }}>
+              <SectionHeader icon={<Ico d={<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />} size={18} stroke="#ec4899" fill="#ec4899" />} title="Para ti" subtitle={recsDe.length ? "Porque escuchás estilos como " + recsDe.slice(0, 3).join(", ") : "Artistas de tu estilo"} />
+              <HorizontalAlbumRow albums={recs} onSelect={(id) => loadAlbum(id, "itunes")} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} source="itunes" />
+            </div>
+          ) : favorites.length > 0 && (
             <div style={{ marginBottom: 30 }}>
                   <SectionHeader icon={<Ico d={<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />} size={18} stroke="#ec4899" fill="#ec4899" />} title="Para ti" subtitle="Basado en tus favoritos" />
               <RecommendationRow favorites={favorites} onSelect={(id, src) => loadAlbum(id, src)} onFavorite={handleFavorite} onPlaylist={handleAddToPlaylist} isFavorite={isFavorite} />
@@ -629,7 +666,13 @@ export default function SpotifyPage() {
       {tab === "search" && !album && !artist && (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-            <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Buscar álbumes, artistas... (ej: Bad Bunny, Rosalía)" style={{ ...IS, flex: 1, minWidth: 200 }} />
+            <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
+              <input autoFocus value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Buscar álbumes, artistas... (ej: Bad Bunny, Rosalía)" style={{ ...IS, paddingRight: 38 }} />
+              {/* X para limpiar al instante */}
+              {query && (
+                <button onClick={() => { setQuery(""); setResults(null); setError(""); }} aria-label="Limpiar" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 30, height: 30, borderRadius: "50%", border: "none", background: "var(--border)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.85em", fontWeight: 700 }}>✕</button>
+              )}
+            </div>
             <button onClick={search} disabled={loading} style={BS}>{loading ? "..." : "Buscar"}</button>
           </div>
           {/* Búsquedas recientes (estilo Spotify) */}
