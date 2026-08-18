@@ -310,6 +310,39 @@ async function obtenerAudio({ videoId, query }) {
       }
     }
 
+    /* ── Plan B: SoundCloud ─────────────────────────────────────
+       Si TODOS los candidatos de YouTube fallaron (bloqueo, DRM,
+       lo que sea), probamos la misma búsqueda en SoundCloud, que
+       no tiene el check de bots de YouTube. Mejor una copia de
+       SoundCloud que ninguna. */
+    if (query) {
+      try {
+        log("YouTube agotado; probando SoundCloud:", query);
+        await correr("yt-dlp", [
+          "-f", "bestaudio",
+          "-o", destino,
+          "--no-playlist",
+          "--no-warnings",
+          "--quiet",
+          "--no-part",
+          "--match-filter", "duration > 60 & duration < 900",
+          "--user-agent", UA,
+          "--retries", "2",
+          `scsearch1:${query}`,
+        ], 180000);
+        const archivo = buscarExistente(id);
+        if (archivo) {
+          log("listo (SoundCloud):", path.basename(archivo),
+              (fs.statSync(archivo).size / 1048576).toFixed(1) + " MB");
+          fallosSeguidos = 0;
+          limpiarSiHaceFalta();
+          return { archivo, id };
+        }
+      } catch (e) {
+        log("  SoundCloud también falló:", String(e.message || "").slice(0, 100));
+      }
+    }
+
     fallosSeguidos++;
     if (fallosSeguidos >= 3 && !COOKIES) {
       log("⚠ 3 fallos seguidos. Configurá MUSICA_COOKIES: es la solución al check de bot.");
