@@ -148,6 +148,28 @@ export default function SpotifyPage() {
     if (albumId) loadAlbum(albumId, source, trackParam);
     else if (artistId) loadArtist(artistId);
     else if (buscarParam) { setTab("search"); search(buscarParam); }
+    /* Destino pendiente (viene de Favoritos/Buzón dentro de la app
+       unificada, sin recargar la página) */
+    try {
+      const dRaw = localStorage.getItem("aura_explorar_destino");
+      if (dRaw) {
+        localStorage.removeItem("aura_explorar_destino");
+        const d = JSON.parse(dRaw);
+        if (d.album) loadAlbum(d.album, d.source || "itunes", d.track || null);
+        else if (d.buscar) { setTab("search"); search(d.buscar); }
+      }
+    } catch {}
+  }, []);
+
+  // Destinos en caliente (Explorar ya montado)
+  useEffect(() => {
+    const h = (e) => {
+      const d = e.detail || {};
+      if (d.album) loadAlbum(d.album, d.source || "itunes", d.track || null);
+      else if (d.buscar) { setTab("search"); search(d.buscar); }
+    };
+    window.addEventListener("aura-explorar-destino", h);
+    return () => window.removeEventListener("aura-explorar-destino", h);
   }, []);
 
   /* ── "Para ti" VIVO ──────────────────────────────────────────
@@ -272,6 +294,32 @@ export default function SpotifyPage() {
     audio.pause();
     audio.currentTime = 0;
     
+    /* ── REPRODUCTOR GLOBAL ────────────────────────────────────────
+       Si Explorar vive dentro de la app unificada, la canción se manda
+       al reproductor principal (el de Mi música): mini-barra, pantalla
+       completa, karaoke, cola... todo en uno y sin cortes. */
+    if (typeof window !== "undefined" && window.__auraPlayerGlobal) {
+      let urlGlobal = url;
+      try {
+        const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+        const claves = [String(trackId), (trackArtist + " " + trackName).trim(), (trackName + " " + trackArtist).trim(), trackName.trim()];
+        for (const k of claves) {
+          if (mp3s[k]?.audio_url) { urlGlobal = mp3s[k].audio_url; break; }
+        }
+      } catch {}
+      if (!urlGlobal) { toast.warning("Esta canción no tiene audio para reproducir", 3000); setNowPlaying(null); return; }
+      window.dispatchEvent(new CustomEvent("aura-reproducir", { detail: {
+        key: String(trackId),
+        title: trackName || "",
+        artist: trackArtist || "",
+        cover_url: trackCover || "",
+        audio_url: urlGlobal,
+        duration_ms: trackDurMs || null,
+      }}));
+      setNowPlaying(null);
+      return;
+    }
+
     // Check if we have a full MP3 cached — try multiple strategies
     let playUrl = url;
     let isFullMp3 = false;

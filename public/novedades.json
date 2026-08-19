@@ -1,13 +1,12 @@
 {
-  "version": "18 de agosto, 2026 · v14",
+  "version": "18 de agosto, 2026 · v15",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🎧 UN solo reproductor para toda la app: lo que suene en Explorar, Mi música o Playlists usa el reproductor principal (pantalla completa, karaoke, cola) y NO se corta al cambiar de sección",
+    "🧭 Favoritos y buzón abren los álbumes dentro de la app unificada, sin recargar",
     "🧭 Nuevo menú lateral estilo cristal líquido: Explorar · Mi música · Mis playlists · Perfil · Modo sin conexión · Cerrar sesión",
     "🗂 Secciones reorganizadas: tu música (descargas/favoritos/stats), tus playlists y tu perfil, cada una en su lugar",
     "🔔 Campanita con contador rojo en el Perfil: mirá el buzón apenas te manden algo",
-    "🎵 Moverte entre Mi música, Playlists y Perfil ya no corta la reproducción",
-    "🧠 Modo sin datos inteligente: si hay internet te ofrece salir, y si NO hay internet te ofrece activarlo — un toque en ambos casos",
-    "✨ Menú rediseñado: estilo cristal con botones nuevos",
-    "📵 Modo sin datos ahora vive en el menú, con switch y puntito indicador"
+    "🎵 Moverte entre Mi música, Playlists y Perfil ya no corta la reproducción"
   ]
 }

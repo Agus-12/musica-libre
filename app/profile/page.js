@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 import { useDownloads } from "../components/DownloadManager";
+import Explorar from "../spotify/page";
 
 let ytApiLoaded = false;
 let ytApiPromise = null;
@@ -232,7 +233,7 @@ export default function ProfilePage() {
   /* ── Personalización + Amigos ── */
   /* Sección activa: musica | playlists | cuenta (la elige el menú).
      Cambiar de sección NO recarga la página: la música no se corta. */
-  const [vista, setVista] = useState("musica");
+  const [vista, setVista] = useState("explorar");
   useEffect(() => {
     try { const v = localStorage.getItem("aura_vista"); if (v) setVista(v); } catch {}
     const alVista = (e) => setVista(e.detail || "musica");
@@ -242,8 +243,43 @@ export default function ProfilePage() {
   useEffect(() => {
     if (vista === "playlists") { setTab("playlists"); setSelectedPlaylist(null); }
     else if (vista === "cuenta") setTab("cuenta");
+    else if (vista === "explorar") setTab("explorar");
     else if (!["downloads", "favorites", "stats"].includes(tab)) setTab("downloads");
   }, [vista]);
+
+  /* ── REPRODUCTOR GLOBAL ──────────────────────────────────────────
+     Explorar (embebido) manda lo que quiera reproducir por un evento
+     y suena en ESTE reproductor (el único de la app). */
+  const startTrackRef = useRef(null);
+  /* Abrir algo en Explorar SIN recargar (la música sigue sonando) */
+  function irAExplorar(destino) {
+    try { localStorage.setItem("aura_explorar_destino", JSON.stringify(destino || {})); } catch {}
+    try { localStorage.setItem("aura_vista", "explorar"); } catch {}
+    setVista("explorar");
+    setTimeout(() => { try { window.dispatchEvent(new CustomEvent("aura-explorar-destino", { detail: destino || {} })); } catch {} }, 60);
+  }
+  useEffect(() => {
+    window.__auraPlayerGlobal = true;
+    const alReproducir = (e) => {
+      const d = e.detail || {};
+      if (!d.key) return;
+      try { startTrackRef.current && startTrackRef.current({
+        key: String(d.key),
+        title: d.title || "",
+        artist: d.artist || "",
+        cover_url: d.cover_url || "",
+        audio_url: d.audio_url || "",
+        video_id: d.video_id || "",
+        duration_ms: d.duration_ms || null,
+        keys: [String(d.key)],
+      }); } catch {}
+    };
+    window.addEventListener("aura-reproducir", alReproducir);
+    return () => {
+      window.__auraPlayerGlobal = false;
+      window.removeEventListener("aura-reproducir", alReproducir);
+    };
+  }, []);
 
   const [showCustom, setShowCustom] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
@@ -883,6 +919,7 @@ export default function ProfilePage() {
     }
   }
 
+  startTrackRef.current = (item) => startTrack(item);
   function startTrack(item) {
     // Memoria del aleatorio: registrar lo que va sonando
     try { historialRef.current = [...historialRef.current.filter(k => k !== item.key), item.key].slice(-25); } catch {}
@@ -1429,11 +1466,11 @@ export default function ProfilePage() {
                     ) : (
                       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
                         {(amigoVista.favoritos||[]).slice(0,12).map((f,i)=>(
-                          <a key={i} href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source||"itunes"}${f.item_type==="track"?"&track="+encodeURIComponent(f.name||""):""}`} style={{textDecoration:"none"}}>
+                          <div key={i} onClick={()=>{setShowFriends(false);setAmigoVista(null);irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source||"itunes",track:f.item_type==="track"?(f.name||""):""});}} style={{cursor:"pointer"}}>
                             <CoverImg url={f.cover_url} size="100%" r={8}/>
                             <div style={{color:"var(--text2)",fontSize:"0.66em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{f.name}</div>
                             <div style={{color:"var(--text4)",fontSize:"0.6em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
-                          </a>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -1467,10 +1504,10 @@ export default function ProfilePage() {
                         <div style={{color:"var(--text4)",fontSize:"0.7em"}}>playlist · de @{s.de?.username} · tocá para verla</div>
                       </div>
                     ) : (
-                    <a href={s.item?.album_id?`/spotify?album=${s.item.album_id}&source=${s.item.source||"itunes"}&track=${encodeURIComponent(s.item?.name||"")}`:`/spotify?buscar=${encodeURIComponent((s.item?.artist||"")+" "+(s.item?.name||""))}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
+                    <div onClick={()=>{setShowFriends(false);if(s.item?.album_id)irAExplorar({album:s.item.album_id,source:s.item.source||"itunes",track:s.item?.name||""});else irAExplorar({buscar:(s.item?.artist||"")+" "+(s.item?.name||"")});}} style={{flex:1,minWidth:0,cursor:"pointer"}}>
                       <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.item?.name}</div>
                       <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{s.item?.artist} · de @{s.de?.username}</div>
-                    </a>
+                    </div>
                     )}
                     <button onClick={()=>borrarShare(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:5}} title="Quitar">
                       <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="var(--text4)"/>
@@ -1568,6 +1605,9 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
+
+      {/* ── Vista EXPLORAR: la página de música embebida (mismo player) ── */}
+      {vista === "explorar" && <Explorar />}
 
       {/* Título de la sección + pestañas */}
       {vista === "musica" && (
@@ -1834,13 +1874,13 @@ export default function ProfilePage() {
                 try{const m=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=[String(f.item_id),(f.artist+" "+f.name).trim(),(f.name+" "+f.artist).trim(),f.name.trim()];for(const k of ks){if(m[k]?.audio_url){isDl=true;break;}}}catch{}
                 return (
                   <div key={f.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:"1px solid var(--border2)"}}>
-                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}&track=${encodeURIComponent(f.name||"")}`} style={{flexShrink:0,display:"block"}}>
+                    <div onClick={()=>irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source,track:f.name||""})} style={{flexShrink:0,display:"block",cursor:"pointer"}}>
                       <CoverImg url={f.cover_url} size={46} r={8}/>
-                    </a>
-                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}&track=${encodeURIComponent(f.name||"")}`} style={{flex:1,minWidth:0,textDecoration:"none"}}>
+                    </div>
+                    <div onClick={()=>irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source,track:f.name||""})} style={{flex:1,minWidth:0,cursor:"pointer"}}>
                       <div style={{color:"var(--text)",fontSize:"0.9em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</div>
                       <div style={{color:"var(--text4)",fontSize:"0.76em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
-                    </a>
+                    </div>
                     {isDl && (
                       <span style={{padding:"2px 7px",borderRadius:4,fontSize:"0.6em",fontWeight:800,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.35)"}}>OFF</span>
                     )}
@@ -1858,7 +1898,7 @@ export default function ProfilePage() {
                 try{const m=JSON.parse(localStorage.getItem("ml_mp3")||"{}");const ks=[String(f.item_id),(f.artist+" "+f.name).trim(),(f.name+" "+f.artist).trim(),f.name.trim()];for(const k of ks){if(m[k]?.video_id||m[k]?.audio_url){isDl=true;break;}}}catch{}
                 return (
                   <div key={f.id} style={{background:"var(--panel)",borderRadius:10,overflow:"hidden",border:"1px solid var(--border)",position:"relative"}}>
-                    <a href={`/spotify?album=${f.extra_data?.album_id||f.item_id}&source=${f.source}`} style={{textDecoration:"none",display:"block",position:"relative"}}>
+                    <div onClick={()=>irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source})} style={{display:"block",position:"relative",cursor:"pointer"}}>
                       <CoverImg url={f.cover_url}/>
                       {/* Insignia dentro de la portada, abajo a la izquierda:
                           antes caía sobre el nombre y se empalmaba con el texto. */}
@@ -1868,7 +1908,7 @@ export default function ProfilePage() {
                           OFF
                         </span>
                       )}
-                    </a>
+                    </div>
                     <button onClick={()=>toggleFavorite(f.item_type,f.item_id)} style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:"50%",width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="#ef4444"/>
                     </button>

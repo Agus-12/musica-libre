@@ -117,15 +117,15 @@ export default function Navbar({ children }) {
           </button>
 
           {/* Logo */}
-          <a href="/spotify" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 9, marginRight: "auto", marginLeft: 4 }}>
+          <button onClick={() => irASeccion("explorar")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 9, marginRight: "auto", marginLeft: 4, padding: 0 }}>
             <LogoAura height={24} />
-          </a>
+          </button>
 
           {/* Desktop links */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }} className="desktop-nav">
-            <a href="/spotify" style={{ padding: "8px 14px", borderRadius: 8, textDecoration: "none", color: "#aaa", fontSize: "0.85em", fontWeight: 500, display: "flex", alignItems: "center", gap: 7 }}>
+            <button onClick={() => irASeccion("explorar")} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "none", color: "#aaa", fontSize: "0.85em", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
               <Ico d={ICON_EXPLORAR} size={15} stroke="currentColor" /> Explorar
-            </a>
+            </button>
             {seccionesPerfil.map(s => (
               <button key={s.vista} onClick={() => irASeccion(s.vista)} style={{ padding: "8px 14px", borderRadius: 8, border: "none", background: "none", color: "#aaa", fontSize: "0.85em", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
                 <Ico d={s.icon} size={15} stroke="currentColor" /> {s.label}
@@ -189,11 +189,11 @@ export default function Navbar({ children }) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
           {/* 1. Explorar */}
-          <a href="/spotify" onClick={() => setMenuOpen(false)} style={itemDrawer}>
+          <button onClick={() => irASeccion("explorar")} style={itemDrawer}>
             <span style={chip("124,92,252")}><Ico d={ICON_EXPLORAR} size={17} stroke="var(--accent)" /></span>
             <span style={{ flex: 1, color: "#eceff4" }}>Explorar</span>
             <Ico d={<polyline points="9 18 15 12 9 6"/>} size={14} stroke="rgba(255,255,255,0.25)" />
-          </a>
+          </button>
 
           {/* 2-4. Mi música / Mis playlists / Perfil */}
           {seccionesPerfil.map(s => (
