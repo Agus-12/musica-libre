@@ -923,12 +923,17 @@ export default function ProfilePage() {
   function startTrack(item) {
     // Memoria del aleatorio: registrar lo que va sonando
     try { historialRef.current = [...historialRef.current.filter(k => k !== item.key), item.key].slice(-25); } catch {}
-    // Estadísticas: contar la reproducción
+    // Estadísticas: SOLO canciones descargadas (las previews de Explorar
+    // no cuentan, como siempre fue)
     try {
-      const st = JSON.parse(localStorage.getItem("aura_stats") || "{}");
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       const k = String(item.key);
-      st[k] = { n: (st[k]?.n || 0) + 1, name: item.title || "", artist: item.artist || "", cover: item.cover_url || "", last: Date.now() };
-      localStorage.setItem("aura_stats", JSON.stringify(st));
+      const descargada = Boolean(mp3s[k]?.audio_url) || (item.keys || []).some(x => mp3s[x]?.audio_url);
+      if (descargada) {
+        const st = JSON.parse(localStorage.getItem("aura_stats") || "{}");
+        st[k] = { n: (st[k]?.n || 0) + 1, name: item.title || "", artist: item.artist || "", cover: item.cover_url || "", last: Date.now() };
+        localStorage.setItem("aura_stats", JSON.stringify(st));
+      }
     } catch {}
     // Si la canción tiene archivo guardado, preferimos ese (funciona offline)
     if (item.audio_url) { startAudioFile(item); return; }
@@ -1325,6 +1330,11 @@ export default function ProfilePage() {
 
   // Mantenemos el espejo al día para los callbacks del player
   liveRef.current = { list: listaVisible, playingKey, shuffle, repeat };
+
+  // El Explorar embebido escucha esto para pintar en verde lo que suena
+  useEffect(() => {
+    try { window.dispatchEvent(new CustomEvent("aura-sonando", { detail: { key: playingKey, playing: isPlaying } })); } catch {}
+  }, [playingKey, isPlaying]);
 
   if(loading) return <div style={{textAlign:"center",padding:60,color:"var(--accent)"}}>Cargando...</div>;
 

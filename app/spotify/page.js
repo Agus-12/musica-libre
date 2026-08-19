@@ -180,12 +180,19 @@ export default function SpotifyPage() {
   /* "Seguir escuchando": lo último que sonó (de las stats locales).
      Tocar una la REPRODUCE al instante en el perfil. */
   const [recientes, setRecientes] = useState([]);
+  const [sonandoGlobal, setSonandoGlobal] = useState({ key: null, playing: false });
+  useEffect(() => {
+    const h = (e) => setSonandoGlobal(e.detail || { key: null, playing: false });
+    window.addEventListener("aura-sonando", h);
+    return () => window.removeEventListener("aura-sonando", h);
+  }, []);
   useEffect(() => {
     try {
       const st = JSON.parse(localStorage.getItem("aura_stats") || "{}");
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       const arr = Object.entries(st)
         .map(([key, v]) => ({ key, ...v }))
-        .filter(v => v && v.name)
+        .filter(v => v && v.name && mp3s[v.key]?.audio_url)   // SOLO descargadas
         .sort((a, b) => (b.last || 0) - (a.last || 0))
         .slice(0, 8);
       setRecientes(arr);
@@ -825,7 +832,7 @@ export default function SpotifyPage() {
               <SectionHeader icon={<Ico d={<><polygon points="5 3 19 12 5 21 5 3"/></>} size={18} stroke="#22c55e" fill="#22c55e" />} title="Seguir escuchando" subtitle="Retomá donde quedaste" />
               <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
                 {recientes.map(s => {
-                  const sonando = playingTrack === String(s.key);
+                  const sonando = playingTrack === String(s.key) || (sonandoGlobal.key === String(s.key) && sonandoGlobal.playing);
                   return (
                   <div key={s.key} onClick={() => seguirEscuchando(s)} style={{ flex: "0 0 200px", width: 200, minWidth: 0, maxWidth: 200, display: "flex", alignItems: "center", gap: 9, background: sonando ? "rgba(34,197,94,0.12)" : "var(--panel)", border: sonando ? "1px solid rgba(34,197,94,0.4)" : "1px solid var(--border)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
                     {s.cover ? <img src={s.cover} style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} loading="lazy" /> : <div style={{ width: 44, height: 44, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
