@@ -230,6 +230,21 @@ export default function ProfilePage() {
   const [expanded, setExpanded] = useState(false);
 
   /* ── Personalización + Amigos ── */
+  /* Sección activa: musica | playlists | cuenta (la elige el menú).
+     Cambiar de sección NO recarga la página: la música no se corta. */
+  const [vista, setVista] = useState("musica");
+  useEffect(() => {
+    try { const v = localStorage.getItem("aura_vista"); if (v) setVista(v); } catch {}
+    const alVista = (e) => setVista(e.detail || "musica");
+    window.addEventListener("aura-vista", alVista);
+    return () => window.removeEventListener("aura-vista", alVista);
+  }, []);
+  useEffect(() => {
+    if (vista === "playlists") { setTab("playlists"); setSelectedPlaylist(null); }
+    else if (vista === "cuenta") setTab("cuenta");
+    else if (!["downloads", "favorites", "stats"].includes(tab)) setTab("downloads");
+  }, [vista]);
+
   const [showCustom, setShowCustom] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [temaAct, setTemaAct] = useState("oscuro");
@@ -1300,7 +1315,8 @@ export default function ProfilePage() {
     <div style={{maxWidth:900,margin:"0 auto",padding:20,boxSizing:"border-box",paddingBottom:hp?"calc(104px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
       <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
 
-      {/* Header */}
+      {/* Header (solo en la sección Perfil) */}
+      {vista === "cuenta" && (
       <div style={{background:"var(--panel)",borderRadius:14,padding:22,marginBottom:22,border:"1px solid var(--border)",display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{width:64,height:64,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2em",flexShrink:0}}>
           {(profile?.display_name||profile?.username||"U")[0].toUpperCase()}
@@ -1313,6 +1329,11 @@ export default function ProfilePage() {
               <Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={13} stroke="var(--accent)"/> Amigos{amigos.length?` (${amigos.length})`:""}
             </button>
             {/* Personalizar */}
+            {/* Campanita del buzón: puntito rojo si te mandaron algo */}
+            <button onClick={()=>{setShowFriends(true);cargarAmigos();cargarBuzon();}} title="Buzón" style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:"50%",border:"1px solid var(--border)",background:"var(--panel2)",cursor:"pointer"}}>
+              <Ico d={<><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></>} size={14} stroke={buzon.length?"var(--accent)":"var(--text3)"}/>
+              {buzon.length > 0 && <span style={{position:"absolute",top:-2,right:-2,minWidth:15,height:15,borderRadius:8,background:"#ef4444",color:"#fff",fontSize:"0.55em",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",border:"2px solid var(--panel)"}}>{buzon.length}</span>}
+            </button>
             <button onClick={()=>setShowCustom(v=>!v)} title="Personalizar" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:16,border:"1px solid var(--border)",background:showCustom?"var(--accent)":"var(--panel2)",color:showCustom?"#fff":"var(--text2)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>
               <Ico d={<><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>} size={13} stroke={showCustom?"#fff":"var(--accent)"}/> Personalizar
             </button>
@@ -1325,6 +1346,8 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      )}
 
       {/* ── Panel: Personalizar ── */}
       {showCustom && (
@@ -1546,21 +1569,26 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
-        <button onClick={()=>{setTab("downloads");setSelectedPlaylist(null);}} style={{...SM,background:tab==="downloads"?"#22c55e":"var(--panel)",color:tab==="downloads"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
-          <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={14} stroke="currentColor"/> Descargadas ({downloadedMusic.length})
-        </button>
-        <button onClick={()=>{setTab("favorites");setSelectedPlaylist(null);}} style={{...SM,background:tab==="favorites"?"var(--accent)":"var(--panel)",color:tab==="favorites"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
-          <Ico d={<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>} size={14} fill="currentColor" stroke="currentColor"/> Favoritos ({favorites.length})
-        </button>
-        <button onClick={()=>{setTab("playlists");setSelectedPlaylist(null);}} style={{...SM,background:tab==="playlists"?"var(--accent)":"var(--panel)",color:tab==="playlists"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
-          <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={14} stroke="currentColor"/> Playlists ({playlists.length})
-        </button>
-        <button onClick={()=>{setTab("stats");setSelectedPlaylist(null);}} style={{...SM,background:tab==="stats"?"var(--accent)":"var(--panel)",color:tab==="stats"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
-          <Ico d={<><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>} size={14} stroke="currentColor"/> Stats
-        </button>
-      </div>
+      {/* Título de la sección + pestañas */}
+      {vista === "musica" && (
+        <>
+          <h1 style={{fontSize:"1.25em",fontWeight:800,marginBottom:14,color:"var(--text-strong)"}}>Mi música</h1>
+          <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
+            <button onClick={()=>{setTab("downloads");setSelectedPlaylist(null);}} style={{...SM,background:tab==="downloads"?"#22c55e":"var(--panel)",color:tab==="downloads"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
+              <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={14} stroke="currentColor"/> Descargadas ({downloadedMusic.length})
+            </button>
+            <button onClick={()=>{setTab("favorites");setSelectedPlaylist(null);}} style={{...SM,background:tab==="favorites"?"var(--accent)":"var(--panel)",color:tab==="favorites"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
+              <Ico d={<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>} size={14} fill="currentColor" stroke="currentColor"/> Favoritos ({favorites.length})
+            </button>
+            <button onClick={()=>{setTab("stats");setSelectedPlaylist(null);}} style={{...SM,background:tab==="stats"?"var(--accent)":"var(--panel)",color:tab==="stats"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
+              <Ico d={<><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>} size={14} stroke="currentColor"/> Stats
+            </button>
+          </div>
+        </>
+      )}
+      {vista === "playlists" && (
+        <h1 style={{fontSize:"1.25em",fontWeight:800,marginBottom:14,color:"var(--text-strong)"}}>Mis playlists</h1>
+      )}
 
       {/* ═══ TAB: Estadísticas ═══ */}
       {tab==="stats" && (() => {

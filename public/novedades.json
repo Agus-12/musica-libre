@@ -1,12 +1,13 @@
 {
-  "version": "18 de agosto, 2026 · v13",
+  "version": "18 de agosto, 2026 · v14",
   "titulo": "🎉 AURA se puso mejor",
   "cambios": [
+    "🧭 Nuevo menú lateral estilo cristal líquido: Explorar · Mi música · Mis playlists · Perfil · Modo sin conexión · Cerrar sesión",
+    "🗂 Secciones reorganizadas: tu música (descargas/favoritos/stats), tus playlists y tu perfil, cada una en su lugar",
+    "🔔 Campanita con contador rojo en el Perfil: mirá el buzón apenas te manden algo",
+    "🎵 Moverte entre Mi música, Playlists y Perfil ya no corta la reproducción",
     "🧠 Modo sin datos inteligente: si hay internet te ofrece salir, y si NO hay internet te ofrece activarlo — un toque en ambos casos",
     "✨ Menú rediseñado: estilo cristal con botones nuevos",
-    "📵 Modo sin datos ahora vive en el menú, con switch y puntito indicador",
-    "🟢 Con el modo activo, la app muestra el estado OFF aunque tengas datos encendidos",
-    "🎚 Mini-reproductor en la sección Música: controlá lo que suena sin salir de Descubrir",
-    "👁 El icono de Descubrir ya se ve con cualquier tema y color de acento"
+    "📵 Modo sin datos ahora vive en el menú, con switch y puntito indicador"
   ]
 }

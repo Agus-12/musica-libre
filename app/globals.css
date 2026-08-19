@@ -72,3 +72,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 @keyframes girar {
   to { transform: rotate(360deg); }
 }
+
+/* Los enlaces de escritorio de la barra solo aparecen en pantallas anchas */
+.desktop-nav { display: none !important; }
+@media (min-width: 760px) { .desktop-nav { display: flex !important; } }
