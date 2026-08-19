@@ -813,7 +813,7 @@ export default function SpotifyPage() {
           </div>
 
           {/* Chips de mood: búsqueda al toque */}
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6, marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6, marginBottom: 20, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
             {[["Fiesta", "fiesta reggaeton hits"], ["Chill", "chill relax acoustic"], ["Gym", "gym workout motivation"], ["Corazón roto", "sad canciones para llorar"], ["Road trip", "road trip classics"], ["Noventas", "90s hits"]].map(([et, q]) => (
               <button key={et} onClick={() => { setTab("search"); search(q); }} style={{ flexShrink: 0, padding: "8px 16px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text2)", fontSize: "0.82em", fontWeight: 700, cursor: "pointer" }}>{et}</button>
             ))}
@@ -823,7 +823,7 @@ export default function SpotifyPage() {
           {recientes.length > 0 && (
             <div style={{ marginBottom: 30 }}>
               <SectionHeader icon={<Ico d={<><polygon points="5 3 19 12 5 21 5 3"/></>} size={18} stroke="#22c55e" fill="#22c55e" />} title="Seguir escuchando" subtitle="Retomá donde quedaste" />
-              <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+              <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
                 {recientes.map(s => {
                   const sonando = playingTrack === String(s.key);
                   return (
@@ -864,7 +864,7 @@ export default function SpotifyPage() {
               {charts.momento?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
                   <SectionHeader icon={<Ico d={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>} size={18} stroke="#22c55e" />} title="Éxitos del momento" subtitle="El top mundial de hoy" />
-                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
                     {charts.momento.map((s, i) => (
                       <div key={s.id} onClick={() => loadAlbum(s.album_id, "deezer", s.name)} style={{ flex: "0 0 120px", width: 120, minWidth: 0, maxWidth: 120, overflow: "hidden", cursor: "pointer" }}>
                         <div style={{ position: "relative" }}>
@@ -881,7 +881,7 @@ export default function SpotifyPage() {
               {charts.playlists?.length > 0 && (
                 <div style={{ marginBottom: 30 }}>
                   <SectionHeader icon={<Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={18} stroke="#ec4899" />} title="Playlists del momento" subtitle="Las listas que el mundo escucha" />
-                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+                  <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
                     {charts.playlists.map(pl => (
                       <div key={pl.id} onClick={() => abrirPlaylistChart(pl)} style={{ flex: "0 0 130px", width: 130, minWidth: 0, maxWidth: 130, overflow: "hidden", cursor: "pointer" }}>
                         {pl.cover ? <img src={pl.cover} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", borderRadius: 10, display: "block" }} loading="lazy" /> : <div style={{ width: "100%", aspectRatio: 1, borderRadius: 10, background: "var(--border)" }} />}
@@ -1220,7 +1220,7 @@ function SectionHeader({ icon, title, subtitle }) {
 
 function HorizontalAlbumRow({ albums, onSelect, onFavorite, onPlaylist, isFavorite, source }) {
   return (
-    <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+    <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
       {albums.map(a => (
         <div key={a.id} onClick={() => onSelect(a.id, a.source || source)} style={{ flex: "0 0 140px", background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)", position: "relative" }}>
           <img src={a.cover_big || a.cover_xl || a.cover_medium} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} loading="lazy" />
@@ -1242,7 +1242,7 @@ function RecommendationRow({ favorites, onSelect, onFavorite, onPlaylist, isFavo
   const favAlbums = favorites.filter(f => f.item_type === "album").slice(0, 8);
   if (favAlbums.length === 0) return null;
   return (
-    <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+    <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
       {favAlbums.map(f => (
         <div key={f.id} onClick={() => onSelect(f.item_id, f.source || "itunes")} style={{ flex: "0 0 140px", background: "var(--panel)", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: "1px solid var(--border)" }}>
           {f.cover_url ? <img src={f.cover_url} style={{ width: "100%", aspectRatio: 1, objectFit: "cover", display: "block" }} /> : <div style={{ width: "100%", aspectRatio: 1, background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2em" }}>?</div>}
