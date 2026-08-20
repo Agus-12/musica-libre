@@ -19,6 +19,10 @@ export const metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
+  /* iOS: sin esto, al enfocar un input Safari hace un zoom automático
+     molesto. El usuario igual puede hacer pellizco manual (iOS ignora
+     el tope para gestos propios). */
+  maximumScale: 1,
   viewportFit: "cover",
   themeColor: "var(--bg)",
 };

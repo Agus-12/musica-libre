@@ -1556,10 +1556,12 @@ export default function ProfilePage() {
                     {(amigoVista.favoritos||[]).length===0 ? (
                       <p style={{color:"var(--text4)",fontSize:"0.8em",marginBottom:14}}>Todavía no tiene favoritos.</p>
                     ) : (
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:8,marginBottom:16}}>
                         {(amigoVista.favoritos||[]).slice(0,12).map((f,i)=>(
-                          <div key={i} onClick={()=>{setAmigoVista(null);irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source||"itunes",track:f.item_type==="track"?(f.name||""):""});}} style={{cursor:"pointer"}}>
-                            <CoverImg url={f.cover_url} size="100%" r={8}/>
+                          <div key={i} onClick={()=>{setAmigoVista(null);irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source||"itunes",track:f.item_type==="track"?(f.name||""):""});}} style={{cursor:"pointer",minWidth:0,overflow:"hidden"}}>
+                            <div style={{width:"100%",aspectRatio:"1 / 1",borderRadius:8,overflow:"hidden"}}>
+                              <CoverImg url={f.cover_url} size="100%" r={0}/>
+                            </div>
                             <div style={{color:"var(--text2)",fontSize:"0.66em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{f.name}</div>
                             <div style={{color:"var(--text4)",fontSize:"0.6em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
                           </div>

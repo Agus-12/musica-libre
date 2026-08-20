@@ -76,3 +76,10 @@ html, body { overflow-x: hidden; max-width: 100%; }
 /* Los enlaces de escritorio de la barra solo aparecen en pantallas anchas */
 .desktop-nav { display: none !important; }
 @media (min-width: 760px) { .desktop-nav { display: flex !important; } }
+
+/* ── iOS: fuera el zoom automático al enfocar campos de texto ──
+   Safari hace zoom a la fuerza si el input tiene letra menor a 16px.
+   En táctil los llevamos a 16px (manda sobre los estilos inline). */
+@media (max-width: 760px) {
+  input, textarea, select { font-size: 16px !important; }
+}
