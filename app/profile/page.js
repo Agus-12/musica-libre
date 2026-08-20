@@ -589,11 +589,67 @@ export default function ProfilePage() {
         artist: i.artist || "",
         cover: i.cover_url || "",
         duration_ms: i.extra_data?.duration_ms || null,
+        solo_playlist: true,     // viven AQUÍ, no en Mi música
       }));
     if (!tracks.length) { toast.warning("Esta playlist no tiene canciones", 3000); return; }
     enqueueAlbum(selectedPlaylist?.name || "Playlist", tracks);
-    toast.success(`Descargando ${tracks.length} canciones de "${selectedPlaylist?.name}"`, 4000);
-    setTab("downloads");
+    toast.success(`Descargando ${tracks.length} canciones aquí en la playlist`, 4000);
+  }
+
+  /* ── La playlist se REPRODUCE aquí mismo (sin pasar por Mi música) ── */
+  function mp3DeItem(item) {
+    try {
+      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const claves = [String(item.item_id), ((item.artist||"")+" "+(item.name||"")).trim(), ((item.name||"")+" "+(item.artist||"")).trim(), (item.name||"").trim()];
+      for (const k of claves) if (s[k]?.audio_url) return s[k];
+    } catch {}
+    return null;
+  }
+  function reproducirItemPlaylist(item) {
+    const mp3 = mp3DeItem(item);
+    const url = mp3?.audio_url || item.extra_data?.preview_url || "";
+    if (!url) { toast.warning("Aún no está descargada: dale a Descargar todas", 3000); return; }
+    startTrack({
+      key: String(item.item_id),
+      title: item.name || "",
+      artist: item.artist || "",
+      cover_url: item.cover_url || "",
+      audio_url: url,
+      video_id: mp3?.video_id || "",
+      duration_ms: item.extra_data?.duration_ms || mp3?.duration_ms || null,
+      keys: [String(item.item_id)],
+    });
+  }
+
+  /* ── Importar una playlist externa por URL (Spotify / Deezer) ── */
+  const [importUrl, setImportUrl] = useState("");
+  const [importando, setImportando] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  async function importarPlaylistURL() {
+    const url = importUrl.trim();
+    if (!url || importando) return;
+    setImportando(true);
+    try {
+      const r = await fetch("/api/importar-playlist?url=" + encodeURIComponent(url));
+      const d = await r.json();
+      if (d.error) { toast.warning(d.error, 5000); setImportando(false); return; }
+      const cr = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name: d.nombre || "Playlist importada", description: "Importada por link" }) });
+      const dc = await cr.json();
+      if (!dc.playlist) { toast.error(dc.error || "No se pudo crear la playlist", 3500); setImportando(false); return; }
+      const ai = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        action: "add-items", playlist_id: dc.playlist.id,
+        items: (d.canciones || []).map(c => ({
+          item_type: "track", item_id: `${(c.artist||"").trim()} ${(c.name||"").trim()}`.trim(),
+          name: c.name, artist: c.artist, cover_url: c.cover || d.cover || "", source: c.source || "spotify",
+          extra_data: { album_id: c.album_id || "", preview_url: c.preview_url || "", duration_ms: c.duration_ms || 0 },
+        })),
+      }) });
+      const da = await ai.json();
+      toast.success(`"${d.nombre}" importada (${da.agregados || 0} canciones)`, 4500);
+      setImportUrl(""); setShowImport(false);
+      loadPlaylists();
+    } catch { toast.error("Error de red", 3000); }
+    setImportando(false);
   }
 
   /* Ver una playlist que te compartieron (es pública) */
@@ -632,6 +688,9 @@ export default function ProfilePage() {
         // la cancion nunca aparecia en Descargadas. La mostramos aunque
         // este vacia para que el usuario sepa que se intento.
         if (!entry.video_id && !entry.apple_url && !entry.audio_url && !entry.title) continue;
+        /* Descargas que pertenecen a una playlist: viven en Mis playlists,
+           NO se mezclan con Mi música. */
+        if (entry.solo_playlist) continue;
         /* Preferimos los datos REALES de la canción (guardados por el
            gestor de descargas): carátula del álbum y nombre de iTunes.
            El título del video de YouTube queda como último recurso. */
@@ -2093,6 +2152,24 @@ export default function ProfilePage() {
       {/* TAB: Playlists */}
       {tab==="playlists" && !selectedPlaylist && (
         <div>
+          {/* Importar una playlist de Spotify/Deezer por su link */}
+          <div style={{marginBottom:14}}>
+            {!showImport ? (
+              <button onClick={()=>setShowImport(true)} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"1px dashed var(--border)",background:"var(--panel)",color:"var(--text2)",fontSize:"0.85em",fontWeight:700,cursor:"pointer"}}>
+                <Ico d={<><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></>} size={14} stroke="var(--accent)"/> Importar playlist por link (Spotify / Deezer)
+              </button>
+            ) : (
+              <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>PEGA EL LINK DE LA PLAYLIST</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <input value={importUrl} onChange={e=>setImportUrl(e.target.value)} placeholder="https://open.spotify.com/playlist/..." style={{flex:1,minWidth:200,padding:"10px 12px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text)",outline:"none"}}/>
+                  <button onClick={importarPlaylistURL} disabled={importando||!importUrl.trim()} style={{padding:"10px 16px",borderRadius:10,border:"none",background:importando?"var(--panel2)":"var(--accent)",color:importando?"var(--text3)":"#fff",fontSize:"0.85em",fontWeight:700,cursor:importando?"default":"pointer"}}>{importando?"Importando...":"Importar"}</button>
+                  <button onClick={()=>{setShowImport(false);setImportUrl("");}} style={{padding:"10px 12px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text3)",fontSize:"0.85em",fontWeight:700,cursor:"pointer"}}>Cancelar</button>
+                </div>
+                <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:8,lineHeight:1.5}}>Sirve con playlists públicas de Spotify (open.spotify.com/playlist/...) y Deezer (deezer.com/playlist/...). Se crea aquí con todas sus canciones, lista para Descargar todas.</div>
+              </div>
+            )}
+          </div>
           {playlists.length===0 ? (
             <div style={{textAlign:"center",padding:30,color:"var(--text5)"}}><p>No tenes playlists</p><p style={{fontSize:"0.85em",marginTop:8}}><a href="/spotify" style={{color:"var(--accent)",fontWeight:600}}>Buscar musica</a></p></div>
           ) : (
@@ -2134,15 +2211,33 @@ export default function ProfilePage() {
           </div>
           {playlistItems.length===0 ? <p style={{textAlign:"center",color:"var(--text5)",padding:20}}>Playlist vacia</p> : (
             <div style={{background:"var(--panel)",borderRadius:10,border:"1px solid var(--border)",overflow:"hidden"}}>
-              {playlistItems.map(item=>(
-                <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--border)"}}>
+              {playlistItems.map(item=>{
+                const esTrack = item.item_type==="track";
+                const mp3 = esTrack ? mp3DeItem(item) : null;
+                const enCola = esTrack && !mp3 && queue.some(q=>String(q.key)===String(item.item_id)&&q.status!=="done"&&q.status!=="failed");
+                const cp = playingKey===String(item.item_id);
+                return (
+                <div key={item.id} onClick={esTrack?()=>reproducirItemPlaylist(item):undefined} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--border)",cursor:esTrack?"pointer":"default",background:cp?"rgba(34,197,94,0.13)":"transparent",borderLeft:cp?"3px solid #22c55e":"3px solid transparent",transition:"background 0.2s"}}>
                   <CoverImg url={item.cover_url} size={40} r={6}/>
-                  <div style={{flex:1,minWidth:0}}><div style={{color:"var(--text)",fontSize:"0.88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div><div style={{color:"var(--text4)",fontSize:"0.75em"}}>{item.artist}</div></div>
-                  <button onClick={()=>removePlaylistItem(item.id)} style={{background:"none",border:"none",color:"var(--text5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{color:cp?"#22c55e":"var(--text)",fontWeight:cp?700:400,fontSize:"0.88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
+                    <div style={{color:"var(--text4)",fontSize:"0.75em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {item.artist}
+                      {esTrack && mp3 && <span style={{color:"#22c55e",fontWeight:700}}> · OFF</span>}
+                      {esTrack && !mp3 && enCola && <span style={{color:"var(--accent)",fontWeight:700}}> · descargando…</span>}
+                    </div>
+                  </div>
+                  {esTrack && (
+                    <button onClick={(e)=>{e.stopPropagation();reproducirItemPlaylist(item);}} title="Reproducir" style={{background:cp&&isPlaying?"#22c55e":mp3?"rgba(34,197,94,0.18)":"rgba(124,92,252,0.15)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <Ico d={cp&&isPlaying?<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>:<polygon points="5 3 19 12 5 21 5 3"/>} size={12} stroke={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"} fill={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"}/>
+                    </button>
+                  )}
+                  <button onClick={(e)=>{e.stopPropagation();removePlaylistItem(item.id);}} style={{background:"none",border:"none",color:"var(--text5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                     <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="var(--text5)"/>
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -172,6 +172,9 @@ export function DownloadProvider({ children }) {
           artist: t.artist,
           cover: t.cover,
           duration_ms: t.duration_ms || null,
+          /* Descarga que pertenece a una playlist: NO aparece en
+             Mi música → Descargadas (vive dentro de la playlist). */
+          solo_playlist: Boolean(t.solo_playlist),
           status: "pending",
           savedAt: Date.now() + i,
         }));
@@ -319,6 +322,13 @@ async function processOne(track, currentQueue, setQueue) {
       artist: (track.repair ? (previo.artist || track.artist) : (track.artist || previo.artist)) || "",
       cover: (track.repair ? (previo.cover || track.cover) : (track.cover || previo.cover)) || "",
       duration_ms: track.duration_ms || previo.duration_ms || null,
+      /* ¿Vive solo dentro de una playlist? Reglas:
+         - Si la canción YA era una descarga normal (visible en Mi música),
+           se queda visible: no la escondemos.
+         - Reparaciones respetan lo que ya estaba. */
+      solo_playlist: track.repair
+        ? Boolean(previo.solo_playlist)
+        : (Boolean(track.solo_playlist) && !(previo.saved_at && !previo.solo_playlist)),
       saved_at: Date.now(),
     };
     saved[sq] = entry;
