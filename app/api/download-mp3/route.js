@@ -378,7 +378,10 @@ export async function GET(req) {
           p.get("expected_duration") ? Number(p.get("expected_duration")) : null,
           p.get("expected_artist") || null,
           p.get("expected_song") || null
-        );
+        ).catch(() => null);
+        /* ↑ Si yt-search truena (YouTube bloquea las IPs de Vercel cada
+           tanto), NO tiramos error: seguimos con video=null y la Mac
+           busca por su cuenta (su IP de casa no está bloqueada). */
     if (!video) {
       /* La búsqueda estricta no encontró nada en YouTube. NO nos rendimos
          todavía: la Mac busca por su cuenta (YouTube con sus propios
