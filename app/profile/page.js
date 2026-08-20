@@ -1817,10 +1817,10 @@ export default function ProfilePage() {
             ) : (
             <div style={{background:"var(--panel)",borderRadius:12,border:"1px solid var(--border)",overflow:"hidden"}}>
               {listaVisible.map(item => {
-                const cp = playingKey===item.key;
+                const cp = playingKey===item.key || (item.keys||[]).includes(playingKey);
                 const dl = downloadingItems[item.key];
                 return (
-                  <div key={item.key} onClick={()=>playDownloaded(item)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:"1px solid var(--border)",background:cp?"rgba(34,197,94,0.08)":"transparent",cursor:"pointer",transition:"background 0.2s"}}>
+                  <div key={item.key} onClick={()=>playDownloaded(item)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:"1px solid var(--border)",background:cp?"rgba(34,197,94,0.13)":"transparent",borderLeft:cp?"3px solid #22c55e":"3px solid transparent",cursor:"pointer",transition:"background 0.2s, border-color 0.2s"}}>
                     {/* Cover + play */}
                     <div style={{position:"relative",flexShrink:0}}>
                       <CoverImg url={item.cover_url} size={52} r={8}/>
