@@ -1359,7 +1359,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <div style={{maxWidth:vista==="explorar"?1000:900,margin:"0 auto",padding:vista==="explorar"?0:20,boxSizing:"border-box",paddingBottom:hp?"calc(104px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
+    <div style={{maxWidth:vista==="explorar"?1000:900,margin:"0 auto",padding:vista==="explorar"?0:20,boxSizing:"border-box",paddingBottom:hp?"calc(135px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
       <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
 
       {/* Header (solo en la sección Perfil) */}
@@ -2030,7 +2030,7 @@ export default function ProfilePage() {
 
           {/* ── Pantalla completa (desplegada) ── */}
           <div
-            style={{position:"fixed",top:0,left:0,right:0,bottom:0,height:"100dvh",zIndex:9999,background:"linear-gradient(180deg,var(--panel) 0%,var(--panel2) 45%,var(--bg) 100%)",display:"flex",flexDirection:"column",transform:expanded?"translateY(0)":"translateY(100%)",transition:"transform 0.38s cubic-bezier(0.32,0.72,0,1)",overflow:"hidden"}}>
+            style={{position:"fixed",top:0,left:0,right:0,bottom:0,height:"100dvh",zIndex:9999,background:"linear-gradient(180deg,var(--panel) 0%,var(--panel2) 45%,var(--bg) 100%)",display:"flex",flexDirection:"column",transform:expanded?"translateY(0)":"translateY(100%)",transition:"transform 0.38s cubic-bezier(0.32,0.72,0,1)",overflow:"hidden",pointerEvents:expanded?"auto":"none",visibility:expanded?"visible":"hidden"}}>
 
             {/* Fondo difuminado con la portada */}
             {playingCover && (

@@ -1013,8 +1013,8 @@ export default function SpotifyPage() {
                           <div style={{ color: "var(--text4)", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}{s.album ? " · " + s.album : ""}</div>
                         </div>
                         {s.preview_url && (
-                          <button onClick={(e) => { e.stopPropagation(); playPreview(s.preview_url, s.id, s.name, s.artist, s.cover, s.duration_ms); }} style={{ background: playingTrack === s.id ? "var(--accent)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <Ico d={playingTrack === s.id ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff" />
+                          <button onClick={(e) => { e.stopPropagation(); playPreview(s.preview_url, s.id, s.name, s.artist, s.cover, s.duration_ms); }} style={{ background: (playingTrack === s.id || (sonandoGlobal.key === String(s.id) && sonandoGlobal.playing)) ? "var(--accent)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Ico d={(playingTrack === s.id || (sonandoGlobal.key === String(s.id) && sonandoGlobal.playing)) ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff" />
                           </button>
                         )}
                       </div>
@@ -1092,7 +1092,7 @@ export default function SpotifyPage() {
               <div style={{ background: "var(--panel)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
                 {album.tracks.map((track, i) => {
                   const trackKey = String(track.id || `${album.id}-${i}`);
-                  const isPlaying = playingTrack === trackKey;
+                  const isPlaying = playingTrack === trackKey || (sonandoGlobal.key === trackKey && sonandoGlobal.playing);
                   const nombreBajo = (track.name || "").toLowerCase().trim();
                   const esResaltada = Boolean(resaltada && (nombreBajo === resaltada || nombreBajo.includes(resaltada) || resaltada.includes(nombreBajo)));
                   return (

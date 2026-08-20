@@ -145,6 +145,12 @@ export default function PWASetup() {
      modo offline por olvidarlo encendido. */
   const [avisoDatos, setAvisoDatos] = useState(false);
   const [avisoSinRed, setAvisoSinRed] = useState(false);
+  const [playerVisible, setPlayerVisible] = useState(false);
+  useEffect(() => {
+    const h = (e) => setPlayerVisible(Boolean(e.detail && e.detail.key));
+    window.addEventListener("aura-sonando", h);
+    return () => window.removeEventListener("aura-sonando", h);
+  }, []);
   useEffect(() => {
     let ultimoPing = 0;
     const revisar = async () => {
@@ -235,7 +241,7 @@ export default function PWASetup() {
     <>
       {/* ── Aviso: modo sin datos activo PERO hay internet ── */}
       {avisoDatos && (
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 350, padding: "12px 16px calc(14px + env(safe-area-inset-bottom))", background: "rgba(10,10,20,0.85)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(234,179,8,0.35)" }}>
+        <div style={{ position: "fixed", bottom: playerVisible ? "calc(82px + env(safe-area-inset-bottom))" : 0, left: 0, right: 0, zIndex: 10500, padding: playerVisible ? "12px 16px 14px" : "12px 16px calc(14px + env(safe-area-inset-bottom))", background: "rgba(10,10,20,0.92)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(234,179,8,0.35)", borderBottom: playerVisible ? "1px solid rgba(234,179,8,0.35)" : "none" }}>
           <div style={{ maxWidth: 500, margin: "0 auto" }}>
             <div style={{ color: "#eab308", fontWeight: 800, fontSize: "0.88em", marginBottom: 4 }}>Hay internet disponible</div>
             <div style={{ color: "rgba(230,230,240,0.7)", fontSize: "0.78em", marginBottom: 10, lineHeight: 1.45 }}>El modo sin datos sigue activo. ¿Lo apagamos para usar la conexión?</div>
@@ -249,7 +255,7 @@ export default function PWASetup() {
 
       {/* ── Aviso: NO hay internet → ofrecer el modo sin datos ── */}
       {avisoSinRed && !avisoDatos && (
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 350, padding: "12px 16px calc(14px + env(safe-area-inset-bottom))", background: "rgba(10,10,20,0.85)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(234,179,8,0.35)" }}>
+        <div style={{ position: "fixed", bottom: playerVisible ? "calc(82px + env(safe-area-inset-bottom))" : 0, left: 0, right: 0, zIndex: 10500, padding: playerVisible ? "12px 16px 14px" : "12px 16px calc(14px + env(safe-area-inset-bottom))", background: "rgba(10,10,20,0.92)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(234,179,8,0.35)", borderBottom: playerVisible ? "1px solid rgba(234,179,8,0.35)" : "none" }}>
           <div style={{ maxWidth: 500, margin: "0 auto" }}>
             <div style={{ color: "#eab308", fontWeight: 800, fontSize: "0.88em", marginBottom: 4 }}>Parece que no hay conexión</div>
             <div style={{ color: "rgba(230,230,240,0.7)", fontSize: "0.78em", marginBottom: 10, lineHeight: 1.45 }}>Activá el modo sin datos: la app va más fluida con tu música descargada y no gasta datos intentando conectar.</div>
