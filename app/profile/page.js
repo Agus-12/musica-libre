@@ -1333,8 +1333,8 @@ export default function ProfilePage() {
 
   // El Explorar embebido escucha esto para pintar en verde lo que suena
   useEffect(() => {
-    try { window.dispatchEvent(new CustomEvent("aura-sonando", { detail: { key: playingKey, playing: isPlaying } })); } catch {}
-  }, [playingKey, isPlaying]);
+    try { window.dispatchEvent(new CustomEvent("aura-sonando", { detail: { key: playingKey, playing: isPlaying, title: playingTitle || "", artist: playingArtist || "" } })); } catch {}
+  }, [playingKey, isPlaying, playingTitle, playingArtist]);
 
   if(loading) return <div style={{textAlign:"center",padding:60,color:"var(--accent)"}}>Cargando...</div>;
 

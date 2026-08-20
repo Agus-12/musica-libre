@@ -206,6 +206,27 @@ export default function SpotifyPage() {
     window.addEventListener("aura-sonando", h);
     return () => window.removeEventListener("aura-sonando", h);
   }, []);
+  /* ¿Esta canción es la que está sonando en el reproductor global?
+     Compara por clave exacta Y por nombre+artista normalizados, porque
+     una misma canción puede vivir con claves distintas (id de iTunes,
+     id de Deezer, clave de la descarga guardada...). */
+  const normCancion = (s) => String(s || "").toLowerCase()
+    .replace(/\(.*?\)|\[.*?\]/g, " ")
+    .replace(/\b(feat|ft)\.?\s.*$/g, " ")
+    .replace(/[^a-z0-9áéíóúüñ ]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  function esLaQueSuena(trackKey, nombre, artistaNombre) {
+    if (playingTrack === String(trackKey)) return true;
+    const g = sonandoGlobal || {};
+    if (!g.playing) return false;
+    if (String(g.key) === String(trackKey)) return true;
+    if (g.title && nombre && normCancion(g.title) === normCancion(nombre)) {
+      if (!g.artist || !artistaNombre) return true;
+      const a1 = normCancion(g.artist), a2 = normCancion(artistaNombre);
+      return a1 === a2 || a1.includes(a2) || a2.includes(a1);
+    }
+    return false;
+  }
   useEffect(() => {
     try {
       const st = JSON.parse(localStorage.getItem("aura_stats") || "{}");
@@ -852,7 +873,7 @@ export default function SpotifyPage() {
               <SectionHeader icon={<Ico d={<><polygon points="5 3 19 12 5 21 5 3"/></>} size={18} stroke="#22c55e" fill="#22c55e" />} title="Seguir escuchando" subtitle="Retomá donde quedaste" />
               <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
                 {recientes.map(s => {
-                  const sonando = playingTrack === String(s.key) || (sonandoGlobal.key === String(s.key) && sonandoGlobal.playing);
+                  const sonando = esLaQueSuena(s.key, s.name, s.artist);
                   return (
                   <div key={s.key} onClick={() => seguirEscuchando(s)} style={{ flex: "0 0 200px", width: 200, minWidth: 0, maxWidth: 200, display: "flex", alignItems: "center", gap: 9, background: sonando ? "rgba(34,197,94,0.12)" : "var(--panel)", border: sonando ? "1px solid rgba(34,197,94,0.4)" : "1px solid var(--border)", borderRadius: 10, padding: 8, cursor: "pointer" }}>
                     {s.cover ? <img src={s.cover} style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} loading="lazy" /> : <div style={{ width: 44, height: 44, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
@@ -1025,20 +1046,23 @@ export default function SpotifyPage() {
                 <div style={{ marginBottom: 25 }}>
                   <SectionHeader icon="" title="Canciones" subtitle="" />
                   <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                    {songResults.map(s => (
-                      <div key={s.id} onClick={() => loadAlbum(s.album_id, s.source || "itunes", s.name)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>
+                    {songResults.map(s => {
+                      const sonando = esLaQueSuena(s.id, s.name, s.artist);
+                      return (
+                      <div key={s.id} onClick={() => loadAlbum(s.album_id, s.source || "itunes", s.name)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer", background: sonando ? "rgba(34,197,94,0.12)" : "transparent", borderLeft: sonando ? "3px solid #22c55e" : "3px solid transparent" }}>
                         {s.cover ? <img src={s.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ color: "var(--text)", fontSize: "0.88em", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+                          <div style={{ color: sonando ? "#22c55e" : "var(--text)", fontSize: "0.88em", fontWeight: sonando ? 700 : 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
                           <div style={{ color: "var(--text4)", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}{s.album ? " · " + s.album : ""}</div>
                         </div>
                         {s.preview_url && (
-                          <button onClick={(e) => { e.stopPropagation(); playPreview(s.preview_url, s.id, s.name, s.artist, s.cover, s.duration_ms); }} style={{ background: (playingTrack === s.id || (sonandoGlobal.key === String(s.id) && sonandoGlobal.playing)) ? "var(--accent)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <Ico d={(playingTrack === s.id || (sonandoGlobal.key === String(s.id) && sonandoGlobal.playing)) ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff" />
+                          <button onClick={(e) => { e.stopPropagation(); playPreview(s.preview_url, s.id, s.name, s.artist, s.cover, s.duration_ms); }} style={{ background: sonando ? "#22c55e" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Ico d={sonando ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff" />
                           </button>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1112,18 +1136,21 @@ export default function SpotifyPage() {
               <div style={{ background: "var(--panel)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
                 {album.tracks.map((track, i) => {
                   const trackKey = String(track.id || `${album.id}-${i}`);
-                  const isPlaying = playingTrack === trackKey || (sonandoGlobal.key === trackKey && sonandoGlobal.playing);
+                  const isPlaying = esLaQueSuena(trackKey, track.name, track.artist || album.artist);
                   const nombreBajo = (track.name || "").toLowerCase().trim();
                   const esResaltada = Boolean(resaltada && (nombreBajo === resaltada || nombreBajo.includes(resaltada) || resaltada.includes(nombreBajo)));
+                  const tocar = () => { if (track.preview_url) playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, track.duration_ms || 0); };
                   return (
                     <div key={i} ref={esResaltada ? (el) => { resaltadaRef.current = el; } : undefined}
+                      onClick={tocar}
                       style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--border)",
-                        background: esResaltada ? "rgba(124,92,252,0.14)" : "transparent",
-                        borderLeft: esResaltada ? "3px solid var(--accent)" : "3px solid transparent",
+                        cursor: track.preview_url ? "pointer" : "default",
+                        background: isPlaying ? "rgba(34,197,94,0.12)" : esResaltada ? "rgba(124,92,252,0.14)" : "transparent",
+                        borderLeft: isPlaying ? "3px solid #22c55e" : esResaltada ? "3px solid var(--accent)" : "3px solid transparent",
                         transition: "background 0.3s" }}>
                       <span style={{ color: "var(--text5)", width: 22, textAlign: "right", fontSize: "0.82em" }}>{track.number || i + 1}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: "var(--text)", fontSize: "0.9em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{track.name}</div>
+                        <div style={{ color: isPlaying ? "#22c55e" : "var(--text)", fontSize: "0.9em", fontWeight: isPlaying ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{track.name}</div>
                         {track.artist && track.artist !== album.artist && <div style={{ color: "var(--text4)", fontSize: "0.75em" }}>{track.artist}</div>}
                       </div>
                       {track.duration && <span style={{ color: "var(--text5)", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
@@ -1132,7 +1159,7 @@ export default function SpotifyPage() {
                       <ShareBtn onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "" })} saved={isFavorite("track", trackKey)} size="sm" />
 
                       {track.preview_url && (
-                        <button onClick={() => playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, track.duration_ms || 0)} style={{ background: isPlaying ? "var(--accent)" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "rgba(34,197,94,0.2)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
+                        <button onClick={(e) => { e.stopPropagation(); tocar(); }} style={{ background: isPlaying ? "#22c55e" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "rgba(34,197,94,0.2)" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative" }}>
                           <svg width="10" height="12" viewBox="0 0 10 12" fill={isPlaying ? "#fff" : hasFullMp3(trackKey, track.name, track.artist || album.artist) ? "#22c55e" : "var(--accent)"}>
                             {isPlaying ? <><rect x="0" y="1" width="3" height="10" rx="1"/><rect x="6" y="1" width="3" height="10" rx="1"/></> : <polygon points="0,0 10,6 0,12"/>}
                           </svg>
