@@ -44,6 +44,19 @@ export default function Navbar({ children }) {
     setTemaClaro(nuevo);
     d.classList.toggle("tema-claro", nuevo);
     try { localStorage.setItem("aura_tema", nuevo ? "claro" : "oscuro"); } catch {}
+    /* Sincronizar con la cuenta: sin esto, el tema guardado en la nube
+       revertía el cambio en cada carga de página. */
+    try {
+      fetch("/api/ajustes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tema: nuevo ? "claro" : "oscuro",
+          accent: localStorage.getItem("aura_accent") || "#7c5cfc",
+          fuente: localStorage.getItem("aura_fuente") || "",
+        }),
+      }).catch(() => {});
+    } catch {}
   }
 
   async function toggleSinDatos() {

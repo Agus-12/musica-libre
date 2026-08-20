@@ -138,6 +138,26 @@ export default function SpotifyPage() {
 
   // Load charts on mount
   useEffect(() => {
+    /* /spotify "suelto" (apps instaladas con el start_url viejo) salta
+       a la app unificada conservando el destino (album/busqueda):
+       así TODOS usan el reproductor global. */
+    if (typeof window !== "undefined" && !window.__auraPlayerGlobal && window.location.pathname.startsWith("/spotify")) {
+      try {
+        const p0 = new URLSearchParams(window.location.search);
+        const destino = {};
+        if (p0.get("album")) {
+          destino.album = p0.get("album");
+          destino.source = p0.get("source") || "itunes";
+          if (p0.get("track")) destino.track = p0.get("track");
+        } else if (p0.get("buscar")) {
+          destino.buscar = p0.get("buscar");
+        }
+        if (Object.keys(destino).length) localStorage.setItem("aura_explorar_destino", JSON.stringify(destino));
+        localStorage.setItem("aura_vista", "explorar");
+      } catch {}
+      window.location.replace("/profile");
+      return;
+    }
     loadCharts();
     const params = new URLSearchParams(window.location.search);
     const albumId = params.get("album");
