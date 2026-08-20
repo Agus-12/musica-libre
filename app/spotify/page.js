@@ -241,6 +241,33 @@ export default function SpotifyPage() {
   }, []);
   /* Visor de una playlist del chart */
   const [plVista, setPlVista] = useState(null);
+  const [guardandoPl, setGuardandoPl] = useState(false);
+  /* Guardar la playlist del chart COMPLETA en "Mis playlists" */
+  async function guardarPlaylistEnMias() {
+    if (!plVista || plVista.cargando || guardandoPl) return;
+    const tracks = plVista.tracks || [];
+    if (!tracks.length) { toast.warning("La playlist está vacía", 2500); return; }
+    setGuardandoPl(true);
+    try {
+      const r = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name: plVista.nombre || "Playlist", description: "Guardada desde Explorar" }) });
+      const d = await r.json();
+      if (!d.playlist) { toast.error(d.error || "No se pudo crear la playlist", 3500); setGuardandoPl(false); return; }
+      let ok = 0;
+      for (const t of tracks) {
+        try {
+          const res = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+            action: "add-item", playlist_id: d.playlist.id, item_type: "track",
+            item_id: String(t.id || `${t.artist||""}-${t.name||""}`), name: t.name || "",
+            artist: t.artist || "", cover_url: t.cover || "", source: "deezer",
+            extra_data: { album_id: t.album_id || "", preview_url: t.preview_url || "", duration_ms: t.duration_ms || 0 },
+          }) });
+          if (res.ok) ok++;
+        } catch {}
+      }
+      toast.success(`"${plVista.nombre}" guardada en Mis playlists (${ok} canciones)`, 4000);
+    } catch { toast.error("Error de red", 3000); }
+    setGuardandoPl(false);
+  }
   async function abrirPlaylistChart(pl) {
     setPlVista({ nombre: pl.nombre, cover: pl.cover, tracks: [], cargando: true });
     try {
@@ -811,13 +838,20 @@ export default function SpotifyPage() {
 
       {/* Visor de playlist del chart */}
       {plVista && (
-        <div onClick={() => setPlVista(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 440, maxHeight: "78vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <div onClick={() => setPlVista(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 250, display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 20, paddingLeft: 20, paddingRight: 20, paddingBottom: sonandoGlobal.key ? "calc(115px + env(safe-area-inset-bottom))" : 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 440, maxHeight: sonandoGlobal.key ? "calc(100dvh - 165px)" : "78vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
               {plVista.cover ? <img src={plVista.cover} style={{ width: 52, height: 52, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} /> : null}
               <div style={{ flex: 1, minWidth: 0, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }}>{plVista.nombre}</div>
               <button onClick={() => setPlVista(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", fontSize: "1.2em", flexShrink: 0 }}>✕</button>
             </div>
+            {/* Guardarla completa en Mis playlists */}
+            {!plVista.cargando && (plVista.tracks || []).length > 0 && (
+              <button onClick={guardarPlaylistEnMias} disabled={guardandoPl} style={{ width: "100%", marginBottom: 12, padding: "10px 14px", borderRadius: 10, border: "none", background: guardandoPl ? "var(--panel2)" : "var(--accent)", color: guardandoPl ? "var(--text3)" : "#fff", fontSize: "0.85em", fontWeight: 700, cursor: guardandoPl ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><line x1="18" y1="15" x2="18" y2="21"/><line x1="15" y1="18" x2="21" y2="18"/></>} size={15} stroke={guardandoPl ? "var(--text3)" : "#fff"} />
+                {guardandoPl ? "Guardando..." : "Agregar a Mis playlists"}
+              </button>
+            )}
             {plVista.cargando ? <p style={{ color: "var(--text4)", textAlign: "center", padding: 20 }}>Cargando...</p> :
               plVista.tracks.map((t, i) => (
                 <div key={i} onClick={() => { setPlVista(null); if (t.album_id) loadAlbum(t.album_id, "deezer", t.name); }} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 2px", borderBottom: "1px solid var(--border2)", cursor: "pointer" }}>

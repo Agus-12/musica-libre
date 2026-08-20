@@ -242,9 +242,12 @@ export default function ProfilePage() {
   }, []);
   useEffect(() => {
     if (vista === "playlists") { setTab("playlists"); setSelectedPlaylist(null); }
-    else if (vista === "cuenta") setTab("cuenta");
+    else if (vista === "cuenta") { setTab("cuenta"); cargarAmigos(); cargarBuzon(); cargarNoLeidos(); }
     else if (vista === "explorar") setTab("explorar");
     else if (!["downloads", "favorites", "stats"].includes(tab)) setTab("downloads");
+    /* Cambio de sección: cerrar paneles flotantes para que no se queden
+       pegados sobre la otra vista (chat, compartir...) */
+    setChatCon(null); setCompartirItem(null);
     /* Cambio de sección = página nueva: arrancar desde ARRIBA. Sin esto,
        el scroll de la sección anterior (p. ej. bien abajo en Mi música)
        se quedaba pegado y en iOS la nueva vista rebotaba al scrollear. */
@@ -285,12 +288,13 @@ export default function ProfilePage() {
     };
   }, []);
 
-  const [showCustom, setShowCustom] = useState(false);
-  const [showFriends, setShowFriends] = useState(false);
   const [temaAct, setTemaAct] = useState("oscuro");
   const [accentAct, setAccentAct] = useState("#7c5cfc");
   const [fuenteAct, setFuenteAct] = useState("");
   const [amigos, setAmigos] = useState([]);
+  const [solicitudes, setSolicitudes] = useState([]);   // me mandaron, falta confirmar
+  const [enviadas, setEnviadas] = useState([]);         // yo mandé, esperando
+  const [noLeidos, setNoLeidos] = useState({});         // chat: {from_id: cantidad}
   const [amigosError, setAmigosError] = useState("");
   const [buscaAmigo, setBuscaAmigo] = useState("");
   const [sugerencias, setSugerencias] = useState([]);
@@ -430,8 +434,32 @@ export default function ProfilePage() {
     try {
       const r = await fetchConSesion("/api/friends");
       const d = await r.json();
-      if (d.amigos) { setAmigos(d.amigos); setAmigosError(""); }
+      if (d.amigos) {
+        setAmigos(d.amigos); setSolicitudes(d.solicitudes || []); setEnviadas(d.enviadas || []);
+        setAmigosError("");
+      }
       else if (d.error) setAmigosError(d.error);
+    } catch {}
+  }
+  async function cargarNoLeidos() {
+    try {
+      const r = await fetchConSesion("/api/chat");
+      const d = await r.json();
+      setNoLeidos(d.noLeidos || {});
+    } catch {}
+  }
+  async function aceptarSolicitud(id) {
+    try {
+      const r = await fetchConSesion("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aceptar: id }) });
+      const d = await r.json();
+      if (d.ok) { toast.success("¡Ya son amigos!", 3000); cargarAmigos(); }
+      else toast.warning(d.error || "No se pudo", 3000);
+    } catch { toast.error("Error de red", 3000); }
+  }
+  async function rechazarSolicitud(id) {
+    try {
+      await fetchConSesion("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rechazar: id }) });
+      cargarAmigos();
     } catch {}
   }
   function buscarUsuarios(texto) {
@@ -449,7 +477,7 @@ export default function ProfilePage() {
     try {
       const r = await fetchConSesion("/api/friends", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }) });
       const d = await r.json();
-      if (d.ok) { toast.success("Amigo agregado: @" + username, 3000); cargarAmigos(); }
+      if (d.ok) { toast.success(d.mensaje || "Solicitud enviada a @" + username, 3500); cargarAmigos(); }
       else toast.warning(d.error || "No se pudo", 3500);
     } catch { toast.error("Error de red", 3000); }
   }
@@ -472,6 +500,60 @@ export default function ProfilePage() {
       else { toast.warning(d.error || "No se pudo cargar", 3500); setAmigoVista(null); }
     } catch { setAmigoVista(null); }
     setAmigoCargando(false);
+  }
+
+  /* ── Chat con un amigo ── */
+  const [chatCon, setChatCon] = useState(null);          // amigo {id, username, ...}
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatTexto, setChatTexto] = useState("");
+  const [chatEnviando, setChatEnviando] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const chatListRef = useRef(null);
+  const chatTimerRef = useRef(null);
+  async function cargarChat(amigoId, scrollAbajo) {
+    try {
+      const r = await fetchConSesion("/api/chat?con=" + encodeURIComponent(amigoId));
+      const d = await r.json();
+      if (d.mensajes) {
+        setChatMsgs(prev => {
+          const iguales = prev.length === d.mensajes.length && prev.length && prev[prev.length-1]?.id === d.mensajes[d.mensajes.length-1]?.id;
+          return iguales ? prev : d.mensajes;
+        });
+        setChatError("");
+        setNoLeidos(n => { const c = { ...n }; delete c[amigoId]; return c; });
+        if (scrollAbajo) setTimeout(() => { try { const el = chatListRef.current; if (el) el.scrollTop = el.scrollHeight; } catch {} }, 60);
+      } else if (d.error) setChatError(d.error);
+    } catch {}
+  }
+  function abrirChat(a) {
+    setChatCon(a); setChatMsgs([]); setChatTexto(""); setChatError("");
+    cargarChat(a.id, true);
+  }
+  useEffect(() => {
+    if (!chatCon) { clearInterval(chatTimerRef.current); return; }
+    chatTimerRef.current = setInterval(() => cargarChat(chatCon.id, false), 5000);
+    return () => clearInterval(chatTimerRef.current);
+  }, [chatCon]);
+  /* Mensajes nuevos que llegan con el chat abierto: bajar solito */
+  const chatUltimoRef = useRef("");
+  useEffect(() => {
+    const ult = chatMsgs.length ? String(chatMsgs[chatMsgs.length-1].id) : "";
+    if (ult && ult !== chatUltimoRef.current) {
+      chatUltimoRef.current = ult;
+      try { const el = chatListRef.current; if (el) el.scrollTop = el.scrollHeight; } catch {}
+    }
+  }, [chatMsgs]);
+  async function enviarMensaje() {
+    const texto = chatTexto.trim();
+    if (!texto || !chatCon || chatEnviando) return;
+    setChatEnviando(true);
+    try {
+      const r = await fetchConSesion("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to_id: chatCon.id, texto }) });
+      const d = await r.json();
+      if (d.ok) { setChatTexto(""); await cargarChat(chatCon.id, true); }
+      else toast.warning(d.error || "No se pudo enviar", 3500);
+    } catch { toast.error("Error de red", 3000); }
+    setChatEnviando(false);
   }
 
   /* ── Compartir canciones con amigos + buzón ── */
@@ -538,7 +620,7 @@ export default function ProfilePage() {
     if (!tracks.length) { toast.warning("No tiene canciones", 3000); return; }
     enqueueAlbum(plCompartida?.nombre || "Playlist", tracks);
     toast.success(`Descargando ${tracks.length} canciones`, 4000);
-    setPlCompartida(null); setShowFriends(false); setTab("downloads");
+    setPlCompartida(null); setTab("downloads");
   }
 
   async function borrarShare(id) {
@@ -1372,7 +1454,7 @@ export default function ProfilePage() {
       <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
 
       {/* Header (solo en la sección Perfil) */}
-      {vista === "cuenta" && (
+      {vista === "cuenta" && (<>
       <div style={{background:"var(--panel)",borderRadius:14,padding:22,marginBottom:22,border:"1px solid var(--border)",display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{width:64,height:64,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2em",flexShrink:0}}>
           {(profile?.display_name||profile?.username||"U")[0].toUpperCase()}
@@ -1380,19 +1462,13 @@ export default function ProfilePage() {
         <div style={{flex:1,minWidth:120}}>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <h1 style={{fontSize:"1.3em",marginBottom:2}}>{profile?.display_name||profile?.username||"Usuario"}</h1>
-            {/* Amigos */}
-            <button onClick={()=>{setShowFriends(true);cargarAmigos();cargarBuzon();}} title="Amigos" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:16,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>
-              <Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={13} stroke="var(--accent)"/> Amigos{amigos.length?` (${amigos.length})`:""}
+            {/* Campanita: buzón + solicitudes + mensajes sin leer. Baja a la sección Amigos */}
+            {(()=>{const totalNoti=buzon.length+solicitudes.length+Object.values(noLeidos).reduce((a,b)=>a+b,0);return (
+            <button onClick={()=>{cargarAmigos();cargarBuzon();cargarNoLeidos();try{document.getElementById("seccion-amigos")?.scrollIntoView({behavior:"smooth",block:"start"});}catch{}}} title="Notificaciones" style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:"50%",border:"1px solid var(--border)",background:"var(--panel2)",cursor:"pointer"}}>
+              <Ico d={<><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></>} size={14} stroke={totalNoti?"var(--accent)":"var(--text3)"}/>
+              {totalNoti > 0 && <span style={{position:"absolute",top:-2,right:-2,minWidth:15,height:15,borderRadius:8,background:"#ef4444",color:"#fff",fontSize:"0.55em",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",border:"2px solid var(--panel)"}}>{totalNoti}</span>}
             </button>
-            {/* Personalizar */}
-            {/* Campanita del buzón: puntito rojo si te mandaron algo */}
-            <button onClick={()=>{setShowFriends(true);cargarAmigos();cargarBuzon();}} title="Buzón" style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:"50%",border:"1px solid var(--border)",background:"var(--panel2)",cursor:"pointer"}}>
-              <Ico d={<><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></>} size={14} stroke={buzon.length?"var(--accent)":"var(--text3)"}/>
-              {buzon.length > 0 && <span style={{position:"absolute",top:-2,right:-2,minWidth:15,height:15,borderRadius:8,background:"#ef4444",color:"#fff",fontSize:"0.55em",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",border:"2px solid var(--panel)"}}>{buzon.length}</span>}
-            </button>
-            <button onClick={()=>setShowCustom(v=>!v)} title="Personalizar" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:16,border:"1px solid var(--border)",background:showCustom?"var(--accent)":"var(--panel2)",color:showCustom?"#fff":"var(--text2)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>
-              <Ico d={<><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>} size={13} stroke={showCustom?"#fff":"var(--accent)"}/> Personalizar
-            </button>
+            );})()}
           </div>
           <p style={{color:"var(--text3)",fontSize:"0.82em"}}>@{profile?.username||"user"}</p>
           <div style={{display:"flex",gap:12,color:"var(--text5)",fontSize:"0.78em",marginTop:4}}>
@@ -1403,10 +1479,8 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      )}
-
-      {/* ── Panel: Personalizar ── */}
-      {showCustom && (
+      {/* ── Sección: Personalizar (siempre visible, abajo de la tarjeta) ── */}
+      {(
         <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
           <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:800,fontSize:"0.9em",marginBottom:12,color:"var(--text)"}}><Ico d={<><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>} size={16} stroke="var(--accent)"/> Personalizar AURA</div>
           <div style={{marginBottom:14}}>
@@ -1453,17 +1527,17 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ── Modal: Amigos ── */}
-      {showFriends && (
-        <div onClick={()=>setShowFriends(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:420,maxHeight:"75vh",overflowY:"auto"}}>
+      {/* ── Sección: Amigos (buzón + solicitudes + chat) ── */}
+        <div id="seccion-amigos" style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
               <div style={{fontWeight:800,color:"var(--text)"}}>
                 {amigoVista ? (
                   <button onClick={()=>setAmigoVista(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--accent)",fontWeight:800,fontSize:"1em",padding:0}}>← Amigos</button>
-                ) : <span style={{display:"inline-flex",alignItems:"center",gap:8}}><Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={16} stroke="var(--accent)"/> Amigos</span>}
+                ) : <span style={{display:"inline-flex",alignItems:"center",gap:8}}><Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={16} stroke="var(--accent)"/> Amigos{amigos.length?` (${amigos.length})`:""}</span>}
               </div>
-              <button onClick={()=>{setShowFriends(false);setAmigoVista(null);}} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
+              <button onClick={()=>{cargarAmigos();cargarBuzon();cargarNoLeidos();}} title="Actualizar" style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}>
+                <Ico d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></>} size={14} stroke="var(--text3)"/>
+              </button>
             </div>
 
             {/* ── Vista: perfil de un amigo ── */}
@@ -1485,7 +1559,7 @@ export default function ProfilePage() {
                     ) : (
                       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
                         {(amigoVista.favoritos||[]).slice(0,12).map((f,i)=>(
-                          <div key={i} onClick={()=>{setShowFriends(false);setAmigoVista(null);irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source||"itunes",track:f.item_type==="track"?(f.name||""):""});}} style={{cursor:"pointer"}}>
+                          <div key={i} onClick={()=>{setAmigoVista(null);irAExplorar({album:f.extra_data?.album_id||f.item_id,source:f.source||"itunes",track:f.item_type==="track"?(f.name||""):""});}} style={{cursor:"pointer"}}>
                             <CoverImg url={f.cover_url} size="100%" r={8}/>
                             <div style={{color:"var(--text2)",fontSize:"0.66em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:3}}>{f.name}</div>
                             <div style={{color:"var(--text4)",fontSize:"0.6em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.artist}</div>
@@ -1510,6 +1584,25 @@ export default function ProfilePage() {
               </div>
             ) : (
             <>
+            {/* ── Solicitudes de amistad: confirmás y quedan amigos LOS DOS ── */}
+            {solicitudes.length>0 && (
+              <div style={{marginBottom:16,border:"1px solid rgba(34,197,94,0.35)",borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"8px 12px",fontSize:"0.7em",fontWeight:800,color:"#22c55e",borderBottom:"1px solid var(--border2)"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico d={<><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></>} size={13} stroke="#22c55e"/> SOLICITUDES DE AMISTAD ({solicitudes.length})</span></div>
+                {solicitudes.map(sq=>(
+                  <div key={sq.friendship_id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border2)"}}>
+                    <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:"0.85em",flexShrink:0}}>{(sq.display_name||sq.username||"?")[0].toUpperCase()}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sq.display_name||sq.username}</div>
+                      <div style={{color:"var(--text4)",fontSize:"0.7em"}}>@{sq.username} quiere ser tu amigo</div>
+                    </div>
+                    <button onClick={()=>aceptarSolicitud(sq.friendship_id)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#22c55e",color:"#fff",fontSize:"0.75em",fontWeight:700,cursor:"pointer",flexShrink:0}}>Confirmar</button>
+                    <button onClick={()=>rechazarSolicitud(sq.friendship_id)} title="Rechazar" style={{background:"none",border:"none",cursor:"pointer",padding:5,flexShrink:0}}>
+                      <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={13} stroke="var(--text4)"/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {/* ── Buzón: canciones que te mandaron ── */}
             {buzon.length>0 && (
               <div style={{marginBottom:16,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
@@ -1523,7 +1616,7 @@ export default function ProfilePage() {
                         <div style={{color:"var(--text4)",fontSize:"0.7em"}}>playlist · de @{s.de?.username} · tocá para verla</div>
                       </div>
                     ) : (
-                    <div onClick={()=>{setShowFriends(false);if(s.item?.album_id)irAExplorar({album:s.item.album_id,source:s.item.source||"itunes",track:s.item?.name||""});else irAExplorar({buscar:(s.item?.artist||"")+" "+(s.item?.name||"")});}} style={{flex:1,minWidth:0,cursor:"pointer"}}>
+                    <div onClick={()=>{if(s.item?.album_id)irAExplorar({album:s.item.album_id,source:s.item.source||"itunes",track:s.item?.name||""});else irAExplorar({buscar:(s.item?.artist||"")+" "+(s.item?.name||"")});}} style={{flex:1,minWidth:0,cursor:"pointer"}}>
                       <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.item?.name}</div>
                       <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{s.item?.artist} · de @{s.de?.username}</div>
                     </div>
@@ -1549,7 +1642,26 @@ export default function ProfilePage() {
                     </div>
                     {amigos.some(a=>a.id===u.id)
                       ? <span style={{color:"#22c55e",fontSize:"0.72em",fontWeight:700}}>✓ amigo</span>
-                      : <button onClick={()=>agregarAmigo(u.username)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"var(--accent)",color:"#fff",fontSize:"0.75em",fontWeight:700,cursor:"pointer"}}>Agregar</button>}
+                      : enviadas.some(a=>a.id===u.id)
+                        ? <span style={{color:"var(--text4)",fontSize:"0.72em",fontWeight:700}}>Pendiente...</span>
+                        : solicitudes.some(a=>a.id===u.id)
+                          ? <button onClick={()=>aceptarSolicitud(solicitudes.find(a=>a.id===u.id).friendship_id)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#22c55e",color:"#fff",fontSize:"0.75em",fontWeight:700,cursor:"pointer"}}>Confirmar</button>
+                          : <button onClick={()=>agregarAmigo(u.username)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"var(--accent)",color:"#fff",fontSize:"0.75em",fontWeight:700,cursor:"pointer"}}>Enviar solicitud</button>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* ── Solicitudes que YO mandé, esperando respuesta ── */}
+            {enviadas.length>0 && (
+              <div style={{marginBottom:14}}>
+                <div style={{color:"var(--text3)",fontSize:"0.68em",fontWeight:800,marginBottom:6}}>ESPERANDO RESPUESTA ({enviadas.length})</div>
+                {enviadas.map(a=>(
+                  <div key={a.friendship_id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 2px",borderBottom:"1px solid var(--border2)"}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:"var(--panel2)",border:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text3)",fontWeight:700,fontSize:"0.75em",flexShrink:0}}>{(a.display_name||a.username||"?")[0].toUpperCase()}</div>
+                    <div style={{flex:1,minWidth:0,color:"var(--text3)",fontSize:"0.8em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>@{a.username} <span style={{color:"var(--text5)",fontSize:"0.85em"}}>· aún no confirma</span></div>
+                    <button onClick={()=>quitarAmigo(a.id)} title="Cancelar solicitud" style={{background:"none",border:"none",cursor:"pointer",padding:5}}>
+                      <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="var(--text4)"/>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1564,6 +1676,11 @@ export default function ProfilePage() {
                   <div style={{color:"var(--text)",fontSize:"0.88em",fontWeight:600}}>{a.display_name||a.username}</div>
                   <div style={{color:"var(--text4)",fontSize:"0.72em"}}>@{a.username} · tocá para ver su música</div>
                 </div>
+                {/* Chat con este amigo (con contador de mensajes nuevos) */}
+                <button onClick={(e)=>{e.stopPropagation();abrirChat(a);}} title="Chat" style={{position:"relative",background:"var(--panel2)",border:"1px solid var(--border)",borderRadius:"50%",width:32,height:32,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <Ico d={<path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>} size={14} stroke={noLeidos[a.id]?"var(--accent)":"var(--text3)"}/>
+                  {noLeidos[a.id]>0 && <span style={{position:"absolute",top:-3,right:-3,minWidth:15,height:15,borderRadius:8,background:"#ef4444",color:"#fff",fontSize:"0.55em",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",border:"2px solid var(--panel)"}}>{noLeidos[a.id]}</span>}
+                </button>
                 <button onClick={(e)=>{e.stopPropagation();quitarAmigo(a.id);}} title="Quitar" style={{background:"none",border:"none",cursor:"pointer",padding:6}}>
                   <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={13} stroke="#ef4444"/>
                 </button>
@@ -1571,13 +1688,51 @@ export default function ProfilePage() {
             ))}
             </>
             )}
+        </div>
+      </>)}
+
+      {/* ── Chat con un amigo ── */}
+      {chatCon && (
+        <div onClick={()=>setChatCon(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:320,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderTopLeftRadius:18,borderTopRightRadius:18,width:"100%",maxWidth:520,height:"min(72dvh, 560px)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderBottom:"1px solid var(--border)",flexShrink:0}}>
+              <div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,var(--accent),#1ed760)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,flexShrink:0}}>{(chatCon.display_name||chatCon.username||"?")[0].toUpperCase()}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{color:"var(--text)",fontWeight:800,fontSize:"0.92em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{chatCon.display_name||chatCon.username}</div>
+                <div style={{color:"var(--text4)",fontSize:"0.7em"}}>@{chatCon.username}</div>
+              </div>
+              <button onClick={()=>setChatCon(null)} style={{background:"none",border:"none",cursor:"pointer",padding:6,display:"flex"}} title="Cerrar">
+                <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={16} stroke="var(--text3)"/>
+              </button>
+            </div>
+            <div ref={chatListRef} style={{flex:1,overflowY:"auto",padding:"14px 14px 8px",display:"flex",flexDirection:"column",gap:6}}>
+              {chatError ? (
+                <p style={{color:"#eab308",fontSize:"0.8em",textAlign:"center",padding:14,lineHeight:1.5}}>{chatError}</p>
+              ) : chatMsgs.length===0 ? (
+                <p style={{color:"var(--text4)",fontSize:"0.82em",textAlign:"center",padding:14}}>Todavía no hay mensajes. ¡Saludá!</p>
+              ) : chatMsgs.map(m=>{
+                const mio = m.from_id !== chatCon.id;
+                return (
+                  <div key={m.id} style={{alignSelf:mio?"flex-end":"flex-start",maxWidth:"78%",background:mio?"var(--accent)":"var(--panel2)",border:mio?"none":"1px solid var(--border)",color:mio?"#fff":"var(--text)",borderRadius:14,borderBottomRightRadius:mio?4:14,borderBottomLeftRadius:mio?14:4,padding:"8px 12px"}}>
+                    <div style={{fontSize:"0.86em",lineHeight:1.4,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{m.texto}</div>
+                    <div style={{fontSize:"0.6em",opacity:0.7,textAlign:"right",marginTop:2}}>{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:8,padding:"10px 12px calc(10px + env(safe-area-inset-bottom))",borderTop:"1px solid var(--border)",flexShrink:0}}>
+              <input value={chatTexto} onChange={e=>setChatTexto(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();enviarMensaje();}}} placeholder="Escribí un mensaje..." style={{flex:1,padding:"11px 14px",borderRadius:22,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text)",fontSize:"0.9em",outline:"none"}}/>
+              <button onClick={enviarMensaje} disabled={chatEnviando||!chatTexto.trim()} style={{width:42,height:42,borderRadius:"50%",border:"none",background:chatTexto.trim()?"var(--accent)":"var(--panel2)",cursor:chatTexto.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:chatEnviando?0.6:1}} title="Enviar">
+                <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={17} stroke={chatTexto.trim()?"#fff":"var(--text4)"}/>
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* ── Modal: elegir amigo para enviarle una canción ── */}
       {compartirItem && (
-        <div onClick={()=>setCompartirItem(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:310,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div onClick={()=>setCompartirItem(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:310,display:"flex",alignItems:"center",justifyContent:"center",paddingTop:20,paddingLeft:20,paddingRight:20,paddingBottom:hp?"calc(115px + env(safe-area-inset-bottom))":20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:380,maxHeight:"70vh",overflowY:"auto"}}>
             <div style={{fontWeight:800,color:"var(--text)",marginBottom:4}}>Enviar a un amigo</div>
             <div style={{color:"var(--text4)",fontSize:"0.78em",marginBottom:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} ><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={13} stroke="var(--accent)"/> {compartirItem.title||compartirItem.name} — {compartirItem.artist}</span></div>
@@ -1599,8 +1754,8 @@ export default function ProfilePage() {
 
       {/* ── Modal: playlist que te compartieron ── */}
       {plCompartida && (
-        <div onClick={()=>setPlCompartida(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:320,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:420,maxHeight:"75vh",overflowY:"auto"}}>
+        <div onClick={()=>setPlCompartida(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:320,display:"flex",alignItems:"center",justifyContent:"center",paddingTop:20,paddingLeft:20,paddingRight:20,paddingBottom:hp?"calc(115px + env(safe-area-inset-bottom))":20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:16,padding:20,width:"100%",maxWidth:420,maxHeight:hp?"calc(100dvh - 165px)":"75vh",overflowY:"auto"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
               <div style={{fontWeight:800,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} ><span style={{display:"inline-flex",alignItems:"center",gap:7}}><Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={15} stroke="var(--accent)"/> {plCompartida.nombre}</span></div>
               <button onClick={()=>setPlCompartida(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--text3)",fontSize:"1.2em"}}>✕</button>
