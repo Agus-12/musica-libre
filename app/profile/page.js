@@ -1368,7 +1368,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <div style={{maxWidth:vista==="explorar"?1000:900,margin:"0 auto",padding:vista==="explorar"?0:20,boxSizing:"border-box",paddingBottom:hp?"calc(135px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
+    <div style={{maxWidth:vista==="explorar"?1000:900,margin:"0 auto",paddingTop:vista==="explorar"?0:20,paddingLeft:vista==="explorar"?0:20,paddingRight:vista==="explorar"?0:20,boxSizing:"border-box",paddingBottom:hp?"calc(135px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
       <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
 
       {/* Header (solo en la sección Perfil) */}

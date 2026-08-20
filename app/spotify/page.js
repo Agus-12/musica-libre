@@ -786,7 +786,7 @@ export default function SpotifyPage() {
   const src = results?.source || "";
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "15px 20px", paddingBottom: nowPlaying ? "calc(95px + env(safe-area-inset-bottom))" : undefined, minHeight: "100vh", position: "relative" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", paddingTop: 15, paddingLeft: 20, paddingRight: 20, paddingBottom: nowPlaying ? "calc(95px + env(safe-area-inset-bottom))" : 15, minHeight: "100vh", position: "relative" }}>
 
       {/* ── Mini-reproductor de Música (canción completa o preview) ── */}
       {nowPlaying && (
