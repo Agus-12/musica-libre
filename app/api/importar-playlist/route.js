@@ -127,19 +127,23 @@ export async function GET(req) {
   try {
     /* Links CORTOS (los que da "Compartir" en el cel): seguimos la
        redirección hasta el link real.
-       - Spotify: spotify.link/xxx, spoti.fi/xxx
+       - Spotify: spotify.link/xxx, spoti.fi/xxx y el nuevo open.spotify.com/s/xxx
+         (OJO: /s/ SOLO redirige si el request parece un celular)
        - Deezer:  link.deezer.com, dzr.page.link */
-    if (/spotify\.link|spoti\.fi|link\.tospotify\.com|link\.deezer\.com|dzr\.page\.link/i.test(url)) {
+    if (/spotify\.link|spoti\.fi|link\.tospotify\.com|open\.spotify\.com\/s\/|link\.deezer\.com|dzr\.page\.link/i.test(url)) {
+      /* Primero leemos el Location a mano: es el link directo y limpio.
+         OJO: puede venir RELATIVO ("/playlist/..."), hay que completarlo
+         con el dominio original. */
       try {
-        const r = await fetch(url, { redirect: "follow", headers: { "User-Agent": UA } });
-        url = r.url || url;
+        const r2 = await fetch(url, { redirect: "manual", headers: { "User-Agent": UA } });
+        const loc = r2.headers.get("location");
+        if (loc) url = new URL(loc, url).toString();
       } catch {}
-      /* Algunos acortadores no redirigen a bots: leemos el Location a mano */
-      if (!/open\.spotify\.com|deezer\.com/i.test(url)) {
+      /* Si no hubo Location, seguimos redirecciones normales */
+      if (!/playlist/i.test(url)) {
         try {
-          const r2 = await fetch(url, { redirect: "manual", headers: { "User-Agent": UA } });
-          const loc = r2.headers.get("location");
-          if (loc) url = loc;
+          const r = await fetch(url, { redirect: "follow", headers: { "User-Agent": UA } });
+          url = r.url || url;
         } catch {}
       }
     }
@@ -150,6 +154,13 @@ export async function GET(req) {
     /* Formato normal, con región (intl-es) o el viejo con /user/ */
     let sp = url.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:user\/[^/]+\/)?playlist\/([A-Za-z0-9]+)/i);
     if (sp) return NextResponse.json(await importarSpotify(sp[1]));
+
+    /* Plan B: el id de playlist donde sea que venga (hasta codificado
+       dentro de otra URL, como los redirects de spotify.app.link) */
+    if (/spotify/i.test(url)) {
+      const spb = url.match(/playlist(?:\/|%2F)([A-Za-z0-9]{15,})/i);
+      if (spb) return NextResponse.json(await importarSpotify(spb[1]));
+    }
 
     if (/open\.spotify\.com\/(album|track|artist)/i.test(url)) {
       return NextResponse.json({ error: "Ese link es de " + (url.match(/album/i) ? "un álbum" : url.match(/track/i) ? "una canción" : "un artista") + ", no de una playlist. En Spotify: la playlist → los 3 puntitos → Compartir → Copiar link." }, { status: 400 });
