@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 import { useDownloads } from "../components/DownloadManager";
@@ -46,6 +46,17 @@ const IcoStop = ({ size = 14, color = "#fff" }) => (
     <rect x="5.5" y="5.5" width="13" height="13" rx="2.5"/>
   </svg>
 );
+
+/* CoverImg vive FUERA del componente: adentro se recreaba en cada render
+   y React desmontaba/remontaba TODAS las imágenes ~4 veces por segundo
+   (por el tic de la barrita de progreso) → carátulas parpadeando. */
+function CoverImg({url,size="100%",r=0}) {
+  const w=typeof size==="string"?size:size+"px";
+  const fluido = typeof size==="string";
+  if(url) return <img src={url} style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,objectFit:"cover",display:"block"}}/>;
+  return <div style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={32} stroke="var(--text6)" sw={1.5}/></div>;
+}
+
 
 export default function ProfilePage() {
   const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
@@ -596,13 +607,17 @@ export default function ProfilePage() {
     toast.success(`Descargando ${tracks.length} canciones aquí en la playlist`, 4000);
   }
 
-  /* ── La playlist se REPRODUCE aquí mismo (sin pasar por Mi música) ── */
+  /* ── La playlist se REPRODUCE aquí mismo (sin pasar por Mi música) ──
+     ml_mp3 se parsea UNA vez (memo) y no en cada fila en cada render:
+     el reproductor re-renderiza ~4 veces/seg por la barrita de progreso
+     y parsear 200+ canciones por fila hacía parpadear las imágenes. */
+  const mp3sPlaylist = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem("ml_mp3") || "{}"); } catch { return {}; }
+  }, [queue, playlistItems, tab]);
   function mp3DeItem(item) {
-    try {
-      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-      const claves = [String(item.item_id), ((item.artist||"")+" "+(item.name||"")).trim(), ((item.name||"")+" "+(item.artist||"")).trim(), (item.name||"").trim()];
-      for (const k of claves) if (s[k]?.audio_url) return s[k];
-    } catch {}
+    const s = mp3sPlaylist;
+    const claves = [String(item.item_id), ((item.artist||"")+" "+(item.name||"")).trim(), ((item.name||"")+" "+(item.artist||"")).trim(), (item.name||"").trim()];
+    for (const k of claves) if (s[k]?.audio_url) return s[k];
     return null;
   }
   function reproducirItemPlaylist(item) {
@@ -620,6 +635,39 @@ export default function ProfilePage() {
       keys: [String(item.item_id)],
     });
   }
+
+  /* Filas de la playlist memoizadas: solo se recalculan si cambia la
+     playlist, las descargas o la canción sonando — NO con cada tic de
+     la barrita de progreso (eso hacía parpadear las carátulas). */
+  const filasPlaylist = useMemo(() => playlistItems.map(item => {
+    const esTrack = item.item_type === "track";
+    const mp3 = esTrack ? mp3DeItem(item) : null;
+    const enCola = esTrack && !mp3 && queue.some(q => String(q.key) === String(item.item_id) && q.status !== "done" && q.status !== "failed");
+    const cp = playingKey === String(item.item_id);
+    return (
+      <div key={item.id} onClick={esTrack ? () => reproducirItemPlaylist(item) : undefined} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--border)",cursor:esTrack?"pointer":"default",background:cp?"rgba(34,197,94,0.13)":"transparent",borderLeft:cp?"3px solid #22c55e":"3px solid transparent",transition:"background 0.2s"}}>
+        <CoverImg url={item.cover_url} size={40} r={6}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{color:cp?"#22c55e":"var(--text)",fontWeight:cp?700:400,fontSize:"0.88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
+          {/* El estado (OFF / bajando) va en etiqueta FIJA que no se
+              recorta aunque los artistas sean larguísimos */}
+          <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+            <span style={{color:"var(--text4)",fontSize:"0.75em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{item.artist}</span>
+            {esTrack && mp3 && <span style={{flexShrink:0,color:"#22c55e",fontSize:"0.62em",fontWeight:800,background:"rgba(34,197,94,0.14)",border:"1px solid rgba(34,197,94,0.35)",borderRadius:6,padding:"1px 6px"}}>OFF</span>}
+            {esTrack && !mp3 && enCola && <span style={{flexShrink:0,color:"var(--accent)",fontSize:"0.62em",fontWeight:800,background:"rgba(124,92,252,0.14)",border:"1px solid rgba(124,92,252,0.35)",borderRadius:6,padding:"1px 6px"}}>bajando…</span>}
+          </div>
+        </div>
+        {esTrack && (
+          <button onClick={(e)=>{e.stopPropagation();reproducirItemPlaylist(item);}} title="Reproducir" style={{background:cp&&isPlaying?"#22c55e":mp3?"rgba(34,197,94,0.18)":"rgba(124,92,252,0.15)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <Ico d={cp&&isPlaying?<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>:<polygon points="5 3 19 12 5 21 5 3"/>} size={12} stroke={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"} fill={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"}/>
+          </button>
+        )}
+        <button onClick={(e)=>{e.stopPropagation();removePlaylistItem(item.id);}} style={{background:"none",border:"none",color:"var(--text5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="var(--text5)"/>
+        </button>
+      </div>
+    );
+  }), [playlistItems, mp3sPlaylist, queue, playingKey, isPlaying]);   // eslint-disable-line
 
   /* ── Importar una playlist externa por URL (Spotify / Deezer) ── */
   const [importUrl, setImportUrl] = useState("");
@@ -1487,15 +1535,6 @@ export default function ProfilePage() {
 
   const SM = {padding:"6px 14px",borderRadius:6,border:"none",color:"var(--text-strong)",fontSize:"0.85em",cursor:"pointer",fontWeight:600};
 
-  function CoverImg({url,size="100%",r=0}) {
-    const w=typeof size==="string"?size:size+"px";
-    /* Con tamaño fluido (100%), forzamos cuadrado con aspect-ratio:
-       sin esto las portadas salían gigantes/deformes en las cuadrículas */
-    const fluido = typeof size==="string";
-    if(url) return <img src={url} style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,objectFit:"cover",display:"block"}}/>;
-    return <div style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={32} stroke="var(--text6)" sw={1.5}/></div>;
-  }
-
   function fmt(s){if(!s||isNaN(s))return"0:00";const m=Math.floor(s/60);return m+":"+String(Math.floor(s%60)).padStart(2,"0");}
   const hp = playingKey!==null;
 
@@ -2211,33 +2250,7 @@ export default function ProfilePage() {
           </div>
           {playlistItems.length===0 ? <p style={{textAlign:"center",color:"var(--text5)",padding:20}}>Playlist vacia</p> : (
             <div style={{background:"var(--panel)",borderRadius:10,border:"1px solid var(--border)",overflow:"hidden"}}>
-              {playlistItems.map(item=>{
-                const esTrack = item.item_type==="track";
-                const mp3 = esTrack ? mp3DeItem(item) : null;
-                const enCola = esTrack && !mp3 && queue.some(q=>String(q.key)===String(item.item_id)&&q.status!=="done"&&q.status!=="failed");
-                const cp = playingKey===String(item.item_id);
-                return (
-                <div key={item.id} onClick={esTrack?()=>reproducirItemPlaylist(item):undefined} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid var(--border)",cursor:esTrack?"pointer":"default",background:cp?"rgba(34,197,94,0.13)":"transparent",borderLeft:cp?"3px solid #22c55e":"3px solid transparent",transition:"background 0.2s"}}>
-                  <CoverImg url={item.cover_url} size={40} r={6}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{color:cp?"#22c55e":"var(--text)",fontWeight:cp?700:400,fontSize:"0.88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
-                    <div style={{color:"var(--text4)",fontSize:"0.75em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      {item.artist}
-                      {esTrack && mp3 && <span style={{color:"#22c55e",fontWeight:700}}> · OFF</span>}
-                      {esTrack && !mp3 && enCola && <span style={{color:"var(--accent)",fontWeight:700}}> · descargando…</span>}
-                    </div>
-                  </div>
-                  {esTrack && (
-                    <button onClick={(e)=>{e.stopPropagation();reproducirItemPlaylist(item);}} title="Reproducir" style={{background:cp&&isPlaying?"#22c55e":mp3?"rgba(34,197,94,0.18)":"rgba(124,92,252,0.15)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <Ico d={cp&&isPlaying?<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>:<polygon points="5 3 19 12 5 21 5 3"/>} size={12} stroke={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"} fill={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"}/>
-                    </button>
-                  )}
-                  <button onClick={(e)=>{e.stopPropagation();removePlaylistItem(item.id);}} style={{background:"none",border:"none",color:"var(--text5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={14} stroke="var(--text5)"/>
-                  </button>
-                </div>
-                );
-              })}
+              {filasPlaylist}
             </div>
           )}
         </div>
