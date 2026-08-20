@@ -40,7 +40,7 @@ export async function POST(req) {
 
   // Create playlist
   if (!action || action === "create") {
-    const { name, description, is_public } = body;
+    const { name, description, is_public, cover_url } = body;
     if (!name) return NextResponse.json({ error: "Nombre requerido" }, { status: 400 });
 
     const { data, error } = await supabase.from("playlists").insert({
@@ -48,6 +48,9 @@ export async function POST(req) {
       name,
       description: description || "",
       is_public: is_public !== false,
+      /* Portada al crear (p. ej. la imagen ORIGINAL de una playlist
+         importada). Si no viene, la primera canción se la presta. */
+      cover_url: cover_url || null,
     }).select().single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

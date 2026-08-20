@@ -633,7 +633,7 @@ export default function ProfilePage() {
       const r = await fetch("/api/importar-playlist?url=" + encodeURIComponent(url));
       const d = await r.json();
       if (d.error) { toast.warning(d.error, 5000); setImportando(false); return; }
-      const cr = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name: d.nombre || "Playlist importada", description: "Importada por link" }) });
+      const cr = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name: d.nombre || "Playlist importada", description: "Importada por link", cover_url: d.cover || "" }) });
       const dc = await cr.json();
       if (!dc.playlist) { toast.error(dc.error || "No se pudo crear la playlist", 3500); setImportando(false); return; }
       const ai = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
