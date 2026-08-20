@@ -114,27 +114,50 @@ async function importarSpotify(playlistId) {
 export async function GET(req) {
   let url = (req.nextUrl.searchParams.get("url") || "").trim();
   if (!url) return NextResponse.json({ error: "Falta la URL" }, { status: 400 });
+
+  /* La gente pega el texto COMPLETO que comparte la app ("Mira esta
+     playlist... https://..."): pescamos la primera URL que venga. */
+  const enTexto = url.match(/https?:\/\/[^\s"'<>]+/);
+  if (enTexto) url = enTexto[0];
+  /* URI nativa de Spotify: spotify:playlist:ID */
+  const uriSp = url.match(/spotify:playlist:([A-Za-z0-9]+)/i);
+  if (uriSp) url = "https://open.spotify.com/playlist/" + uriSp[1];
   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
 
   try {
-    /* Links cortos de Deezer: seguimos la redirección para sacar el id */
-    if (/link\.deezer\.com|dzr\.page\.link/i.test(url)) {
+    /* Links CORTOS (los que da "Compartir" en el cel): seguimos la
+       redirección hasta el link real.
+       - Spotify: spotify.link/xxx, spoti.fi/xxx
+       - Deezer:  link.deezer.com, dzr.page.link */
+    if (/spotify\.link|spoti\.fi|link\.tospotify\.com|link\.deezer\.com|dzr\.page\.link/i.test(url)) {
       try {
         const r = await fetch(url, { redirect: "follow", headers: { "User-Agent": UA } });
         url = r.url || url;
       } catch {}
+      /* Algunos acortadores no redirigen a bots: leemos el Location a mano */
+      if (!/open\.spotify\.com|deezer\.com/i.test(url)) {
+        try {
+          const r2 = await fetch(url, { redirect: "manual", headers: { "User-Agent": UA } });
+          const loc = r2.headers.get("location");
+          if (loc) url = loc;
+        } catch {}
+      }
     }
 
     let dz = url.match(/deezer\.com\/(?:[a-z]{2}\/)?playlist\/(\d+)/i);
     if (dz) return NextResponse.json(await importarDeezer(dz[1]));
 
-    let sp = url.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?playlist\/([A-Za-z0-9]+)/i);
+    /* Formato normal, con región (intl-es) o el viejo con /user/ */
+    let sp = url.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:user\/[^/]+\/)?playlist\/([A-Za-z0-9]+)/i);
     if (sp) return NextResponse.json(await importarSpotify(sp[1]));
 
+    if (/open\.spotify\.com\/(album|track|artist)/i.test(url)) {
+      return NextResponse.json({ error: "Ese link es de " + (url.match(/album/i) ? "un álbum" : url.match(/track/i) ? "una canción" : "un artista") + ", no de una playlist. En Spotify: la playlist → los 3 puntitos → Compartir → Copiar link." }, { status: 400 });
+    }
     if (/music\.apple\.com/i.test(url)) {
       return NextResponse.json({ error: "Apple Music no deja leer playlists sin su llave de pago. Usa el link de Spotify o Deezer de esa playlist." }, { status: 400 });
     }
-    return NextResponse.json({ error: "No reconozco ese link. Manda el link de una playlist de Spotify (open.spotify.com/playlist/...) o Deezer (deezer.com/playlist/...)." }, { status: 400 });
+    return NextResponse.json({ error: "No reconozco ese link. Manda el link de una playlist de Spotify (open.spotify.com/playlist/... o spotify.link/...) o Deezer (deezer.com/playlist/...)." }, { status: 400 });
   } catch (e) {
     return NextResponse.json({ error: String(e.message || e).slice(0, 200) }, { status: 400 });
   }
