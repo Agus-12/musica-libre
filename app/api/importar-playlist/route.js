@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const maxDuration = 60;   // playlists grandes: buscar carátulas toma unos segundos
+
 /* ═══════════════════════════════════════════════════════════════
    /api/importar-playlist?url=...
    Lee una playlist EXTERNA por su link y devuelve las canciones:
@@ -12,6 +14,44 @@ import { NextResponse } from "next/server";
    ═══════════════════════════════════════════════════════════════ */
 
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
+/* La página embed de Spotify NO trae la carátula de cada canción (solo la
+   de la playlist). Buscamos cada canción en Deezer para ponerle su
+   carátula ORIGINAL del álbum + preview + duración real. En paralelo
+   (8 a la vez) para que no tarde. */
+async function enriquecerConDeezer(canciones) {
+  const out = [...canciones];
+  let i = 0;
+  const worker = async () => {
+    while (i < out.length && i < 200) {
+      const idx = i++;
+      const c = out[idx];
+      if (c.cover_real) continue;
+      try {
+        const art = (c.artist || "").split(",")[0].trim();
+        let q = `artist:"${art}" track:"${(c.name || "").replace(/"/g, "")}"`;
+        let r = await fetch("https://api.deezer.com/search?q=" + encodeURIComponent(q) + "&limit=1", { headers: { "User-Agent": UA } }).then(x => x.json()).catch(() => null);
+        let t = r?.data?.[0];
+        if (!t) {
+          r = await fetch("https://api.deezer.com/search?q=" + encodeURIComponent(`${art} ${c.name}`) + "&limit=1", { headers: { "User-Agent": UA } }).then(x => x.json()).catch(() => null);
+          t = r?.data?.[0];
+        }
+        if (t) {
+          out[idx] = {
+            ...c,
+            cover: t.album?.cover_xl || t.album?.cover_big || t.album?.cover_medium || c.cover,
+            album_id: c.album_id || (t.album?.id ? String(t.album.id) : ""),
+            preview_url: c.preview_url || t.preview || "",
+            duration_ms: c.duration_ms || (t.duration || 0) * 1000,
+            source: "deezer",
+          };
+        }
+      } catch {}
+    }
+  };
+  await Promise.all(Array.from({ length: 8 }, worker));
+  return out;
+}
 
 async function importarDeezer(playlistId) {
   const r = await fetch(`https://api.deezer.com/playlist/${playlistId}?limit=300`, { headers: { "User-Agent": UA } });
@@ -64,6 +104,7 @@ async function spotifyConCredenciales(playlistId) {
     name: t.name || "",
     artist: (t.artists || []).map(a => a.name).join(", "),
     cover: t.album?.images?.[0]?.url || "",
+    cover_real: true,
     duration_ms: t.duration_ms || 0,
     album_id: "",
     preview_url: "",
@@ -108,7 +149,9 @@ async function importarSpotify(playlistId) {
     source: "spotify",
   })).filter(c => c.name);
   if (!canciones.length) throw new Error("La playlist salió vacía");
-  return { nombre: ent.name || ent.title || "Playlist", cover, canciones };
+  /* Carátulas ORIGINALES de cada canción (el embed solo da la de la playlist) */
+  const conCaratulas = await enriquecerConDeezer(canciones);
+  return { nombre: ent.name || ent.title || "Playlist", cover, canciones: conCaratulas };
 }
 
 export async function GET(req) {
