@@ -84,3 +84,7 @@ CREATE POLICY "Marcar leido" ON public.mensajes
 
 CREATE INDEX IF NOT EXISTS mensajes_conv_idx ON public.mensajes(from_id, to_id, created_at);
 CREATE INDEX IF NOT EXISTS mensajes_noleidos_idx ON public.mensajes(to_id, leido);
+
+-- 4. Compartir canciones DENTRO del chat (estilo Spotify):
+--    los mensajes pueden llevar una canción o playlist adjunta.
+ALTER TABLE public.mensajes ADD COLUMN IF NOT EXISTS item JSONB;

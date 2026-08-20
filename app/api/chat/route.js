@@ -19,7 +19,7 @@ export async function GET(req) {
   if (con) {
     const { data, error } = await supabase
       .from("mensajes")
-      .select("id, from_id, to_id, texto, created_at, leido")
+      .select("id, from_id, to_id, texto, item, created_at, leido")
       .or(`and(from_id.eq.${user.id},to_id.eq.${con}),and(from_id.eq.${con},to_id.eq.${user.id})`)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -55,15 +55,34 @@ export async function POST(req) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser();
   if (authErr || !user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { to_id, texto } = await req.json();
-  const limpio = String(texto || "").trim().slice(0, 1000);
+  const { to_id, texto, item } = await req.json();
+  const esItem = item && typeof item === "object" && (item.name || item.title);
+  const limpio = String(texto || "").trim().slice(0, 1000)
+    || (esItem ? `${item.type === "playlist" ? "Playlist" : "Canción"}: ${item.name || item.title}${item.artist ? " — " + item.artist : ""}` : "");
   if (!to_id || !limpio) return NextResponse.json({ error: "Falta el mensaje" }, { status: 400 });
 
-  const { data, error } = await supabase
+  const fila = { from_id: user.id, to_id, texto: limpio };
+  if (esItem) fila.item = {
+    type: item.type || "track",
+    name: item.name || item.title || "",
+    artist: item.artist || "",
+    cover: item.cover || item.cover_url || "",
+    album_id: item.album_id || "",
+    playlist_id: item.playlist_id || "",
+    source: item.source || "itunes",
+  };
+
+  let { data, error } = await supabase
     .from("mensajes")
-    .insert({ from_id: user.id, to_id, texto: limpio })
+    .insert(fila)
     .select()
     .single();
+  /* Si la columna item no existe todavía (falta re-correr el SQL),
+     mandamos el mensaje igual, solo como texto. */
+  if (error && esItem && /item/i.test(error.message || "")) {
+    const r2 = await supabase.from("mensajes").insert({ from_id: user.id, to_id, texto: limpio }).select().single();
+    data = r2.data; error = r2.error;
+  }
   if (error) {
     const msg = /policy|security/i.test(error.message || "")
       ? "Solo podés chatear con amigos confirmados"
@@ -79,8 +98,10 @@ export async function POST(req) {
     const { data: yo } = await supabase.from("profiles").select("username, display_name").eq("id", user.id).single();
     const quien = yo?.display_name || yo?.username || "Alguien";
     await enviarPush([to_id], {
-      titulo: `Mensaje de ${quien}`,
-      cuerpo: limpio.slice(0, 90),
+      titulo: esItem
+        ? `${quien} te mandó una ${fila.item?.type === "playlist" ? "playlist" : "canción"}`
+        : `Mensaje de ${quien}`,
+      cuerpo: esItem ? `${fila.item?.name || ""}${fila.item?.artist ? " — " + fila.item.artist : ""}` : limpio.slice(0, 90),
       url: "/profile",
     });
   } catch {}

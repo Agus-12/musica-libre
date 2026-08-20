@@ -1,12 +1,12 @@
 {
-  "version": "20 de agosto, 2026 · v16",
+  "version": "20 de agosto, 2026 · v16.1",
   "titulo": "🎉 AURA ahora es más social",
   "cambios": [
     "💬 CHAT entre amigos: escribile a cualquier amigo desde Perfil → Amigos (burbujita al lado de cada uno). Te llega notificación aunque tengas la app cerrada",
+    "🎵 Compartir estilo Spotify: las canciones y playlists que mandes llegan DENTRO del chat como tarjetita tocable (adiós buzón)",
     "🤝 Solicitudes de amistad: ahora al agregar a alguien le llega la solicitud, la confirma y quedan amigos LOS DOS en automático",
-    "👤 Perfil renovado: Amigos y Personalizar ahora son secciones fijas abajo de tu tarjeta, ya no se esconden en menús",
-    "📬 El buzón siempre está a la vista cuando te mandaron algo, con las solicitudes y mensajes nuevos contados en la campanita",
+    "👤 Perfil renovado: Amigos y Personalizar viven abajo de tu tarjeta (Personalizar plegado, lo abrís cuando quieras)",
     "➕ Las playlists de Explorar ahora se pueden guardar COMPLETAS en Mis playlists con un botón",
-    "🐛 Arreglado: el panel de Personalizar ya no te persigue a otras secciones, y las playlists ya no quedan recortadas por el reproductor"
+    "🐛 Arreglos: los favoritos de tus amigos ya se ven en cuadrícula pareja, el panel de Personalizar ya no te persigue, y las playlists ya no quedan recortadas por el reproductor"
   ]
 }

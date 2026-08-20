@@ -242,7 +242,7 @@ export default function ProfilePage() {
   }, []);
   useEffect(() => {
     if (vista === "playlists") { setTab("playlists"); setSelectedPlaylist(null); }
-    else if (vista === "cuenta") { setTab("cuenta"); cargarAmigos(); cargarBuzon(); cargarNoLeidos(); }
+    else if (vista === "cuenta") { setTab("cuenta"); cargarAmigos(); cargarNoLeidos(); }
     else if (vista === "explorar") setTab("explorar");
     else if (!["downloads", "favorites", "stats"].includes(tab)) setTab("downloads");
     /* Cambio de sección: cerrar paneles flotantes para que no se queden
@@ -291,6 +291,7 @@ export default function ProfilePage() {
   const [temaAct, setTemaAct] = useState("oscuro");
   const [accentAct, setAccentAct] = useState("#7c5cfc");
   const [fuenteAct, setFuenteAct] = useState("");
+  const [showCustom, setShowCustom] = useState(false);   // Personalizar: plegado por default
   const [amigos, setAmigos] = useState([]);
   const [solicitudes, setSolicitudes] = useState([]);   // me mandaron, falta confirmar
   const [enviadas, setEnviadas] = useState([]);         // yo mandé, esperando
@@ -323,7 +324,6 @@ export default function ProfilePage() {
       setFuenteAct(localStorage.getItem("aura_fuente") || "");
     } catch {}
     cargarAmigos();
-    cargarBuzon();
     const alCambiarDatos = (e) => setSinDatos(Boolean(e.detail));
     window.addEventListener("aura-sin-datos", alCambiarDatos);
     return () => window.removeEventListener("aura-sin-datos", alCambiarDatos);
@@ -558,24 +558,17 @@ export default function ProfilePage() {
 
   /* ── Compartir canciones con amigos + buzón ── */
   const [compartirItem, setCompartirItem] = useState(null); // item a enviar
-  const [buzon, setBuzon] = useState([]);
-  async function cargarBuzon() {
-    try {
-      const r = await fetchConSesion("/api/shares");
-      const d = await r.json();
-      setBuzon(d.recibidos || []);
-    } catch {}
-  }
+  /* Compartir = mandarla por el CHAT del amigo (estilo Spotify) */
   async function enviarShare(amigo) {
     const it = compartirItem;
     if (!it) return;
     try {
-      const r = await fetchConSesion("/api/shares", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      const r = await fetchConSesion("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         to_id: amigo.id,
         item: { type: it.type || "track", name: it.title || it.name, artist: it.artist || "", cover: it.cover_url || it.cover || "", album_id: it.album_id || "", playlist_id: it.playlist_id || "", source: "itunes" },
       }) });
       const d = await r.json();
-      if (d.ok) toast.success("Enviada a @" + amigo.username, 3000);
+      if (d.ok) { toast.success("Enviada a @" + amigo.username, 2500); setCompartirItem(null); abrirChat(amigo); return; }
       else toast.warning(d.error || "No se pudo enviar", 3500);
     } catch { toast.error("Error de red", 3000); }
     setCompartirItem(null);
@@ -623,10 +616,6 @@ export default function ProfilePage() {
     setPlCompartida(null); setTab("downloads");
   }
 
-  async function borrarShare(id) {
-    try { await fetchConSesion("/api/shares", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); } catch {}
-    setBuzon(prev => prev.filter(s => s.id !== id));
-  }
 
   // Espejo del estado para los callbacks del player (que se registran una vez
   // y si no, verían valores viejos).
@@ -1438,8 +1427,11 @@ export default function ProfilePage() {
 
   function CoverImg({url,size="100%",r=0}) {
     const w=typeof size==="string"?size:size+"px";
-    if(url) return <img src={url} style={{width:w,height:w,borderRadius:r,objectFit:"cover",display:"block"}}/>;
-    return <div style={{width:w,height:w,borderRadius:r,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={32} stroke="var(--text6)" sw={1.5}/></div>;
+    /* Con tamaño fluido (100%), forzamos cuadrado con aspect-ratio:
+       sin esto las portadas salían gigantes/deformes en las cuadrículas */
+    const fluido = typeof size==="string";
+    if(url) return <img src={url} style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,objectFit:"cover",display:"block"}}/>;
+    return <div style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={32} stroke="var(--text6)" sw={1.5}/></div>;
   }
 
   function fmt(s){if(!s||isNaN(s))return"0:00";const m=Math.floor(s/60);return m+":"+String(Math.floor(s%60)).padStart(2,"0");}
@@ -1463,8 +1455,8 @@ export default function ProfilePage() {
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <h1 style={{fontSize:"1.3em",marginBottom:2}}>{profile?.display_name||profile?.username||"Usuario"}</h1>
             {/* Campanita: buzón + solicitudes + mensajes sin leer. Baja a la sección Amigos */}
-            {(()=>{const totalNoti=buzon.length+solicitudes.length+Object.values(noLeidos).reduce((a,b)=>a+b,0);return (
-            <button onClick={()=>{cargarAmigos();cargarBuzon();cargarNoLeidos();try{document.getElementById("seccion-amigos")?.scrollIntoView({behavior:"smooth",block:"start"});}catch{}}} title="Notificaciones" style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:"50%",border:"1px solid var(--border)",background:"var(--panel2)",cursor:"pointer"}}>
+            {(()=>{const totalNoti=solicitudes.length+Object.values(noLeidos).reduce((a,b)=>a+b,0);return (
+            <button onClick={()=>{cargarAmigos();cargarNoLeidos();try{document.getElementById("seccion-amigos")?.scrollIntoView({behavior:"smooth",block:"start"});}catch{}}} title="Notificaciones" style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:"50%",border:"1px solid var(--border)",background:"var(--panel2)",cursor:"pointer"}}>
               <Ico d={<><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></>} size={14} stroke={totalNoti?"var(--accent)":"var(--text3)"}/>
               {totalNoti > 0 && <span style={{position:"absolute",top:-2,right:-2,minWidth:15,height:15,borderRadius:8,background:"#ef4444",color:"#fff",fontSize:"0.55em",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",border:"2px solid var(--panel)"}}>{totalNoti}</span>}
             </button>
@@ -1479,10 +1471,16 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ── Sección: Personalizar (siempre visible, abajo de la tarjeta) ── */}
+      {/* ── Sección: Personalizar (plegada: vos elegís abrirla) ── */}
       {(
         <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:800,fontSize:"0.9em",marginBottom:12,color:"var(--text)"}}><Ico d={<><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>} size={16} stroke="var(--accent)"/> Personalizar AURA</div>
+          <div onClick={()=>setShowCustom(v=>!v)} style={{display:"flex",alignItems:"center",gap:8,fontWeight:800,fontSize:"0.9em",marginBottom:showCustom?12:0,color:"var(--text)",cursor:"pointer",userSelect:"none"}}>
+            <Ico d={<><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></>} size={16} stroke="var(--accent)"/> Personalizar AURA
+            <span style={{marginLeft:"auto",display:"flex",transition:"transform 0.2s",transform:showCustom?"rotate(180deg)":"rotate(0deg)"}}>
+              <Ico d={<polyline points="6 9 12 15 18 9"/>} size={16} stroke="var(--text3)"/>
+            </span>
+          </div>
+          {showCustom && (<>
           <div style={{marginBottom:14}}>
             <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>TEMA</div>
             <div style={{display:"flex",gap:8}}>
@@ -1524,10 +1522,11 @@ export default function ProfilePage() {
               ))}
             </div>
           </div>
+          </>)}
         </div>
       )}
 
-      {/* ── Sección: Amigos (buzón + solicitudes + chat) ── */}
+      {/* ── Sección: Amigos (solicitudes + chat) ── */}
         <div id="seccion-amigos" style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
               <div style={{fontWeight:800,color:"var(--text)"}}>
@@ -1535,7 +1534,7 @@ export default function ProfilePage() {
                   <button onClick={()=>setAmigoVista(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--accent)",fontWeight:800,fontSize:"1em",padding:0}}>← Amigos</button>
                 ) : <span style={{display:"inline-flex",alignItems:"center",gap:8}}><Ico d={<><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></>} size={16} stroke="var(--accent)"/> Amigos{amigos.length?` (${amigos.length})`:""}</span>}
               </div>
-              <button onClick={()=>{cargarAmigos();cargarBuzon();cargarNoLeidos();}} title="Actualizar" style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}>
+              <button onClick={()=>{cargarAmigos();cargarNoLeidos();}} title="Actualizar" style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}>
                 <Ico d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></>} size={14} stroke="var(--text3)"/>
               </button>
             </div>
@@ -1598,31 +1597,6 @@ export default function ProfilePage() {
                     <button onClick={()=>aceptarSolicitud(sq.friendship_id)} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#22c55e",color:"#fff",fontSize:"0.75em",fontWeight:700,cursor:"pointer",flexShrink:0}}>Confirmar</button>
                     <button onClick={()=>rechazarSolicitud(sq.friendship_id)} title="Rechazar" style={{background:"none",border:"none",cursor:"pointer",padding:5,flexShrink:0}}>
                       <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={13} stroke="var(--text4)"/>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* ── Buzón: canciones que te mandaron ── */}
-            {buzon.length>0 && (
-              <div style={{marginBottom:16,border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
-                <div style={{padding:"8px 12px",fontSize:"0.7em",fontWeight:800,color:"var(--accent)",borderBottom:"1px solid var(--border2)"}} ><span style={{display:"inline-flex",alignItems:"center",gap:6}}><Ico d={<><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></>} size={13} stroke="var(--accent)"/> TE MANDARON ({buzon.length})</span></div>
-                {buzon.map(s=>(
-                  <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border2)"}}>
-                    <CoverImg url={s.item?.cover} size={38} r={6}/>
-                    {s.item?.type === "playlist" ? (
-                      <div onClick={()=>verPlaylistCompartida(s)} style={{flex:1,minWidth:0,cursor:"pointer"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>} size={13} stroke="var(--accent)"/> {s.item?.name}</div>
-                        <div style={{color:"var(--text4)",fontSize:"0.7em"}}>playlist · de @{s.de?.username} · tocá para verla</div>
-                      </div>
-                    ) : (
-                    <div onClick={()=>{if(s.item?.album_id)irAExplorar({album:s.item.album_id,source:s.item.source||"itunes",track:s.item?.name||""});else irAExplorar({buscar:(s.item?.artist||"")+" "+(s.item?.name||"")});}} style={{flex:1,minWidth:0,cursor:"pointer"}}>
-                      <div style={{color:"var(--text)",fontSize:"0.85em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.item?.name}</div>
-                      <div style={{color:"var(--text4)",fontSize:"0.7em"}}>{s.item?.artist} · de @{s.de?.username}</div>
-                    </div>
-                    )}
-                    <button onClick={()=>borrarShare(s.id)} style={{background:"none",border:"none",cursor:"pointer",padding:5}} title="Quitar">
-                      <Ico d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} size={12} stroke="var(--text4)"/>
                     </button>
                   </div>
                 ))}
@@ -1714,7 +1688,20 @@ export default function ProfilePage() {
                 const mio = m.from_id !== chatCon.id;
                 return (
                   <div key={m.id} style={{alignSelf:mio?"flex-end":"flex-start",maxWidth:"78%",background:mio?"var(--accent)":"var(--panel2)",border:mio?"none":"1px solid var(--border)",color:mio?"#fff":"var(--text)",borderRadius:14,borderBottomRightRadius:mio?4:14,borderBottomLeftRadius:mio?14:4,padding:"8px 12px"}}>
-                    <div style={{fontSize:"0.86em",lineHeight:1.4,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{m.texto}</div>
+                    {/* Canción o playlist compartida: tarjeta tocable (estilo Spotify) */}
+                    {m.item && (m.item.name || m.item.title) ? (
+                      <div onClick={()=>{ const it=m.item; if(it.type==="playlist"&&it.playlist_id){verPlaylistCompartida({item:it});} else {setChatCon(null); if(it.album_id)irAExplorar({album:it.album_id,source:it.source||"itunes",track:it.name||""}); else irAExplorar({buscar:(it.artist||"")+" "+(it.name||"")});} }}
+                        style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:mio?"rgba(0,0,0,0.18)":"var(--panel)",border:mio?"none":"1px solid var(--border)",borderRadius:10,padding:8,marginBottom:4,minWidth:180}}>
+                        <CoverImg url={m.item.cover} size={40} r={7}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:"0.84em",fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.item.name}</div>
+                          <div style={{fontSize:"0.7em",opacity:0.75,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.item.type==="playlist"?"playlist · tocá para verla":(m.item.artist||"canción")+" · tocá para abrir"}</div>
+                        </div>
+                        <Ico d={m.item.type==="playlist"?<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></>:<polygon points="5 3 19 12 5 21 5 3"/>} size={15} stroke={mio?"#fff":"var(--accent)"}/>
+                      </div>
+                    ) : (
+                      <div style={{fontSize:"0.86em",lineHeight:1.4,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{m.texto}</div>
+                    )}
                     <div style={{fontSize:"0.6em",opacity:0.7,textAlign:"right",marginTop:2}}>{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</div>
                   </div>
                 );
