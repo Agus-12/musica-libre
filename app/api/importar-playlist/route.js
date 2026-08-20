@@ -17,7 +17,17 @@ async function importarDeezer(playlistId) {
   const r = await fetch(`https://api.deezer.com/playlist/${playlistId}?limit=300`, { headers: { "User-Agent": UA } });
   const d = await r.json();
   if (!d || d.error) throw new Error("Deezer no encontró esa playlist");
-  const canciones = (d.tracks?.data || []).map(t => ({
+  let data = d.tracks?.data || [];
+  /* Playlists largas: seguir pidiendo páginas (hasta 500 canciones) */
+  try {
+    let next = d.tracks?.next;
+    while (next && data.length < 500) {
+      const p = await fetch(next, { headers: { "User-Agent": UA } }).then(x => x.json());
+      data = data.concat(p.data || []);
+      next = p.next;
+    }
+  } catch {}
+  const canciones = data.slice(0, 500).map(t => ({
     name: t.title || "",
     artist: t.artist?.name || "",
     cover: t.album?.cover_xl || t.album?.cover_big || t.album?.cover_medium || "",
@@ -38,11 +48,19 @@ async function spotifyConCredenciales(playlistId) {
     body: "grant_type=client_credentials",
   }).then(r => r.json()).catch(() => null);
   if (!tk?.access_token) return null;
-  const pl = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,images,tracks.items(track(name,duration_ms,artists(name),album(images))),tracks.next`, {
+  const pl = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,images`, {
     headers: { Authorization: "Bearer " + tk.access_token },
   }).then(r => r.json()).catch(() => null);
   if (!pl?.name) return null;
-  const canciones = (pl.tracks?.items || []).map(({ track: t }) => t && ({
+  /* Canciones con paginación: hasta 500 (la página embed solo da ~100) */
+  let items = [], next = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=items(track(name,duration_ms,artists(name),album(images))),next`;
+  while (next && items.length < 500) {
+    const pg = await fetch(next, { headers: { Authorization: "Bearer " + tk.access_token } }).then(r => r.json()).catch(() => null);
+    if (!pg) break;
+    items = items.concat(pg.items || []);
+    next = pg.next;
+  }
+  const canciones = items.map(({ track: t }) => t && ({
     name: t.name || "",
     artist: (t.artists || []).map(a => a.name).join(", "),
     cover: t.album?.images?.[0]?.url || "",
