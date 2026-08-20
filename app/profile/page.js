@@ -245,6 +245,10 @@ export default function ProfilePage() {
     else if (vista === "cuenta") setTab("cuenta");
     else if (vista === "explorar") setTab("explorar");
     else if (!["downloads", "favorites", "stats"].includes(tab)) setTab("downloads");
+    /* Cambio de sección = página nueva: arrancar desde ARRIBA. Sin esto,
+       el scroll de la sección anterior (p. ej. bien abajo en Mi música)
+       se quedaba pegado y en iOS la nueva vista rebotaba al scrollear. */
+    try { window.scrollTo(0, 0); } catch {}
   }, [vista]);
 
   /* ── REPRODUCTOR GLOBAL ──────────────────────────────────────────
@@ -768,11 +772,16 @@ export default function ProfilePage() {
     window.addEventListener("mouseup", end);
     window.addEventListener("touchmove", move, { passive: false });
     window.addEventListener("touchend", end);
+    /* iOS a veces corta el arrastre con touchcancel (gesto del sistema,
+       notificación...). Sin esto, el bloqueador de scroll del arrastre
+       se quedaba PEGADO y la página entera dejaba de scrollear. */
+    window.addEventListener("touchcancel", end);
     return () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", end);
       window.removeEventListener("touchmove", move);
       window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", end);
     };
   }, [seeking, duration]);
 

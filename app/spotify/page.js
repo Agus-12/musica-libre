@@ -532,6 +532,10 @@ export default function SpotifyPage() {
   async function loadAlbum(albumId, source = "itunes", resaltar = null) {
     setResaltada(resaltar ? String(resaltar).toLowerCase().trim() : null);
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
+    /* Arrancar el álbum desde ARRIBA: si venías scrolleado hasta abajo
+       (p. ej. desde Mi música o el feed), iOS se quedaba con el scroll
+       hundido y el álbum largo "no dejaba bajar" (rebotaba). */
+    try { window.scrollTo(0, 0); } catch {}
     try {
       const endpoint = source === "deezer"
         ? "/api/music?action=album&id=" + albumId + "&source=deezer&v=3"
@@ -546,6 +550,7 @@ export default function SpotifyPage() {
 
   async function loadArtist(artistId) {
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
+    try { window.scrollTo(0, 0); } catch {}
     try {
       const res = await fetch("/api/music?action=lookup&id=" + artistId + "&source=itunes");
       const data = await res.json();
