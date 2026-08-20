@@ -54,6 +54,37 @@ export async function POST(req) {
     return NextResponse.json({ playlist: data });
   }
 
+  /* Agregar MUCHAS canciones de un jalón (guardar una playlist entera
+     de Explorar). Antes se mandaba una por una y tardaba una eternidad. */
+  if (action === "add-items") {
+    const { playlist_id, items } = body;
+    if (!playlist_id || !Array.isArray(items) || !items.length) {
+      return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
+    }
+    const filas = items.slice(0, 300).map(it => ({
+      playlist_id,
+      item_type: it.item_type || "track",
+      item_id: String(it.item_id || ""),
+      name: it.name || "",
+      artist: it.artist || "",
+      cover_url: it.cover_url || "",
+      source: it.source || "deezer",
+      extra_data: it.extra_data || {},
+    })).filter(f => f.item_id && f.name);
+    if (!filas.length) return NextResponse.json({ error: "Sin canciones válidas" }, { status: 400 });
+
+    const { data, error } = await supabase.from("playlist_items").insert(filas).select("id");
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    await supabase.from("playlists").update({ updated_at: new Date().toISOString() }).eq("id", playlist_id);
+    const cover = filas.find(f => f.cover_url)?.cover_url;
+    if (cover) {
+      const { data: pl } = await supabase.from("playlists").select("cover_url").eq("id", playlist_id).single();
+      if (pl && !pl.cover_url) await supabase.from("playlists").update({ cover_url: cover }).eq("id", playlist_id);
+    }
+    return NextResponse.json({ agregados: (data || []).length });
+  }
+
   // Add item to playlist
   if (action === "add-item") {
     const { playlist_id, item_type, item_id, name, artist, cover_url, source, extra_data } = body;

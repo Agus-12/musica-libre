@@ -200,7 +200,8 @@ export default function SpotifyPage() {
   /* "Seguir escuchando": lo último que sonó (de las stats locales).
      Tocar una la REPRODUCE al instante en el perfil. */
   const [recientes, setRecientes] = useState([]);
-  const [sonandoGlobal, setSonandoGlobal] = useState({ key: null, playing: false });
+  const [sonandoGlobal, setSonandoGlobal] = useState(() =>
+    (typeof window !== "undefined" && window.__auraSonando) || { key: null, playing: false });
   useEffect(() => {
     const h = (e) => setSonandoGlobal(e.detail || { key: null, playing: false });
     window.addEventListener("aura-sonando", h);
@@ -209,9 +210,12 @@ export default function SpotifyPage() {
   /* ¿Esta canción es la que está sonando en el reproductor global?
      Compara por clave exacta Y por nombre+artista normalizados, porque
      una misma canción puede vivir con claves distintas (id de iTunes,
-     id de Deezer, clave de la descarga guardada...). */
+     id de Deezer, clave de la descarga guardada...).
+     OJO: los paréntesis SÍ cuentan — "(Radio Mix)", "(2009 Version)" son
+     versiones DISTINTAS y antes se pintaban todas en verde a la vez.
+     Solo ignoramos los de créditos: "(feat. X)", "(con X)". */
   const normCancion = (s) => String(s || "").toLowerCase()
-    .replace(/\(.*?\)|\[.*?\]/g, " ")
+    .replace(/[\(\[]\s*(feat|ft|with|con)\b[^\)\]]*[\)\]]/g, " ")
     .replace(/\b(feat|ft)\.?\s.*$/g, " ")
     .replace(/[^a-z0-9áéíóúüñ ]/g, " ")
     .replace(/\s+/g, " ").trim();
@@ -252,19 +256,18 @@ export default function SpotifyPage() {
       const r = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", name: plVista.nombre || "Playlist", description: "Guardada desde Explorar" }) });
       const d = await r.json();
       if (!d.playlist) { toast.error(d.error || "No se pudo crear la playlist", 3500); setGuardandoPl(false); return; }
-      let ok = 0;
-      for (const t of tracks) {
-        try {
-          const res = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-            action: "add-item", playlist_id: d.playlist.id, item_type: "track",
-            item_id: String(t.id || `${t.artist||""}-${t.name||""}`), name: t.name || "",
-            artist: t.artist || "", cover_url: t.cover || "", source: "deezer",
-            extra_data: { album_id: t.album_id || "", preview_url: t.preview_url || "", duration_ms: t.duration_ms || 0 },
-          }) });
-          if (res.ok) ok++;
-        } catch {}
-      }
-      toast.success(`"${plVista.nombre}" guardada en Mis playlists (${ok} canciones)`, 4000);
+      /* TODAS las canciones en UN solo viaje (antes: una por una = eterno) */
+      const res = await fetch("/api/playlists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        action: "add-items", playlist_id: d.playlist.id,
+        items: tracks.map(t => ({
+          item_type: "track", item_id: String(t.id || `${t.artist||""}-${t.name||""}`), name: t.name || "",
+          artist: t.artist || "", cover_url: t.cover || "", source: "deezer",
+          extra_data: { album_id: t.album_id || "", preview_url: t.preview_url || "", duration_ms: t.duration_ms || 0 },
+        })),
+      }) });
+      const dd = await res.json();
+      if (dd.agregados) toast.success(`"${plVista.nombre}" guardada en Mis playlists (${dd.agregados} canciones)`, 4000);
+      else toast.warning(dd.error || "Se creó la playlist pero no se pudieron agregar las canciones", 4000);
     } catch { toast.error("Error de red", 3000); }
     setGuardandoPl(false);
   }

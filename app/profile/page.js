@@ -1413,6 +1413,9 @@ export default function ProfilePage() {
 
   // El Explorar embebido escucha esto para pintar en verde lo que suena
   useEffect(() => {
+    /* Espejo global: si Explorar se re-monta (cambio de sección), puede
+       recuperar qué está sonando aunque el evento ya haya pasado. */
+    try { window.__auraSonando = { key: playingKey, playing: isPlaying, title: playingTitle || "", artist: playingArtist || "" }; } catch {}
     try { window.dispatchEvent(new CustomEvent("aura-sonando", { detail: { key: playingKey, playing: isPlaying, title: playingTitle || "", artist: playingArtist || "" } })); } catch {}
   }, [playingKey, isPlaying, playingTitle, playingArtist]);
 
