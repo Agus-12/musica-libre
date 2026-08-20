@@ -281,6 +281,9 @@ export default function ProfilePage() {
     const alReproducir = (e) => {
       const d = e.detail || {};
       if (!d.key) return;
+      /* Lo que llega de Explorar se reproduce FUERA del contexto de
+         playlist: siguiente/aleatorio vuelven a Mi música. */
+      try { contextoPlaylistRef.current = null; } catch {}
       try { startTrackRef.current && startTrackRef.current({
         key: String(d.key),
         title: d.title || "",
@@ -620,20 +623,33 @@ export default function ProfilePage() {
     for (const k of claves) if (s[k]?.audio_url) return s[k];
     return null;
   }
+
+  /* ── Contexto de reproducción (estilo Spotify) ──
+     Si le diste play DENTRO de una playlist, el aleatorio y el
+     "siguiente" solo toman canciones de ESA playlist. Se limpia al
+     reproducir desde Mi música o desde Explorar. */
+  const contextoPlaylistRef = useRef(null);
+  function itemAPista(it) {
+    const mp3 = mp3DeItem(it);
+    const url = mp3?.audio_url || it.extra_data?.preview_url || "";
+    if (!url) return null;
+    return {
+      key: String(it.item_id), title: it.name || "", artist: it.artist || "",
+      cover_url: it.cover_url || "", audio_url: url, video_id: mp3?.video_id || "",
+      duration_ms: it.extra_data?.duration_ms || mp3?.duration_ms || null,
+      keys: [String(it.item_id)],
+    };
+  }
   function reproducirItemPlaylist(item) {
-    const mp3 = mp3DeItem(item);
-    const url = mp3?.audio_url || item.extra_data?.preview_url || "";
-    if (!url) { toast.warning("Aún no está descargada: dale a Descargar todas", 3000); return; }
-    startTrack({
-      key: String(item.item_id),
-      title: item.name || "",
-      artist: item.artist || "",
-      cover_url: item.cover_url || "",
-      audio_url: url,
-      video_id: mp3?.video_id || "",
-      duration_ms: item.extra_data?.duration_ms || mp3?.duration_ms || null,
-      keys: [String(item.item_id)],
-    });
+    const pista = itemAPista(item);
+    if (!pista) { toast.warning("Aún no está descargada: dale a Descargar todas", 3000); return; }
+    /* El contexto = TODAS las canciones reproducibles de esta playlist */
+    const ctx = (playlistItems || []).filter(i => i.item_type === "track").map(itemAPista).filter(Boolean);
+    contextoPlaylistRef.current = ctx.length ? ctx : null;
+    if (ctx.length) liveRef.current = { ...liveRef.current, list: ctx };
+    /* Aleatorio activo: permutación nueva SOLO con esta playlist */
+    if (liveRef.current.shuffle) regenerarOrdenAleatorio(pista.key);
+    startTrack(pista);
   }
 
   /* Filas de la playlist memoizadas: solo se recalculan si cambia la
@@ -1297,6 +1313,13 @@ export default function ProfilePage() {
   }
 
   async function playDownloaded(item) {
+    /* Reproducir desde Mi música = fuera el contexto de playlist:
+       el aleatorio/siguiente vuelven a tomar TODAS tus descargas. */
+    if (contextoPlaylistRef.current) {
+      contextoPlaylistRef.current = null;
+      liveRef.current = { ...liveRef.current, list: listaVisible };
+      if (liveRef.current.shuffle) regenerarOrdenAleatorio(item.key);
+    }
     // Si hay archivo de audio guardado, lo usamos: suena aunque no haya
     // internet (viene de la caché del navegador).
     if (item.audio_url) { startAudioFile(item); return; }
@@ -1515,8 +1538,13 @@ export default function ProfilePage() {
         (x.artist || "").toLowerCase().includes(q))
     : downloadedMusic;
 
-  // Mantenemos el espejo al día para los callbacks del player
-  liveRef.current = { list: listaVisible, playingKey, shuffle, repeat };
+  // Mantenemos el espejo al día para los callbacks del player.
+  // Si hay CONTEXTO de playlist (le diste play adentro de una), la lista
+  // del reproductor es ESA playlist: aleatorio y siguiente viven ahí.
+  const listaReproduccion = (contextoPlaylistRef.current && contextoPlaylistRef.current.length)
+    ? contextoPlaylistRef.current
+    : listaVisible;
+  liveRef.current = { list: listaReproduccion, playingKey, shuffle, repeat };
 
   // El Explorar embebido escucha esto para pintar en verde lo que suena
   useEffect(() => {
@@ -2038,7 +2066,7 @@ export default function ProfilePage() {
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
               {/* Reproducir todo */}
               <button
-                onClick={()=>{ const l=listaVisible; if(!l.length)return; startTrack(shuffle ? l[Math.floor(Math.random()*l.length)] : l[0]); }}
+                onClick={()=>{ const l=listaVisible; if(!l.length)return; contextoPlaylistRef.current=null; liveRef.current={...liveRef.current,list:l}; if(shuffle)regenerarOrdenAleatorio(null); startTrack(shuffle ? l[Math.floor(Math.random()*l.length)] : l[0]); }}
                 title="Reproducir todo"
                 style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"11px 16px",borderRadius:10,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#22c55e,#16a34a)",color:"#fff",fontWeight:700,fontSize:"0.85em",boxShadow:"0 3px 12px rgba(34,197,94,0.3)"}}>
                 <IcoPlay size={14}/> Reproducir
