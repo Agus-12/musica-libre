@@ -665,14 +665,12 @@ export default function ProfilePage() {
         <CoverImg url={item.cover_url} size={40} r={6}/>
         <div style={{flex:1,minWidth:0}}>
           <div style={{color:cp?"#22c55e":"var(--text)",fontWeight:cp?700:400,fontSize:"0.88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name}</div>
-          {/* El estado (OFF / bajando) va en etiqueta FIJA que no se
-              recorta aunque los artistas sean larguísimos */}
-          <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-            <span style={{color:"var(--text4)",fontSize:"0.75em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{item.artist}</span>
-            {esTrack && mp3 && <span style={{flexShrink:0,color:"#22c55e",fontSize:"0.62em",fontWeight:800,background:"rgba(34,197,94,0.14)",border:"1px solid rgba(34,197,94,0.35)",borderRadius:6,padding:"1px 6px"}}>OFF</span>}
-            {esTrack && !mp3 && enCola && <span style={{flexShrink:0,color:"var(--accent)",fontSize:"0.62em",fontWeight:800,background:"rgba(124,92,252,0.14)",border:"1px solid rgba(124,92,252,0.35)",borderRadius:6,padding:"1px 6px"}}>bajando…</span>}
-          </div>
+          <div style={{color:"var(--text4)",fontSize:"0.75em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.artist}</div>
         </div>
+        {/* Estado en COLUMNA fija junto al play (igual que en Descargadas):
+            todos los OFF quedan alineaditos */}
+        {esTrack && mp3 && <span style={{padding:"2px 6px",borderRadius:4,fontSize:"0.6em",fontWeight:700,flexShrink:0,background:"rgba(34,197,94,0.15)",color:"#22c55e",border:"1px solid rgba(34,197,94,0.3)"}}>OFF</span>}
+        {esTrack && !mp3 && enCola && <span style={{padding:"2px 6px",borderRadius:4,fontSize:"0.6em",fontWeight:700,flexShrink:0,background:"rgba(124,92,252,0.15)",color:"var(--accent)",border:"1px solid rgba(124,92,252,0.3)"}}>BAJANDO</span>}
         {esTrack && (
           <button onClick={(e)=>{e.stopPropagation();reproducirItemPlaylist(item);}} title="Reproducir" style={{background:cp&&isPlaying?"#22c55e":mp3?"rgba(34,197,94,0.18)":"rgba(124,92,252,0.15)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             <Ico d={cp&&isPlaying?<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>:<polygon points="5 3 19 12 5 21 5 3"/>} size={12} stroke={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"} fill={cp&&isPlaying?"#fff":mp3?"#22c55e":"var(--accent)"}/>
