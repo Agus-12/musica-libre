@@ -541,6 +541,10 @@ export default function SpotifyPage() {
     if (!q) return;
     if (typeof qOverride === "string") setQuery(qOverride);
     setLoading(true); setError(""); setResults(null); setAlbum(null); setArtist(null);
+    setYtmResults([]);
+    /* YT Music en PARALELO (no frena la búsqueda normal si tarda) */
+    fetch("/api/music?action=ytmusic&q=" + encodeURIComponent(q))
+      .then(r => r.json()).then(d => setYtmResults(d.canciones || [])).catch(() => {});
     try {
       const res = await fetch("/api/music?action=search&q=" + encodeURIComponent(q) + "&source=auto&limit=20&v=3");
       const data = await res.json();
@@ -813,6 +817,31 @@ export default function SpotifyPage() {
   const albums = results?.albums || [];
   const artists = results?.artists || [];
   const songResults = results?.songs || [];
+  const [ytmResults, setYtmResults] = useState([]);
+  /* Descargar una canción EXACTA de YT Music (por su video id) */
+  function descargarYTM(c) {
+    enqueueAlbum(c.title, [{
+      key: String(c.videoId), name: c.title, artist: c.artist || "",
+      cover: c.cover || "", duration_ms: (c.dur || 0) * 1000 || null,
+      video_id: String(c.videoId),
+    }]);
+    toast.success("Descargando: " + c.title, 3000);
+  }
+  function reproducirYTM(c) {
+    if (typeof window === "undefined") return;
+    /* Si ya está descargada suena el archivo; si no, el video exacto
+       por el reproductor global (necesita internet). */
+    let audio = "";
+    try {
+      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      audio = s[String(c.videoId)]?.audio_url || "";
+    } catch {}
+    window.dispatchEvent(new CustomEvent("aura-reproducir", { detail: {
+      key: String(c.videoId), title: c.title || "", artist: c.artist || "",
+      cover_url: c.cover || "", audio_url: audio, video_id: String(c.videoId),
+      duration_ms: (c.dur || 0) * 1000 || null,
+    }}));
+  }
   const src = results?.source || "";
 
   return (
@@ -1102,6 +1131,35 @@ export default function SpotifyPage() {
                             <Ico d={sonando ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff" />
                           </button>
                         )}
+                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {ytmResults.length > 0 && (
+                <div style={{ marginBottom: 25 }}>
+                  <SectionHeader icon={<Ico d={<><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></>} size={18} stroke="#ef4444" />} title="YouTube Music" subtitle="Descarga exacta: baja justo esa versión" />
+                  <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                    {ytmResults.map(c => {
+                      const sonando = esLaQueSuena(c.videoId, c.title, c.artist);
+                      const off = hasFullMp3(String(c.videoId), c.title, c.artist || "");
+                      return (
+                      <div key={c.videoId} onClick={() => reproducirYTM(c)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer", background: sonando ? "rgba(34,197,94,0.12)" : "transparent", borderLeft: sonando ? "3px solid #22c55e" : "3px solid transparent" }}>
+                        {c.cover ? <img src={c.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ color: sonando ? "#22c55e" : "var(--text)", fontSize: "0.88em", fontWeight: sonando ? 700 : 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title}</div>
+                          <div style={{ color: "var(--text4)", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.artist}{c.album ? " · " + c.album : ""}{c.dur ? " · " + Math.floor(c.dur / 60) + ":" + String(c.dur % 60).padStart(2, "0") : ""}</div>
+                        </div>
+                        {off && <span style={{ padding: "2px 6px", borderRadius: 4, fontSize: "0.6em", fontWeight: 700, flexShrink: 0, background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>OFF</span>}
+                        {!off && (
+                          <button onClick={(e) => { e.stopPropagation(); descargarYTM(c); }} title="Descargar esta versión exacta" style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={14} stroke="#22c55e" />
+                          </button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); reproducirYTM(c); }} style={{ background: sonando ? "#22c55e" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <Ico d={sonando ? <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></> : <polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff" />
+                        </button>
                       </div>
                       );
                     })}

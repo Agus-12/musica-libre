@@ -172,6 +172,9 @@ export function DownloadProvider({ children }) {
           artist: t.artist,
           cover: t.cover,
           duration_ms: t.duration_ms || null,
+          /* Video EXACTO (resultados de YT Music): la Mac baja ese id
+             sin volver a buscar → cero errores de "bajó otra versión". */
+          video_id: t.video_id || "",
           /* Descarga que pertenece a una playlist: NO aparece en
              Mi música → Descargadas (vive dentro de la playlist). */
           solo_playlist: Boolean(t.solo_playlist),

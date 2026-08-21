@@ -60,6 +60,76 @@ async function manejarGET(req) {
   const limit = parseInt(p.get("limit") || "20");
 
   try {
+    /* ── YT MUSIC: búsqueda de canciones (biblioteca de music.youtube.com).
+       Primero directo desde aquí (la API interna a veces sí atiende a
+       Vercel); si no, la Mac de casa hace la búsqueda con su IP. ── */
+    if (action === "ytmusic") {
+      if (!query.trim()) return NextResponse.json({ canciones: [] });
+      const parsear = (d) => {
+        const items = [];
+        const walk = (o) => {
+          if (!o || typeof o !== "object") return;
+          if (o.musicResponsiveListItemRenderer) items.push(o.musicResponsiveListItemRenderer);
+          for (const v of Object.values(o)) walk(v);
+        };
+        walk(d);
+        return items.map((it) => {
+          try {
+            const vid = it.playlistItemData?.videoId
+              || it.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+            const cols = it.flexColumns || [];
+            const runs0 = cols[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+            const runs1 = cols[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+            const pageTypeDe = (x) => x.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType;
+            const title = runs0.map((x) => x.text).join("");
+            const textos = runs1.map((x) => x.text);
+            const durTxt = textos.length ? textos[textos.length - 1] : "";
+            const m = String(durTxt).trim().match(/^(\d+):(\d{2})$/);
+            const dur = m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+            const artist = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ARTIST").map((x) => x.text).join(", ") || (textos[0] || "");
+            const album = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ALBUM").map((x) => x.text).join("");
+            const thumbs = it.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
+            const cover = thumbs.length ? thumbs[thumbs.length - 1].url : "";
+            if (!vid || !title) return null;
+            return { videoId: vid, title, artist, album, dur, cover };
+          } catch { return null; }
+        }).filter(Boolean);
+      };
+      /* 1) Directo desde Vercel */
+      try {
+        const r = await fetch("https://music.youtube.com/youtubei/v1/search?prettyPrint=false", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            "Origin": "https://music.youtube.com",
+            "Referer": "https://music.youtube.com/",
+          },
+          body: JSON.stringify({
+            context: { client: { clientName: "WEB_REMIX", clientVersion: "1.20240701.01.00", hl: "es", gl: "MX" } },
+            query,
+            params: "EgWKAQIIAWoQEAMQBBAJEAoQBRAREBAQFQ%3D%3D",
+          }),
+          signal: AbortSignal.timeout(6000),
+        });
+        if (r.ok) {
+          const canciones = parsear(await r.json());
+          if (canciones.length) return NextResponse.json({ canciones: canciones.slice(0, 20), via: "directo" });
+        }
+      } catch {}
+      /* 2) La Mac de casa (su IP nunca está bloqueada) */
+      try {
+        const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
+        const token = process.env.MUSICA_TOKEN || "";
+        if (base) {
+          const r2 = await fetch(`${base}/ytmusic?q=${encodeURIComponent(query)}&token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(12000) });
+          const d2 = await r2.json();
+          if (d2.canciones) return NextResponse.json({ canciones: d2.canciones, via: "casa" });
+        }
+      } catch {}
+      return NextResponse.json({ canciones: [] });
+    }
+
     /* ── FEED VIVO: charts y lanzamientos REALES (Deezer los
        actualiza a diario) + Latin Hits de iTunes ── */
     if (action === "feed") {

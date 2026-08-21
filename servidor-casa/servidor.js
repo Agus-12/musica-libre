@@ -155,6 +155,78 @@ async function buscarCandidatos(query, cuantos = 5, durEsperada = 0) {
   }
 }
 
+/* ── Búsqueda en YT MUSIC (la API interna de music.youtube.com) ──
+   Es la PRINCIPAL para descargas: devuelve puras CANCIONES (nada de
+   videos raros, lives ni reactions), con duración y artista de verdad.
+   Si falla o no encuentra, se cae a la búsqueda clásica de YouTube. */
+async function buscarYTMusicCrudo(query) {
+  if (typeof fetch === "undefined") return [];   // node viejo sin fetch
+  const r = await fetch("https://music.youtube.com/youtubei/v1/search?prettyPrint=false", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      "Origin": "https://music.youtube.com",
+      "Referer": "https://music.youtube.com/",
+    },
+    body: JSON.stringify({
+      context: { client: { clientName: "WEB_REMIX", clientVersion: "1.20240701.01.00", hl: "es", gl: "MX" } },
+      query,
+      params: "EgWKAQIIAWoQEAMQBBAJEAoQBRAREBAQFQ%3D%3D",   // filtro: canciones
+    }),
+  });
+  const d = await r.json();
+  const items = [];
+  const walk = (o) => {
+    if (!o || typeof o !== "object") return;
+    if (o.musicResponsiveListItemRenderer) items.push(o.musicResponsiveListItemRenderer);
+    for (const v of Object.values(o)) walk(v);
+  };
+  walk(d);
+  return items.map((it) => {
+    try {
+      const vid = (it.playlistItemData && it.playlistItemData.videoId)
+        || (it.overlay && it.overlay.musicItemThumbnailOverlayRenderer && it.overlay.musicItemThumbnailOverlayRenderer.content
+            && it.overlay.musicItemThumbnailOverlayRenderer.content.musicPlayButtonRenderer
+            && it.overlay.musicItemThumbnailOverlayRenderer.content.musicPlayButtonRenderer.playNavigationEndpoint
+            && it.overlay.musicItemThumbnailOverlayRenderer.content.musicPlayButtonRenderer.playNavigationEndpoint.watchEndpoint
+            && it.overlay.musicItemThumbnailOverlayRenderer.content.musicPlayButtonRenderer.playNavigationEndpoint.watchEndpoint.videoId);
+      const cols = it.flexColumns || [];
+      const runs0 = (cols[0] && cols[0].musicResponsiveListItemFlexColumnRenderer && cols[0].musicResponsiveListItemFlexColumnRenderer.text && cols[0].musicResponsiveListItemFlexColumnRenderer.text.runs) || [];
+      const runs1 = (cols[1] && cols[1].musicResponsiveListItemFlexColumnRenderer && cols[1].musicResponsiveListItemFlexColumnRenderer.text && cols[1].musicResponsiveListItemFlexColumnRenderer.text.runs) || [];
+      const pageTypeDe = (x) => x.navigationEndpoint && x.navigationEndpoint.browseEndpoint
+        && x.navigationEndpoint.browseEndpoint.browseEndpointContextSupportedConfigs
+        && x.navigationEndpoint.browseEndpoint.browseEndpointContextSupportedConfigs.browseEndpointContextMusicConfig
+        && x.navigationEndpoint.browseEndpoint.browseEndpointContextSupportedConfigs.browseEndpointContextMusicConfig.pageType;
+      const title = runs0.map((x) => x.text).join("");
+      const textos = runs1.map((x) => x.text);
+      const durTxt = textos.length ? textos[textos.length - 1] : "";
+      const m = String(durTxt).trim().match(/^(\d+):(\d{2})$/);
+      const durSeg = m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+      const artist = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ARTIST").map((x) => x.text).join(", ") || (textos[0] || "");
+      const album = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ALBUM").map((x) => x.text).join("");
+      const thumbs = (it.thumbnail && it.thumbnail.musicThumbnailRenderer && it.thumbnail.musicThumbnailRenderer.thumbnail && it.thumbnail.musicThumbnailRenderer.thumbnail.thumbnails) || [];
+      const cover = thumbs.length ? thumbs[thumbs.length - 1].url : "";
+      if (!vid || !title) return null;
+      return { videoId: vid, title, artist, album, dur: durSeg, cover };
+    } catch { return null; }
+  }).filter(Boolean);
+}
+
+async function buscarYTMusic(query, durEsperada = 0) {
+  try {
+    const canciones = await buscarYTMusicCrudo(query);
+    return canciones
+      .filter((c) => c.dur === 0 || (c.dur >= 60 && c.dur <= 900))
+      .filter((c) => !durEsperada || c.dur === 0 || Math.abs(c.dur - durEsperada) <= durEsperada * 0.35)
+      .slice(0, 5)
+      .map((c) => c.videoId);
+  } catch (e) {
+    log("YT Music falló:", String(e.message || "").slice(0, 80));
+    return [];
+  }
+}
+
 // Errores que significan "este video no sirve, probá con otro".
 const VIDEO_INSERVIBLE = /DRM|members-only|premium|age.?restricted|sign in to confirm your age/i;
 
@@ -213,11 +285,17 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
          video tiene DRM (pasa mucho con los oficiales). */
       candidatos = [videoId];
       if (query) {
+        /* YT Music primero (canciones limpias), YouTube clásico después */
+        const ytm = await buscarYTMusic(query, dur);
         const extra = await buscarCandidatos(query, 5, dur);
-        for (const c of extra) if (c !== videoId) candidatos.push(c);
+        for (const c of [...ytm, ...extra]) if (!candidatos.includes(c)) candidatos.push(c);
       }
     } else {
-      candidatos = await buscarCandidatos(query, 5, dur);
+      /* Búsqueda PRINCIPAL: YT Music. Plan B: la búsqueda clásica. */
+      const ytm = await buscarYTMusic(query, dur);
+      const clasica = await buscarCandidatos(query, 5, dur);
+      candidatos = [...ytm];
+      for (const c of clasica) if (!candidatos.includes(c)) candidatos.push(c);
       if (!candidatos.length) throw new Error("la búsqueda no devolvió resultados");
     }
 
@@ -458,13 +536,25 @@ const servidor = http.createServer(async (req, res) => {
       }
     } catch {}
     return json(res, 200, {
-      ok: true, ytdlp, version, servidor: "2026-08-17e", carpeta: CARPETA,
+      ok: true, ytdlp, version, servidor: "2026-08-20a", carpeta: CARPETA,
       protegido: Boolean(TOKEN),
       cookies: Boolean(COOKIES),
       canciones_guardadas: guardadas,
       espacio_mb: Math.round(mb / 1048576),
       fallos_seguidos: fallosSeguidos,
     });
+  }
+
+  // ── /ytmusic: búsqueda de canciones en YT Music (para Explorar) ──
+  if (ruta === "/ytmusic") {
+    const q = url.searchParams.get("q") || "";
+    if (!q.trim()) return json(res, 400, { error: "falta q" });
+    try {
+      const canciones = await buscarYTMusicCrudo(q);
+      return json(res, 200, { canciones: canciones.slice(0, 20) });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message || "").slice(0, 120) });
+    }
   }
 
   // ── /resolver: baja la canción y devuelve dónde escucharla ──
