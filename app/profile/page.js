@@ -51,9 +51,13 @@ const IcoStop = ({ size = 14, color = "#fff" }) => (
    y React desmontaba/remontaba TODAS las imágenes ~4 veces por segundo
    (por el tic de la barrita de progreso) → carátulas parpadeando. */
 function CoverImg({url,size="100%",r=0}) {
+  const [fallo, setFallo] = useState(false);
+  useEffect(() => { setFallo(false); }, [url]);   // url nueva: reintentar
   const w=typeof size==="string"?size:size+"px";
   const fluido = typeof size==="string";
-  if(url) return <img src={url} style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,objectFit:"cover",display:"block"}}/>;
+  /* Si la imagen no carga (sin internet y no estaba cacheada), mostramos
+     el placeholder bonito en vez de un hueco roto */
+  if(url && !fallo) return <img src={url} onError={()=>setFallo(true)} style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,objectFit:"cover",display:"block"}}/>;
   return <div style={{width:w,height:fluido?"auto":w,aspectRatio:fluido?"1 / 1":undefined,borderRadius:r,background:"linear-gradient(135deg,var(--panel),var(--border))",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>} size={32} stroke="var(--text6)" sw={1.5}/></div>;
 }
 
@@ -597,6 +601,7 @@ export default function ProfilePage() {
   function descargarPlaylist() {
     const tracks = (playlistItems || [])
       .filter(i => i.item_type === "track")
+      .filter(i => !mp3DeItem(i))          // solo las que FALTAN
       .map(i => ({
         key: String(i.item_id),
         name: i.name,
@@ -2289,9 +2294,21 @@ export default function ProfilePage() {
             <div style={{flex:1,minWidth:0}}><h2 style={{fontSize:"1.2em",marginBottom:2}}>{selectedPlaylist.name}</h2><p style={{color:"var(--text3)",fontSize:"0.8em"}}>{selectedPlaylist.description||"Sin descripcion"} · {playlistItems.length} items</p></div>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:15,flexWrap:"wrap"}}>
-            <button onClick={descargarPlaylist} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"none",background:"#22c55e",color:"#fff",fontSize:"0.85em",fontWeight:800,cursor:"pointer"}}>
-              <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={15} stroke="#fff"/> Descargar todas ({playlistItems.filter(i=>i.item_type==="track").length})
-            </button>
+            {/* El botón sabe cuántas FALTAN; si ya están todas, lo dice */}
+            {(()=>{
+              const pistas = playlistItems.filter(i=>i.item_type==="track");
+              const faltan = pistas.filter(i=>!mp3DeItem(i)).length;
+              if (pistas.length>0 && faltan===0) return (
+                <span style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"1px solid rgba(34,197,94,0.4)",background:"rgba(34,197,94,0.12)",color:"#22c55e",fontSize:"0.85em",fontWeight:800}}>
+                  <Ico d={<polyline points="20 6 9 17 4 12"/>} size={15} stroke="#22c55e"/> Todas descargadas ({pistas.length})
+                </span>
+              );
+              return (
+                <button onClick={descargarPlaylist} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"none",background:"#22c55e",color:"#fff",fontSize:"0.85em",fontWeight:800,cursor:"pointer"}}>
+                  <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={15} stroke="#fff"/> {faltan===pistas.length ? `Descargar todas (${pistas.length})` : `Descargar las que faltan (${faltan})`}
+                </button>
+              );
+            })()}
             <button onClick={()=>setCompartirItem({type:"playlist",title:selectedPlaylist.name,name:selectedPlaylist.name,artist:"",cover_url:selectedPlaylist.cover_url||"",playlist_id:selectedPlaylist.id})} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"10px 16px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.85em",fontWeight:700,cursor:"pointer"}}>
               <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14} stroke="var(--accent)"/> Enviar a un amigo
             </button>

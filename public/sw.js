@@ -222,7 +222,11 @@ async function cacheFirstWithNetwork(event, cacheName) {
   try {
     if (await modoSinDatos()) return new Response('', { status: 404 });
     const response = await fetch(event.request);
-    if (response.ok) {
+    /* OJO: las carátulas de otros dominios (Deezer, Apple, YouTube) son
+       respuestas "opacas" (status 0, ok=false) y el filtro de antes las
+       rechazaba → sin internet desaparecían TODAS las portadas. Las
+       opacas se pueden cachear perfectamente. */
+    if (response.ok || response.type === 'opaque') {
       const cache = await caches.open(cacheName);
       cache.put(event.request, response.clone());
     }
