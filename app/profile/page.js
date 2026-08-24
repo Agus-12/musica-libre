@@ -1139,8 +1139,14 @@ export default function ProfilePage() {
     // Si la canción tiene archivo guardado, preferimos ese (funciona offline)
     if (item.audio_url) { startAudioFile(item); return; }
     usingAudioRef.current = false;
-    // Si veníamos de un archivo, lo paramos
+    // Si veníamos de un archivo, lo paramos. OJO: vaciar el src dispara
+    // el evento "error" del audio viejo, y su manejador RESUCITABA la
+    // canción anterior por YouTube encima de la nueva (pasaba al poner
+    // algo de YT Music tras escuchar una descargada). La guarda
+    // deteniendoRef le dice "esto es a propósito, no revivas nada".
+    deteniendoRef.current = true;
     try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; } } catch {}
+    setTimeout(() => { deteniendoRef.current = false; }, 300);
 
     const p = playerRef.current;
     if (!p) return;
