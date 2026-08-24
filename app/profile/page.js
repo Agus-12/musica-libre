@@ -902,8 +902,21 @@ export default function ProfilePage() {
   useEffect(() => {
     function onVisibility() {
       if (document.visibilityState !== "visible") return;
-      if (!playerRef.current || !playerReadyRef.current) return;
       if (!isPlaying) return;
+      /* Si lo que suena es un ARCHIVO, aquí el iframe de YouTube NI SE
+         TOCA: despertarlo resucitaba la canción ANTERIOR que quedó
+         cargada ahí (y al volver a poner la tuya, sonaban las dos). */
+      if (usingAudioRef.current) {
+        try {
+          const a = audioRef.current;
+          if (a && a.paused && !enSilencioRef.current) {
+            const pr = a.play();
+            if (pr && pr.catch) pr.catch(() => {});
+          }
+        } catch {}
+        return;
+      }
+      if (!playerRef.current || !playerReadyRef.current) return;
       try {
         const st = playerRef.current.getPlayerState();
         if (st !== 1) { playerRef.current.playVideo(); kickPlay(); }
@@ -926,6 +939,9 @@ export default function ProfilePage() {
       return;
     }
     wakeRef.current = setInterval(() => {
+      /* Suena un archivo → el iframe de YouTube no es asunto nuestro
+         (revivirlo metía la canción anterior encima de la actual) */
+      if (usingAudioRef.current) return;
       const p = playerRef.current;
       if (!p || !playerReadyRef.current) return;
       try {
