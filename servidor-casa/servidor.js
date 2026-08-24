@@ -222,7 +222,9 @@ async function buscarYTMusicCrudo(query) {
       const artist = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ARTIST").map((x) => x.text).join(", ") || (textos[0] || "");
       const album = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ALBUM").map((x) => x.text).join("");
       const thumbs = (it.thumbnail && it.thumbnail.musicThumbnailRenderer && it.thumbnail.musicThumbnailRenderer.thumbnail && it.thumbnail.musicThumbnailRenderer.thumbnail.thumbnails) || [];
-      const cover = thumbs.length ? thumbs[thumbs.length - 1].url : "";
+      let cover = thumbs.length ? thumbs[thumbs.length - 1].url : "";
+      /* Miniatura de 120px → versión grande (carátula de verdad) */
+      cover = cover.replace(/w\d+-h\d+/, "w544-h544");
       if (!vid || !title) return null;
       return { videoId: vid, title, artist, album, dur: durSeg, cover };
     } catch { return null; }

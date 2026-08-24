@@ -89,7 +89,10 @@ async function manejarGET(req) {
             const artist = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ARTIST").map((x) => x.text).join(", ") || (textos[0] || "");
             const album = runs1.filter((x) => pageTypeDe(x) === "MUSIC_PAGE_TYPE_ALBUM").map((x) => x.text).join("");
             const thumbs = it.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
-            const cover = thumbs.length ? thumbs[thumbs.length - 1].url : "";
+            let cover = thumbs.length ? thumbs[thumbs.length - 1].url : "";
+            /* YT Music manda miniaturas de 120px (pixeleadas): le pedimos
+               la versión grande cambiando el tamaño en la URL */
+            cover = cover.replace(/w\d+-h\d+/, "w544-h544");
             if (!vid || !title) return null;
             return { videoId: vid, title, artist, album, dur, cover };
           } catch { return null; }

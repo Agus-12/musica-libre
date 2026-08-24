@@ -1142,7 +1142,10 @@ export default function SpotifyPage() {
                   <SectionHeader icon={<Ico d={<><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></>} size={18} stroke="#ef4444" />} title="YouTube Music" subtitle="Descarga exacta: baja justo esa versión" />
                   <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                     {ytmResults.map(c => {
-                      const sonando = esLaQueSuena(c.videoId, c.title, c.artist);
+                      /* Aquí el match es por ID EXACTO del video (nada de
+                         nombre+artista): dos versiones de la misma canción
+                         se marcaban las dos a la vez */
+                      const sonando = playingTrack === String(c.videoId) || (String(sonandoGlobal.key) === String(c.videoId) && sonandoGlobal.playing);
                       const off = hasFullMp3(String(c.videoId), c.title, c.artist || "");
                       return (
                       <div key={c.videoId} onClick={() => reproducirYTM(c)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer", background: sonando ? "rgba(34,197,94,0.12)" : "transparent", borderLeft: sonando ? "3px solid #22c55e" : "3px solid transparent" }}>
