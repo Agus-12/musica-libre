@@ -108,6 +108,40 @@ function buscarExistente(id) {
   return null;
 }
 
+/* ── Control de calidad de archivos ──────────────────────────────
+   Un m4a FRAGMENTADO (cajas "moof": pedacitos sin índice completo)
+   vuelve loco a iOS: la duración cambia sola (2 min → 5 min) y la
+   barrita brinca. Pasaba si ffmpeg no estaba a la mano al armar el
+   archivo. Ahora: TODO archivo se revisa antes de servirse; si está
+   fragmentado se repara con ffmpeg (remux, sin recomprimir) y si no
+   tiene remedio se borra para que se baje de nuevo limpio. */
+function esM4aFragmentado(p) {
+  try {
+    if (!/\.(m4a|mp4)$/i.test(p)) return false;
+    return fs.readFileSync(p).includes(Buffer.from("moof"));
+  } catch { return false; }
+}
+
+async function sanearArchivo(p) {
+  if (!p) return null;
+  if (!esM4aFragmentado(p)) return p;
+  log("archivo fragmentado, reparando con ffmpeg:", path.basename(p));
+  const tmp = p.replace(/\.m4a$/i, ".fix.m4a");
+  try {
+    await correr("ffmpeg", ["-y", "-i", p, "-c", "copy", "-movflags", "+faststart", tmp], 60000);
+    if (fs.existsSync(tmp) && fs.statSync(tmp).size > 10000 && !esM4aFragmentado(tmp)) {
+      fs.renameSync(tmp, p);
+      log("reparado:", path.basename(p));
+      return p;
+    }
+  } catch (e) {
+    log("no se pudo reparar:", String(e.message || "").slice(0, 80));
+  }
+  try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
+  try { fs.unlinkSync(p); log("archivo dañado BORRADO (se bajará de nuevo):", path.basename(p)); } catch {}
+  return null;
+}
+
 const MIME = { ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".webm": "audio/webm", ".opus": "audio/ogg" };
 
 // ── Descarga con yt-dlp ────────────────────────────────────────
@@ -284,7 +318,7 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
   const clave = videoId || query;
   const id = idSeguro(clave);
 
-  const ya = buscarExistente(id);
+  const ya = await sanearArchivo(buscarExistente(id));
   if (ya) { log("cache HIT:", clave); return { archivo: ya, id }; }
 
   if (enProceso.has(id)) return enProceso.get(id);
@@ -378,7 +412,7 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
             url,
           ], 180000);
 
-          const archivo = buscarExistente(id);
+          const archivo = await sanearArchivo(buscarExistente(id));
           if (archivo) {
             log("listo:", path.basename(archivo),
                 (fs.statSync(archivo).size / 1048576).toFixed(1) + " MB",
@@ -439,7 +473,7 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
           "--retries", "2",
           `scsearch1:${query}`,
         ], 180000);
-        const archivo = buscarExistente(id);
+        const archivo = await sanearArchivo(buscarExistente(id));
         if (archivo) {
           log("listo (SoundCloud):", path.basename(archivo),
               (fs.statSync(archivo).size / 1048576).toFixed(1) + " MB");
@@ -563,7 +597,7 @@ const servidor = http.createServer(async (req, res) => {
       }
     } catch {}
     return json(res, 200, {
-      ok: true, ytdlp, version, servidor: "2026-08-23a", carpeta: CARPETA,
+      ok: true, ytdlp, version, servidor: "2026-08-23b", carpeta: CARPETA,
       protegido: Boolean(TOKEN),
       cookies: Boolean(COOKIES),
       canciones_guardadas: guardadas,
@@ -616,8 +650,9 @@ const servidor = http.createServer(async (req, res) => {
       });
     };
 
-    // Ya la teníamos bajada: respuesta instantánea.
-    const ya = buscarExistente(id);
+    // Ya la teníamos bajada: respuesta instantánea (revisando que el
+    // archivo esté sano; si estaba fragmentado se repara o se rebaja).
+    const ya = await sanearArchivo(buscarExistente(id));
     if (ya) return responderListo(ya);
 
     // ¿Falló hace poco? Devolvemos el motivo sin reintentar.
