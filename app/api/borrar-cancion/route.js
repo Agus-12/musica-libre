@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { baseMac } from "@/app/utils/servidorCasa";
 
 /* ═══════════════════════════════════════════════════
    /api/borrar-cancion — le pide a la Mac borrar el audio
@@ -22,7 +23,7 @@ export async function GET(req) {
     return NextResponse.json({ ok: false, error: "falta video_id" }, { status: 400 });
   }
 
-  const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
+  const base = await baseMac();
   if (!base) {
     return NextResponse.json({ ok: false, error: "MUSICA_SERVER vacía" });
   }

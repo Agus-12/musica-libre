@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
+import { baseMac } from "@/app/utils/servidorCasa";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
@@ -118,7 +119,8 @@ async function servidorCaseroVivo(base) {
 }
 
 async function pedirAlServidorCasero({ videoId, query, dur }) {
-  const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
+  /* URL dinámica: si el túnel se reinició, la Mac ya publicó la nueva */
+  const base = await baseMac();
   if (!base) { ultimoMotivoCasa = "MUSICA_SERVER vacía"; return null; }
 
   // Fail-fast: si la Mac no está viva, no esperamos 120 s al pedo.

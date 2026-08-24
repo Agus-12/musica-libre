@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { baseMac } from "@/app/utils/servidorCasa";
 
 // Unified music API — Deezer (primary), iTunes (fallback), oEmbed (Spotify URLs)
 // ALL FREE, NO AUTH REQUIRED
@@ -122,7 +123,7 @@ async function manejarGET(req) {
       } catch {}
       /* 2) La Mac de casa (su IP nunca está bloqueada) */
       try {
-        const base = (process.env.MUSICA_SERVER || "").replace(/\/+$/, "");
+        const base = await baseMac();
         const token = process.env.MUSICA_TOKEN || "";
         if (base) {
           const r2 = await fetch(`${base}/ytmusic?q=${encodeURIComponent(query)}&token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(12000) });
