@@ -836,6 +836,18 @@ export default function SpotifyPage() {
       const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       audio = s[String(c.videoId)]?.audio_url || "";
     } catch {}
+    if (!audio) {
+      /* Sin archivo = suena por YouTube, y iOS lo PAUSA al salir de la
+         app (es "video" para Apple). La descargamos en automático: la
+         próxima vez suena como archivo, hasta con pantalla bloqueada.
+         enqueueAlbum ya evita duplicados si ya estaba en la cola. */
+      enqueueAlbum(c.title, [{
+        key: String(c.videoId), name: c.title, artist: c.artist || "",
+        cover: c.cover || "", duration_ms: (c.dur || 0) * 1000 || null,
+        video_id: String(c.videoId),
+      }]);
+      toast.info("Sonando por YouTube (con la app abierta). La estoy descargando: en un ratito suena hasta con la pantalla bloqueada", 5000);
+    }
     window.dispatchEvent(new CustomEvent("aura-reproducir", { detail: {
       key: String(c.videoId), title: c.title || "", artist: c.artist || "",
       cover_url: c.cover || "", audio_url: audio, video_id: String(c.videoId),
