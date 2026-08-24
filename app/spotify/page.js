@@ -231,18 +231,23 @@ export default function SpotifyPage() {
     }
     return false;
   }
-  /* UNA sola fila ganadora por lista: primero la que coincide por CLAVE
-     exacta; solo si ninguna coincide, la PRIMERA por nombre+artista.
-     Antes cada fila decidía por su cuenta y dos versiones de la misma
-     canción (mismo nombre, distinto álbum) se pintaban las dos. */
-  function indiceSonando(lista, claveDe, nombreDe, artistaDe) {
+  /* UNA sola fila ganadora EN TODA LA PANTALLA (ni dos en la misma
+     lista, ni una en Canciones y otra en YouTube Music a la vez):
+     - Si alguna sección tiene la CLAVE exacta de lo que suena, esa fila
+       gana y las demás secciones no pintan nada.
+     - El respaldo por nombre+artista solo se usa si NINGUNA sección
+       reconoció la clave (p. ej. suena una descargada con otra clave). */
+  function idxPorClave(lista, claveDe) {
     if (!lista || !lista.length) return -1;
     const g = sonandoGlobal || {};
-    let i = lista.findIndex((x, j) => {
+    return lista.findIndex((x, j) => {
       const k = String(claveDe(x, j));
       return playingTrack === k || (g.playing && String(g.key) === k);
     });
-    if (i >= 0) return i;
+  }
+  function idxPorNombre(lista, nombreDe, artistaDe) {
+    if (!lista || !lista.length) return -1;
+    const g = sonandoGlobal || {};
     if (!g.playing || !g.title) return -1;
     return lista.findIndex((x, j) => {
       const n = nombreDe(x, j), a = artistaDe(x, j);
