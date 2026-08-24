@@ -23,6 +23,13 @@ const os = require("os");
 const { execFile } = require("child_process");
 const crypto = require("crypto");
 
+/* launchd arranca los programas con un PATH pelón (/usr/bin:/bin) donde
+   NO están yt-dlp ni ffmpeg (viven en /usr/local/bin o /opt/homebrew/bin).
+   Sin esto, el servidor corría bien a mano pero al arrancar con
+   launchctl las descargas fallaban con "yt-dlp not found". */
+process.env.PATH = [process.env.PATH, "/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin"]
+  .filter(Boolean).join(":");
+
 // ── Configuración ──────────────────────────────────────────────
 const PUERTO = Number(process.env.PORT || 8787);
 const CARPETA = process.env.MUSICA_DIR || path.join(os.homedir(), "musica-libre-audio");
@@ -161,7 +168,13 @@ async function buscarCandidatos(query, cuantos = 5, durEsperada = 0) {
    Si falla o no encuentra, se cae a la búsqueda clásica de YouTube. */
 async function buscarYTMusicCrudo(query) {
   if (typeof fetch === "undefined") return [];   // node viejo sin fetch
-  const r = await fetch("https://music.youtube.com/youtubei/v1/search?prettyPrint=false", {
+  /* Timeout propio: sin esto, un fetch colgado dejaba la ruta muerta */
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  let r;
+  try {
+    r = await fetch("https://music.youtube.com/youtubei/v1/search?prettyPrint=false", {
+      signal: ctrl.signal,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -174,7 +187,10 @@ async function buscarYTMusicCrudo(query) {
       query,
       params: "EgWKAQIIAWoQEAMQBBAJEAoQBRAREBAQFQ%3D%3D",   // filtro: canciones
     }),
-  });
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const d = await r.json();
   const items = [];
   const walk = (o) => {
@@ -536,7 +552,7 @@ const servidor = http.createServer(async (req, res) => {
       }
     } catch {}
     return json(res, 200, {
-      ok: true, ytdlp, version, servidor: "2026-08-20a", carpeta: CARPETA,
+      ok: true, ytdlp, version, servidor: "2026-08-20b", carpeta: CARPETA,
       protegido: Boolean(TOKEN),
       cookies: Boolean(COOKIES),
       canciones_guardadas: guardadas,
