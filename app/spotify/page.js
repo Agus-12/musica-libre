@@ -838,10 +838,14 @@ export default function SpotifyPage() {
   const albums = results?.albums || [];
   const artists = results?.artists || [];
   const songResults = results?.songs || [];
-  /* Índices de la ÚNICA fila sonando por lista (nunca dos verdes) */
-  const idxCancionSonando = indiceSonando(songResults, s => s.id, s => s.name, s => s.artist);
-  const idxAlbumSonando = album?.tracks?.length ? indiceSonando(album.tracks, (t, j) => t.id || `${album.id}-${j}`, t => t.name, t => t.artist || album.artist) : -1;
   const [ytmResults, setYtmResults] = useState([]);
+  /* Fila única sonando EN TODA LA PANTALLA (clave exacta manda) */
+  const kCanciones = idxPorClave(songResults, s => s.id);
+  const kYtm = idxPorClave(ytmResults, c => c.videoId);
+  const kAlbum = album?.tracks?.length ? idxPorClave(album.tracks, (t, j) => t.id || `${album.id}-${j}`) : -1;
+  const hayClaveExacta = kCanciones >= 0 || kYtm >= 0 || kAlbum >= 0;
+  const idxCancionSonando = kCanciones >= 0 ? kCanciones : (hayClaveExacta ? -1 : idxPorNombre(songResults, s => s.name, s => s.artist));
+  const idxAlbumSonando = kAlbum >= 0 ? kAlbum : ((hayClaveExacta || !album?.tracks?.length) ? -1 : idxPorNombre(album.tracks, t => t.name, t => t.artist || album.artist));
   /* Descargar una canción EXACTA de YT Music (por su video id) */
   function descargarYTM(c) {
     enqueueAlbum(c.title, [{
