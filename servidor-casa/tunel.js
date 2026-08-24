@@ -24,11 +24,13 @@ const APP = (process.env.AURA_APP || "https://musica-libre.vercel.app").replace(
 const LOCAL = process.env.AURA_LOCAL || "http://localhost:8787";
 
 let urlActual = "";
+let reintentoTimer = null;
 
 function log(...a) { console.log(new Date().toISOString().slice(11, 19), ...a); }
 
 async function avisar() {
   if (!urlActual) return;
+  clearTimeout(reintentoTimer);
   try {
     const r = await fetch(`${APP}/api/tunel`, {
       method: "POST",
@@ -37,11 +39,14 @@ async function avisar() {
       signal: AbortSignal.timeout(15000),
     });
     const d = await r.json();
-    if (d.ok) log("Vercel enterado:", urlActual);
-    else log("Vercel no aceptó:", JSON.stringify(d));
+    if (d.ok) { log("Vercel enterado:", urlActual); return; }
+    /* Rechazado (p. ej. el DNS del túnel recién nacido aún no propaga
+       y la verificación de /salud falló): reintentar en 45s, no en 10 min */
+    log("Vercel no aceptó (reintento en 45s):", JSON.stringify(d));
+    reintentoTimer = setTimeout(avisar, 45 * 1000);
   } catch (e) {
     log("no pude avisar a Vercel (reintento en 1 min):", String(e.message || "").slice(0, 60));
-    setTimeout(avisar, 60 * 1000);
+    reintentoTimer = setTimeout(avisar, 60 * 1000);
   }
 }
 
@@ -56,7 +61,7 @@ function arrancarTunel() {
       log("URL del túnel:", urlActual);
       /* Esperamos 3s a que el túnel de verdad enrute antes de avisar
          (Vercel verifica /salud a través de él) */
-      setTimeout(avisar, 3000);
+      setTimeout(avisar, 10000);
     }
   };
   p.stdout.on("data", leer);
