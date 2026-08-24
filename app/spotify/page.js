@@ -837,16 +837,16 @@ export default function SpotifyPage() {
       audio = s[String(c.videoId)]?.audio_url || "";
     } catch {}
     if (!audio) {
-      /* Sin archivo = suena por YouTube, y iOS lo PAUSA al salir de la
-         app (es "video" para Apple). La descargamos en automático: la
-         próxima vez suena como archivo, hasta con pantalla bloqueada.
-         enqueueAlbum ya evita duplicados si ya estaba en la cola. */
-      enqueueAlbum(c.title, [{
-        key: String(c.videoId), name: c.title, artist: c.artist || "",
-        cover: c.cover || "", duration_ms: (c.dur || 0) * 1000 || null,
-        video_id: String(c.videoId),
-      }]);
-      toast.info("Sonando por YouTube (con la app abierta). La estoy descargando: en un ratito suena hasta con la pantalla bloqueada", 5000);
+      /* Solo ESCUCHAR (streaming por YouTube): no le descargamos nada
+         al usuario sin permiso. Para tenerla offline está el botón de
+         descarga. Avisamos UNA vez por sesión que el streaming se pausa
+         al salir de la app (regla de iOS con video). */
+      try {
+        if (!sessionStorage.getItem("aura_aviso_ytm")) {
+          sessionStorage.setItem("aura_aviso_ytm", "1");
+          toast.info("Sonando por YouTube: se pausa si sales de la app. Si la quieres con pantalla bloqueada y sin internet, descárgala con la flechita", 5000);
+        }
+      } catch {}
     }
     window.dispatchEvent(new CustomEvent("aura-reproducir", { detail: {
       key: String(c.videoId), title: c.title || "", artist: c.artist || "",
