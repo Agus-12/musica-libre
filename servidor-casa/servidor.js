@@ -278,6 +278,7 @@ const fallosRecientes = new Map();
 
 // Cache del chequeo de yt-dlp para que /salud responda al instante.
 let ytdlpCache = { ts: 0, ok: false, version: null };
+let ytdlpUltimaBuena = null;   // última versión que SÍ respondió
 
 async function obtenerAudio({ videoId, query, dur = 0 }) {
   const clave = videoId || query;
@@ -536,12 +537,20 @@ const servidor = http.createServer(async (req, res) => {
     /* La versión de yt-dlp se cachea 10 min: ejecutar el binario en cada
        consulta tarda segundos cuando la Mac está ocupada descargando, y
        eso hacía que Vercel creyera que el servidor estaba caído. */
-    if (Date.now() - ytdlpCache.ts > 10 * 60 * 1000) {
+    /* Si el último chequeo FALLÓ, reintentamos al minuto (no en 10):
+       cuando la Mac anda ocupada bajando, `yt-dlp --version` se tarda
+       y el false cacheado dejaba las descargas muertas 10 minutos. */
+    const vencido = Date.now() - ytdlpCache.ts > (ytdlpCache.ok ? 10 * 60 * 1000 : 60 * 1000);
+    if (vencido) {
       try {
         const v = await correr("yt-dlp", ["--version"], 8000);
+        ytdlpUltimaBuena = v;
         ytdlpCache = { ts: Date.now(), ok: true, version: v };
       } catch {
-        ytdlpCache = { ts: Date.now(), ok: false, version: null };
+        /* ¿Falló el chequeo pero ANTES sí funcionaba? La Mac solo está
+           ocupada: seguimos reportando la última versión buena. Solo
+           decimos false si yt-dlp NUNCA ha respondido desde el arranque. */
+        ytdlpCache = { ts: Date.now(), ok: Boolean(ytdlpUltimaBuena), version: ytdlpUltimaBuena };
       }
     }
     const ytdlp = ytdlpCache.ok, version = ytdlpCache.version;
@@ -554,7 +563,7 @@ const servidor = http.createServer(async (req, res) => {
       }
     } catch {}
     return json(res, 200, {
-      ok: true, ytdlp, version, servidor: "2026-08-20b", carpeta: CARPETA,
+      ok: true, ytdlp, version, servidor: "2026-08-23a", carpeta: CARPETA,
       protegido: Boolean(TOKEN),
       cookies: Boolean(COOKIES),
       canciones_guardadas: guardadas,

@@ -101,9 +101,13 @@ async function servidorCaseroVivo(base) {
       ultimoMotivoCasa = "salud no devolvió ok:true";
       return false;
     }
+    /* OJO: ytdlp:false ya NO descarta a la Mac. Cuando está ocupada
+       descargando, su chequeo de yt-dlp se tardaba y reportaba false
+       por 10 minutos → Vercel la ignoraba → todo caía a "YT" sin
+       archivo. Aunque yt-dlp de verdad faltara, la Mac igual sirve
+       las canciones YA guardadas de su caché. */
     if (data.ytdlp === false) {
-      ultimoMotivoCasa = "la Mac responde pero yt-dlp no está instalado o no está en el PATH";
-      return false;
+      ultimoMotivoCasa = "aviso: la Mac reporta yt-dlp caído (o está muy ocupada); se intenta igual";
     }
     return true;
   } catch (e) {
