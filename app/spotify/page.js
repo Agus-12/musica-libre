@@ -231,6 +231,27 @@ export default function SpotifyPage() {
     }
     return false;
   }
+  /* UNA sola fila ganadora por lista: primero la que coincide por CLAVE
+     exacta; solo si ninguna coincide, la PRIMERA por nombre+artista.
+     Antes cada fila decidía por su cuenta y dos versiones de la misma
+     canción (mismo nombre, distinto álbum) se pintaban las dos. */
+  function indiceSonando(lista, claveDe, nombreDe, artistaDe) {
+    if (!lista || !lista.length) return -1;
+    const g = sonandoGlobal || {};
+    let i = lista.findIndex((x, j) => {
+      const k = String(claveDe(x, j));
+      return playingTrack === k || (g.playing && String(g.key) === k);
+    });
+    if (i >= 0) return i;
+    if (!g.playing || !g.title) return -1;
+    return lista.findIndex((x, j) => {
+      const n = nombreDe(x, j), a = artistaDe(x, j);
+      if (!n || normCancion(g.title) !== normCancion(n)) return false;
+      if (!g.artist || !a) return true;
+      const a1 = normCancion(g.artist), a2 = normCancion(a);
+      return a1 === a2 || a1.includes(a2) || a2.includes(a1);
+    });
+  }
   useEffect(() => {
     try {
       const st = JSON.parse(localStorage.getItem("aura_stats") || "{}");
@@ -817,6 +838,9 @@ export default function SpotifyPage() {
   const albums = results?.albums || [];
   const artists = results?.artists || [];
   const songResults = results?.songs || [];
+  /* Índices de la ÚNICA fila sonando por lista (nunca dos verdes) */
+  const idxCancionSonando = indiceSonando(songResults, s => s.id, s => s.name, s => s.artist);
+  const idxAlbumSonando = album?.tracks?.length ? indiceSonando(album.tracks, (t, j) => t.id || `${album.id}-${j}`, t => t.name, t => t.artist || album.artist) : -1;
   const [ytmResults, setYtmResults] = useState([]);
   /* Descargar una canción EXACTA de YT Music (por su video id) */
   function descargarYTM(c) {
@@ -1129,8 +1153,8 @@ export default function SpotifyPage() {
                 <div style={{ marginBottom: 25 }}>
                   <SectionHeader icon="" title="Canciones" subtitle="" />
                   <div style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                    {songResults.map(s => {
-                      const sonando = esLaQueSuena(s.id, s.name, s.artist);
+                    {songResults.map((s, iFila) => {
+                      const sonando = iFila === idxCancionSonando;
                       return (
                       <div key={s.id} onClick={() => loadAlbum(s.album_id, s.source || "itunes", s.name)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 12px", borderBottom: "1px solid var(--border2)", cursor: "pointer", background: sonando ? "rgba(34,197,94,0.12)" : "transparent", borderLeft: sonando ? "3px solid #22c55e" : "3px solid transparent" }}>
                         {s.cover ? <img src={s.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
@@ -1251,7 +1275,7 @@ export default function SpotifyPage() {
               <div style={{ background: "var(--panel)", borderRadius: 12, border: "1px solid var(--border)", overflow: "hidden" }}>
                 {album.tracks.map((track, i) => {
                   const trackKey = String(track.id || `${album.id}-${i}`);
-                  const isPlaying = esLaQueSuena(trackKey, track.name, track.artist || album.artist);
+                  const isPlaying = i === idxAlbumSonando;
                   const nombreBajo = (track.name || "").toLowerCase().trim();
                   const esResaltada = Boolean(resaltada && (nombreBajo === resaltada || nombreBajo.includes(resaltada) || resaltada.includes(nombreBajo)));
                   const tocar = () => { if (track.preview_url) playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, track.duration_ms || 0); };
