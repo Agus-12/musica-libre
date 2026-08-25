@@ -22,7 +22,7 @@ export async function POST(req) {
     items: [{ id: `aura-premium-${plan}`, title: p.titulo, description: "Acceso Premium de AURA", quantity: 1, currency_id: "MXN", unit_price: p.precio }],
     payer: { email: payerEmail },
     external_reference: external,
-    back_urls: { success: `${base}/profile?pago=exito`, failure: `${base}/profile?pago=fallo`, pending: `${base}/profile?pago=pendiente` },
+    back_urls: { success: `${base}/pago/resultado?estado=exito`, failure: `${base}/pago/resultado?estado=fallo`, pending: `${base}/pago/resultado?estado=pendiente` },
     auto_return: "approved",
     notification_url: `${base}/api/pagos/webhook`,
     statement_descriptor: "AURA PREMIUM",
