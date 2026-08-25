@@ -39,12 +39,15 @@ export async function POST(req) {
   if (!db) return NextResponse.json({ error: "Falta SUPABASE_SERVICE_ROLE_KEY en Vercel" }, { status: 500 });
   const body = await req.json().catch(() => ({}));
   const plan = PLANES[body.plan] ? body.plan : "mensual";
+  const card = body.card || {};
+  const cardToken = card.token || card.card_token_id || "";
+  if (!cardToken) return NextResponse.json({ error: "Falta el token seguro de la tarjeta" }, { status: 400 });
   const base = new URL(req.url).origin;
   const external = `aura:${user.id}:${plan}`;
   const payerEmail = process.env.MP_TEST_PAYER_EMAIL || user.email;
   try {
     const planId = await obtenerPlanMp(db, token, plan, base);
-    const payload = { reason: PLANES[plan].titulo, external_reference: external, payer_email: payerEmail, preapproval_plan_id: planId, back_url: `${base}/profile?pago=regreso`, status: "pending" };
+    const payload = { reason: PLANES[plan].titulo, external_reference: external, payer_email: payerEmail, preapproval_plan_id: planId, card_token_id: cardToken, back_url: `${base}/profile?pago=regreso`, status: "authorized" };
     const r = await fetch("https://api.mercadopago.com/preapproval", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload), cache: "no-store" });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {

@@ -4,6 +4,7 @@ import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 import { useDownloads } from "../components/DownloadManager";
 import Explorar from "../spotify/page";
+import MercadoPagoForm from "../components/MercadoPagoForm";
 
 let ytApiLoaded = false;
 let ytApiPromise = null;
@@ -322,6 +323,8 @@ export default function ProfilePage() {
   const [sinDatos, setSinDatos] = useState(false);
   const [almacenamientoOffline, setAlmacenamientoOffline] = useState({ cargando: false, canciones: 0, bytes: 0 });
   const [estadoPremium, setEstadoPremium] = useState({ cargando: true, activo: false, plan: "free", estado: "free", acceso_libre: false });
+  const [pagoPlan, setPagoPlan] = useState("");
+  const [mpPublicKey, setMpPublicKey] = useState("");
   // "En línea" DE VERDAD: con el Modo sin datos activo, la app se
   // comporta como offline aunque haya datos móviles disponibles.
   const enLinea = isOnline && !sinDatos;
@@ -340,15 +343,13 @@ export default function ProfilePage() {
     try { const r = await fetch("/api/pagos/estado", { cache: "no-store" }); const d = await r.json(); if (r.ok) setEstadoPremium({ ...d, cargando: false }); }
     catch { setEstadoPremium(v => ({ ...v, cargando: false })); }
   }
-  async function iniciarPago(plan) {
-    try {
-      const r = await fetch("/api/pagos/crear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan }) });
-      const d = await r.json();
-      if (!r.ok || !d.init_point) { const detalle = typeof d.detalle === "string" ? d.detalle : (d.detalle ? JSON.stringify(d.detalle) : ""); toast.error([d.error || "No se pudo iniciar el pago", detalle].filter(Boolean).join(": "), 8000); return; }
-      window.location.href = d.init_point;
-    } catch { toast.error("No se pudo conectar con Mercado Pago", 4000); }
+  function iniciarPago(plan) { setPagoPlan(plan); }
+  function pagoTerminado() {
+    setPagoPlan("");
+    toast.success("Suscripción enviada a Mercado Pago. Actualizando Premium…", 5000);
+    setTimeout(cargarEstadoPremium, 2500);
   }
-  useEffect(() => { if (vista === "cuenta" && user) cargarEstadoPremium(); }, [vista, user]);
+  useEffect(() => { if (vista === "cuenta" && user) { cargarEstadoPremium(); fetch("/api/pagos/config").then(r => r.json()).then(d => setMpPublicKey(d.public_key || "")).catch(() => {}); } }, [vista, user]);
 
   async function leerAlmacenamientoOffline() {
     if (!("caches" in window)) return;
@@ -1686,7 +1687,8 @@ export default function ProfilePage() {
       <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><Ico d={<><path d="M12 2l2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 2z"/></>} size={17} stroke="var(--accent)"/><div style={{fontWeight:800,color:"var(--text)"}}>AURA Premium</div></div>
         <div style={{fontSize:"0.78em",color:"var(--text3)",marginBottom:10}}>{estadoPremium.cargando ? "Consultando estado…" : estadoPremium.acceso_libre ? "AURA Libre: acceso total" : estadoPremium.activo ? `Premium activo${estadoPremium.vence_en ? ` hasta ${new Date(estadoPremium.vence_en).toLocaleDateString("es-MX")}` : ""}` : "Prueba de suscripción con Mercado Pago"}</div>
-        {!estadoPremium.activo && !estadoPremium.acceso_libre && <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button onClick={()=>iniciarPago("mensual")} style={{padding:"9px 13px",borderRadius:10,border:"none",background:"var(--accent)",color:"#fff",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Mensual · $26 MXN</button><button onClick={()=>iniciarPago("anual")} style={{padding:"9px 13px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Anual · $260 MXN</button></div>}
+        {!estadoPremium.activo && !estadoPremium.acceso_libre && !pagoPlan && <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button onClick={()=>iniciarPago("mensual")} style={{padding:"9px 13px",borderRadius:10,border:"none",background:"var(--accent)",color:"#fff",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Mensual · $26 MXN</button><button onClick={()=>iniciarPago("anual")} style={{padding:"9px 13px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Anual · $260 MXN</button></div>}
+        {pagoPlan && mpPublicKey && <MercadoPagoForm publicKey={mpPublicKey} amount={pagoPlan === "anual" ? 260 : 26} plan={pagoPlan} onDone={pagoTerminado} onCancel={()=>setPagoPlan("")} />}
       </div>
 
       {/* Acceso rápido: visible sin abrir Personalizar */}
