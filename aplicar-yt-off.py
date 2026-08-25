@@ -16,6 +16,7 @@ t = t.replace(
 '''  async function sincronizarCupoOffline(purge = false) {
     if (syncCupo.haciendo) return null;
     setSyncCupo({ haciendo: true, listo: false });''',
+'''  async function sincronizarCupoOffline(purge = false) {
     if (syncCupoRef.current) return null;
     syncCupoRef.current = true;
     setSyncCupo({ haciendo: true, listo: false });''',
