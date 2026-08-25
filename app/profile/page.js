@@ -5,7 +5,7 @@ import { useToast } from "../components/ToastContext";
 import { useDownloads } from "../components/DownloadManager";
 import Explorar from "../spotify/page";
 import { aliasesDe, gruposAliasLocales, LIMITE_FREE, unicasOfflineLocales } from "../utils/offlineCupo";
-import { marcarRechazada, rechazadasDe, estaVerificadaLocal, marcarVerificadaLocal } from "../utils/versionesRechazadas";
+import { marcarRechazada, rechazadasDe, estaVerificadaLocal, marcarVerificadaLocal, listarVerificadasLocales } from "../utils/versionesRechazadas";
 
 let ytApiLoaded = false;
 let ytApiPromise = null;
@@ -311,6 +311,34 @@ export default function ProfilePage() {
       window.removeEventListener("aura-reproducir", alReproducir);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancel = false;
+    (async () => {
+      try {
+        if (localStorage.getItem("ml_verif_sync") === "2") return;
+        const lista = listarVerificadasLocales();
+        if (!lista.length) { localStorage.setItem("ml_verif_sync", "2"); return; }
+        let ok = 0;
+        for (const it of lista) {
+          if (cancel) return;
+          const qs = new URLSearchParams({
+            ok: "1",
+            q: `${it.artist || ""} ${it.title || ""}`.trim(),
+            artist: it.artist || "",
+            title: it.title || "",
+            v: it.video_id || "",
+          });
+          const r = await fetch("/api/verificar-cancion?" + qs);
+          const d = await r.json().catch(() => ({}));
+          if (d.ok || d.verificada || d.nube) ok++;
+        }
+        if (ok > 0) localStorage.setItem("ml_verif_sync", "2");
+      } catch {}
+    })();
+    return () => { cancel = true; };
+  }, [user]);
 
   const [temaAct, setTemaAct] = useState("oscuro");
   const [accentAct, setAccentAct] = useState("#7c5cfc");

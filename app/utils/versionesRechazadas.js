@@ -46,3 +46,16 @@ export function marcarVerificadaLocal(artist, title, videoId) {
     localStorage.setItem(KEY_OK, JSON.stringify(all));
   } catch {}
 }
+export function listarVerificadasLocales() {
+  try {
+    const all = JSON.parse(localStorage.getItem(KEY_OK) || "{}") || {};
+    return Object.entries(all).map(([k, v]) => {
+      const i = String(k).indexOf("|");
+      return {
+        artist: i >= 0 ? k.slice(0, i) : "",
+        title: i >= 0 ? k.slice(i + 1) : String(k),
+        video_id: (v && v.video_id) || "",
+      };
+    });
+  } catch { return []; }
+}
