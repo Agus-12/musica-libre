@@ -999,7 +999,12 @@ export default function ProfilePage() {
       }
 
       const unicos = Array.from(grupos.values());
-      unicos.sort((a, b) => b.saved_at - a.saved_at);
+      unicos.sort((a, b) => {
+        const aOff = a.audio_url ? 1 : 0;
+        const bOff = b.audio_url ? 1 : 0;
+        if (aOff !== bOff) return aOff - bOff;
+        return b.saved_at - a.saved_at;
+      });
       setDownloadedMusic(unicos);
     } catch { setDownloadedMusic([]); }
   }
@@ -1365,7 +1370,13 @@ export default function ProfilePage() {
     setTimeout(() => { deteniendoRef.current = false; }, 300);
 
     const p = playerRef.current;
-    if (!p) return;
+    if (!p || !playerReadyRef.current) {
+      pendingRef.current = item;
+      setPlayingKey(item.key); setPlayingTitle(item.title);
+      setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
+      ensurePlayer();
+      return;
+    }
     setPlayingKey(item.key); setPlayingTitle(item.title);
     setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
     setProgress(0); setCurrentTime(0); setDuration(0);
@@ -1853,7 +1864,7 @@ export default function ProfilePage() {
 
   return (
     <div style={{maxWidth:vista==="explorar"?1000:900,margin:"0 auto",paddingTop:vista==="explorar"?0:20,paddingLeft:vista==="explorar"?0:20,paddingRight:vista==="explorar"?0:20,boxSizing:"border-box",paddingBottom:hp?"calc(135px + env(safe-area-inset-bottom))":"calc(20px + env(safe-area-inset-bottom))"}}>
-      <div id="yt-player-container" style={{position:"absolute",top:-9999,left:-9999,width:1,height:1,overflow:"hidden"}}/>
+      <div id="yt-player-container" style={{position:"fixed",left:0,bottom:0,width:1,height:1,opacity:0.02,pointerEvents:"none",overflow:"hidden",zIndex:0}}/>
 
       {/* Header (solo en la sección Perfil) */}
       {vista === "cuenta" && (<>
