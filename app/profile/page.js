@@ -322,6 +322,8 @@ export default function ProfilePage() {
   const [sinDatos, setSinDatos] = useState(false);
   const [almacenamientoOffline, setAlmacenamientoOffline] = useState({ cargando: false, canciones: 0, bytes: 0 });
   const [estadoPremium, setEstadoPremium] = useState({ cargando: true, activo: false, plan: "free", estado: "free", acceso_libre: false });
+  const [adminUsuarios, setAdminUsuarios] = useState(null);
+  const [adminCargando, setAdminCargando] = useState(false);
   const [pagoPlan, setPagoPlan] = useState("");
   const [mpPublicKey, setMpPublicKey] = useState("");
   // "En línea" DE VERDAD: con el Modo sin datos activo, la app se
@@ -350,7 +352,26 @@ export default function ProfilePage() {
       window.location.href = d.init_point;
     } catch { toast.error("No se pudo conectar con Mercado Pago", 4000); }
   }
-  useEffect(() => { if (vista === "cuenta" && user) { cargarEstadoPremium(); fetch("/api/pagos/config").then(r => r.json()).then(d => setMpPublicKey(d.public_key || "")).catch(() => {}); } }, [vista, user]);
+  async function cargarPanelAdmin() {
+    setAdminCargando(true);
+    try {
+      const r = await fetch("/api/admin/usuarios", { cache: "no-store" });
+      if (!r.ok) { setAdminUsuarios(null); return; }
+      const d = await r.json();
+      setAdminUsuarios(d.usuarios || []);
+    } catch { setAdminUsuarios(null); }
+    finally { setAdminCargando(false); }
+  }
+  async function cambiarAuraLibre(userId, activo) {
+    try {
+      const r = await fetch("/api/admin/aura-libre", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user_id: userId, activo }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error || "No se pudo actualizar", 3500); return; }
+      setAdminUsuarios(prev => (prev || []).map(u => u.user_id === userId ? { ...u, aura_libre: activo, acceso_libre: activo, limite_offline: activo ? 0 : 50 } : u));
+      toast.success(activo ? "Aura Libre activado" : "Aura Libre desactivado", 2500);
+    } catch { toast.error("Error de red", 3000); }
+  }
+  useEffect(() => { if (vista === "cuenta" && user) { cargarEstadoPremium(); fetch("/api/pagos/config").then(r => r.json()).then(d => setMpPublicKey(d.public_key || "")).catch(() => {}); cargarPanelAdmin(); } }, [vista, user]);
 
   async function leerAlmacenamientoOffline() {
     if (!("caches" in window)) return;
@@ -1586,30 +1607,8 @@ export default function ProfilePage() {
       }
       if (claves.includes(playingKey)) stopPlayback();
 
-      // Quitar de favoritos la canción correspondiente
-      const posibles = new Set(claves.map(k => String(k).toLowerCase()));
-      const tituloArtista = (item.artist + " " + item.title).trim().toLowerCase();
-      const artistaTitulo = (item.title + " " + item.artist).trim().toLowerCase();
-
-      const favsBorrar = favorites.filter(f => {
-        if (f.item_type !== "track") return false;
-        const id = String(f.item_id).toLowerCase();
-        if (posibles.has(id)) return true;
-        const n = (f.name || "").trim().toLowerCase();
-        const a = (f.artist || "").trim().toLowerCase();
-        return (a + " " + n) === tituloArtista || (n + " " + a) === artistaTitulo;
-      });
-
-      for (const f of favsBorrar) {
-        await toggleFavorite("track", f.item_id);
-      }
-
-      toast.success(
-        favsBorrar.length
-          ? "Eliminada de descargas y favoritos: " + item.title
-          : "Eliminada: " + item.title,
-        3000
-      );
+      // Eliminar una descarga NO elimina el favorito.
+      toast.success("Eliminada de descargas: " + item.title, 3000);
       refreshDownloads();
     } catch {}
   }
@@ -1690,6 +1689,23 @@ export default function ProfilePage() {
         <div style={{fontSize:"0.78em",color:"var(--text3)",marginBottom:10}}>{estadoPremium.cargando ? "Consultando estado…" : estadoPremium.acceso_libre ? "AURA Libre: acceso total" : estadoPremium.activo ? `Premium activo${estadoPremium.vence_en ? ` hasta ${new Date(estadoPremium.vence_en).toLocaleDateString("es-MX")}` : ""}` : "Prueba de suscripción con Mercado Pago"}</div>
         {!estadoPremium.activo && !estadoPremium.acceso_libre && !pagoPlan && <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button onClick={()=>iniciarPago("mensual")} style={{padding:"9px 13px",borderRadius:10,border:"none",background:"var(--accent)",color:"#fff",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Mensual · $26 MXN</button><button onClick={()=>iniciarPago("anual")} style={{padding:"9px 13px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Anual · $260 MXN</button></div>}
       </div>
+
+      {/* Panel privado: solo la API lo revela a ADMIN_USER_ID */}
+      {adminUsuarios && (
+        <div style={{background:"var(--panel)",border:"1px solid rgba(124,92,252,.35)",borderRadius:14,padding:18,marginBottom:22}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
+            <div><div style={{fontWeight:800,color:"var(--text)"}}>Administrar AURA Libre</div><div style={{fontSize:"0.72em",color:"var(--text4)",marginTop:3}}>Solo visible para la cuenta propietaria</div></div>
+            <button onClick={cargarPanelAdmin} disabled={adminCargando} style={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",cursor:"pointer",fontSize:"0.75em"}}>{adminCargando ? "..." : "Actualizar"}</button>
+          </div>
+          <div style={{display:"grid",gap:8}}>
+            {adminUsuarios.map(u => <div key={u.user_id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 10px",borderRadius:9,background:"var(--panel2)",border:"1px solid var(--border)"}}>
+              <div style={{flex:1,minWidth:0}}><div style={{color:"var(--text)",fontSize:"0.8em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email || u.user_id}</div><div style={{color:"var(--text4)",fontSize:"0.68em"}}>{u.plan === "premium" && u.estado === "active" ? "Premium activo" : u.aura_libre ? "Aura Libre" : "Gratis"}</div></div>
+              <button onClick={() => cambiarAuraLibre(u.user_id, !u.aura_libre)} style={{padding:"7px 9px",borderRadius:8,border:"none",background:u.aura_libre?"#ef4444":"#22c55e",color:"#fff",cursor:"pointer",fontSize:"0.7em",fontWeight:700,flexShrink:0}}>{u.aura_libre ? "Desactivar" : "Activar"}</button>
+            </div>)}
+            {!adminUsuarios.length && <div style={{color:"var(--text4)",fontSize:"0.8em"}}>No hay usuarios registrados todavía.</div>}
+          </div>
+        </div>
+      )}
 
       {/* Acceso rápido: visible sin abrir Personalizar */}
       <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>

@@ -227,6 +227,7 @@ async function processOne(track, currentQueue, setQueue) {
   setQueue(prev => prev.map(t => t.id === track.id ? { ...t, status: "downloading" } : t));
   const params = new URLSearchParams();
   params.set("q", sq);
+  params.set("track_key", String(track.key || sq).slice(0, 300));
   /* Reparación: ya sabemos el video exacto → Vercel no busca en YouTube
      y la Mac lo encuentra en su caché por id. Respuesta casi instantánea.
      PERO: si ese video ya falló 2 veces, lo soltamos y dejamos que se
@@ -292,6 +293,14 @@ async function processOne(track, currentQueue, setQueue) {
         guardadoOffline = true;
       }
     } catch {}
+  }
+
+  // Registrar una sola vez la canción offline para aplicar el límite entre dispositivos.
+  if (guardadoOffline) {
+    try {
+      const r = await fetch("/api/pagos/offline", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ track_key: String(track.key || sq).slice(0, 300) }) });
+      if (!r.ok) { guardadoOffline = false; }
+    } catch { /* El archivo local sigue disponible; se sincroniza en otro intento. */ }
   }
 
   /* Si el usuario BORRÓ la canción mientras esta reparación corría,
