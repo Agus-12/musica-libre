@@ -1647,6 +1647,9 @@ export default function ProfilePage() {
           } catch {}
         }
 
+        if (guardado) {
+          try { removeByKeys && removeByKeys(item.keys && item.keys.length ? item.keys : [item.key]); } catch {}
+        }
         toast.success(guardado?"Guardada sin internet: "+item.title:"Encontrada (suena por YouTube): "+item.title,4000);
         refreshDownloads();
       }
