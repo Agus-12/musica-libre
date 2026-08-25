@@ -42,7 +42,10 @@ export async function POST(req) {
   if (!cardToken) return NextResponse.json({ error: "Falta el token seguro de la tarjeta" }, { status: 400 });
   const base = new URL(req.url).origin;
   const external = `aura:${user.id}:${plan}`;
-  const payerEmail = process.env.MP_TEST_PAYER_EMAIL || user.email;
+  // Usamos el correo que Mercado Pago recibió junto con la tarjeta; debe
+  // corresponder al comprador de prueba. El fallback sirve cuando el Brick
+  // no lo devuelve.
+  const payerEmail = card.payer?.email || card.payer_email || process.env.MP_TEST_PAYER_EMAIL || user.email;
   try {
     // Suscripción directa sin plan externo: el Card Payment Brick ya nos
     // entrega el token seguro de la tarjeta. Así evitamos IDs de planes
