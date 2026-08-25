@@ -1667,6 +1667,23 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* Acceso rápido: visible sin abrir Personalizar */}
+      <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          <Ico d={<><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></>} size={16} stroke="var(--accent)"/>
+          <div style={{fontWeight:800,color:"var(--text)"}}>Almacenamiento offline</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
+          <button onClick={leerAlmacenamientoOffline} style={{padding:"9px 13px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
+            <Ico d={<><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></>} size={14} stroke="var(--accent)"/>
+            {almacenamientoOffline.cargando ? "Calculando…" : "Ver espacio usado"}
+          </button>
+          {(almacenamientoOffline.canciones > 0 || almacenamientoOffline.bytes > 0) && <span style={{color:"var(--text2)",fontSize:"0.78em",fontWeight:700}}>{almacenamientoOffline.canciones} {almacenamientoOffline.canciones===1?"canción":"canciones"} · {formatoBytes(almacenamientoOffline.bytes)}</span>}
+          {(almacenamientoOffline.canciones > 0 || almacenamientoOffline.bytes > 0) && <button onClick={borrarTodoOffline} style={{padding:"8px 11px",borderRadius:9,border:"1px solid rgba(239,68,68,.35)",background:"rgba(239,68,68,.08)",color:"#ef4444",fontSize:"0.76em",fontWeight:700,cursor:"pointer"}}>Liberar todo</button>}
+        </div>
+        <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:7,lineHeight:1.5}}>Mide los audios guardados en este iPhone. Puedes borrar todas las copias offline desde aquí; tus playlists y favoritos no se eliminan.</div>
+      </div>
+
       {/* ── Sección: Personalizar (plegada: vos elegís abrirla) ── */}
       {(
         <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
@@ -1702,18 +1719,6 @@ export default function ProfilePage() {
               </span>
             </button>
             <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:6,lineHeight:1.5}}>Activalo al salir de casa: la app no toca internet (ni datos móviles) y funciona solo con lo descargado. iOS no permite detectar WiFi vs datos automáticamente.</div>
-          </div>
-          <div style={{marginBottom:14,paddingTop:2}}>
-            <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>ALMACENAMIENTO OFFLINE</div>
-            <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
-              <button onClick={leerAlmacenamientoOffline} style={{padding:"9px 13px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.82em",fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
-                <Ico d={<><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></>} size={14} stroke="var(--accent)"/>
-                {almacenamientoOffline.cargando ? "Calculando…" : "Ver espacio usado"}
-              </button>
-              {(almacenamientoOffline.canciones > 0 || almacenamientoOffline.bytes > 0) && <span style={{color:"var(--text2)",fontSize:"0.78em",fontWeight:700}}>{almacenamientoOffline.canciones} {almacenamientoOffline.canciones===1?"canción":"canciones"} · {formatoBytes(almacenamientoOffline.bytes)}</span>}
-              {(almacenamientoOffline.canciones > 0 || almacenamientoOffline.bytes > 0) && <button onClick={borrarTodoOffline} style={{padding:"8px 11px",borderRadius:9,border:"1px solid rgba(239,68,68,.35)",background:"rgba(239,68,68,.08)",color:"#ef4444",fontSize:"0.76em",fontWeight:700,cursor:"pointer"}}>Liberar todo</button>}
-            </div>
-            <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:6,lineHeight:1.5}}>Mide los audios guardados en este iPhone. Puedes borrar todas las copias offline desde aquí; tus playlists y favoritos no se eliminan.</div>
           </div>
           <div style={{marginBottom:14}}>
             <div style={{color:"var(--text3)",fontSize:"0.75em",fontWeight:700,marginBottom:8}}>NOTIFICACIONES</div>
