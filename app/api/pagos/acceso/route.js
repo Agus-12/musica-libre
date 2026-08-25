@@ -23,13 +23,17 @@ export async function GET() {
   const auraLibre = Boolean(data?.acceso_libre || data?.aura_libre);
   const ilimitado = premiumActivo || auraLibre;
   const limite = ilimitado ? 0 : 50;
+  const { count: offlineCount } = await supabase
+    .from("descargas_offline")
+    .select("track_key", { count: "exact", head: true })
+    .eq("user_id", user.id);
 
   return NextResponse.json({
     plan: premiumActivo ? "premium" : auraLibre ? "aura_libre" : "free",
     premium: premiumActivo,
     aura_libre: auraLibre,
     ilimitado,
-    limite_offline: limite,
+    limite_offline: limite,\n    offline_count: offlineCount || 0,
     vence_en: data?.vence_en || null,
   });
 }
