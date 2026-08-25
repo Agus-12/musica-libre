@@ -2119,7 +2119,7 @@ export default function ProfilePage() {
           <h1 style={{fontSize:"1.25em",fontWeight:800,marginBottom:14,color:"var(--text-strong)"}}>Mi música</h1>
           <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
             <button onClick={()=>{setTab("downloads");setSelectedPlaylist(null);}} style={{...SM,background:tab==="downloads"?"#22c55e":"var(--panel)",color:tab==="downloads"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
-              <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={14} stroke="currentColor"/> Descargadas ({downloadedMusic.length})
+              <Ico d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} size={14} stroke="currentColor"/> Descargadas ({downloadedMusic.filter(x => x.audio_url).length})
             </button>
             <button onClick={()=>{setTab("favorites");setSelectedPlaylist(null);}} style={{...SM,background:tab==="favorites"?"var(--accent)":"var(--panel)",color:tab==="favorites"?"#fff":"var(--text3)",padding:"8px 16px",display:"flex",alignItems:"center",gap:6}}>
               <Ico d={<path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>} size={14} fill="currentColor" stroke="currentColor"/> Favoritos ({favorites.length})

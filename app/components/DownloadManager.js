@@ -65,7 +65,7 @@ export function DownloadProvider({ children }) {
       const saved = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       const vistos = new Set();
       for (const [key, e] of Object.entries(saved)) {
-        if (!e || e.audio_url) continue;                      // ya está offline
+        if (!e || e.audio_url || e.online_only) continue;    // online_only no se repara como offline
         if (!e.video_id && !e.title && !e.name) continue;     // entrada vacía
         if ((e.intentos_repair || 0) >= 5) continue;           // imposible: no insistir
         /* Agrupamos por artista+nombre (no por video): la misma canción
@@ -270,7 +270,7 @@ async function processOne(track, currentQueue, setQueue) {
      segundo, parpadeó el wifi), NO abortamos la descarga: contamos ese
      intento como "pendiente" y seguimos. Antes cualquier parpadeo de
      red marcaba la canción como fallida para siempre. */
-  const MAX_REINTENTOS = 12;
+  const MAX_REINTENTOS = track.online_only ? 2 : 12;
   let data = {};
   for (let intento = 0; intento < MAX_REINTENTOS; intento++) {
     try {
