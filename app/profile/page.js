@@ -65,7 +65,10 @@ function CoverImg({url,size="100%",r=0}) {
 
 
 export default function ProfilePage() {
-  const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession } = useUser();
+  const { user, profile, favorites, playlists, loading, isFavorite, toggleFavorite, loadFavorites, loadPlaylists, checkSession, logout } = useUser();
+  const [borrarCuentaPaso, setBorrarCuentaPaso] = useState(0);
+  const [borrarCuentaTxt, setBorrarCuentaTxt] = useState("");
+  const [borrandoCuenta, setBorrandoCuenta] = useState(false);
   const [tab, setTab] = useState("downloads");
   const [favType, setFavType] = useState("album");
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -483,6 +486,37 @@ export default function ProfilePage() {
     if (n < 1024 * 1024 * 1024) return `${(n / 1048576).toFixed(n < 100 * 1048576 ? 1 : 0)} MB`;
     return `${(n / 1073741824).toFixed(2)} GB`;
   }
+  async function eliminarCuenta() {
+    if (borrarCuentaTxt.trim().toUpperCase() !== "ELIMINAR") {
+      toast.warning("Escribí ELIMINAR para confirmar", 3000);
+      return;
+    }
+    setBorrandoCuenta(true);
+    try {
+      const r = await fetch("/api/cuenta", { method: "DELETE" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error(d.error || "No se pudo eliminar la cuenta", 4500);
+        setBorrandoCuenta(false);
+        return;
+      }
+      try {
+        localStorage.removeItem("ml_offline_user");
+        localStorage.removeItem("ml_offline_profile");
+        localStorage.removeItem("ml_offline_favorites");
+        localStorage.removeItem("ml_offline_playlists");
+        localStorage.removeItem("ml_mp3");
+        localStorage.removeItem("ml_offline");
+      } catch {}
+      try { await logout(); } catch {}
+      toast.success("Cuenta eliminada", 2500);
+      window.location.href = "/";
+    } catch {
+      toast.error("Error de red", 3500);
+      setBorrandoCuenta(false);
+    }
+  }
+
   async function borrarTodoOffline() {
     if (!("caches" in window)) return;
     if (!window.confirm("¿Borrar todas las canciones guardadas sin internet en este dispositivo?")) return;
@@ -2120,6 +2154,24 @@ export default function ProfilePage() {
           {(almacenamientoOffline.canciones > 0 || almacenamientoOffline.bytes > 0) && <button onClick={borrarTodoOffline} style={{padding:"8px 11px",borderRadius:9,border:"1px solid rgba(239,68,68,.35)",background:"rgba(239,68,68,.08)",color:"#ef4444",fontSize:"0.76em",fontWeight:700,cursor:"pointer"}}>Liberar todo</button>}
         </div>
         <div style={{color:"var(--text4)",fontSize:"0.68em",marginTop:7,lineHeight:1.5}}>Mide los audios guardados en este iPhone. Puedes borrar todas las copias offline desde aquí; tus playlists y favoritos no se eliminan.</div>
+      </div>
+
+      <div style={{background:"var(--panel)",border:"1px solid rgba(239,68,68,.35)",borderRadius:14,padding:18,marginBottom:22}}>
+        <div style={{fontWeight:800,color:"#ef4444",marginBottom:6}}>Eliminar cuenta</div>
+        <div style={{color:"var(--text4)",fontSize:"0.72em",lineHeight:1.5,marginBottom:12}}>Se borra tu perfil, favoritos, playlists y el acceso. Las canciones que ya bajaste en este teléfono se quedan en el aparato. No se puede deshacer.</div>
+        {borrarCuentaPaso === 0 && (
+          <button onClick={()=>{setBorrarCuentaPaso(1);setBorrarCuentaTxt("");}} style={{padding:"9px 13px",borderRadius:10,border:"1px solid rgba(239,68,68,.45)",background:"rgba(239,68,68,.1)",color:"#ef4444",fontSize:"0.82em",fontWeight:800,cursor:"pointer"}}>Eliminar mi cuenta</button>
+        )}
+        {borrarCuentaPaso === 1 && (
+          <div>
+            <div style={{color:"var(--text2)",fontSize:"0.78em",marginBottom:8}}>Escribí <b>ELIMINAR</b> para confirmar:</div>
+            <input value={borrarCuentaTxt} onChange={e=>setBorrarCuentaTxt(e.target.value)} placeholder="ELIMINAR" style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text)",marginBottom:10}}/>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={eliminarCuenta} disabled={borrandoCuenta} style={{padding:"9px 13px",borderRadius:10,border:"none",background:"#ef4444",color:"#fff",fontSize:"0.82em",fontWeight:800,cursor:"pointer",opacity:borrandoCuenta?0.6:1}}>{borrandoCuenta?"Borrando…":"Sí, borrar para siempre"}</button>
+              <button onClick={()=>{setBorrarCuentaPaso(0);setBorrarCuentaTxt("");}} style={{padding:"9px 13px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text3)",fontSize:"0.82em",fontWeight:700,cursor:"pointer"}}>Cancelar</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Sección: Personalizar (plegada: vos elegís abrirla) ── */}
