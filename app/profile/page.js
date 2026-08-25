@@ -1626,6 +1626,9 @@ export default function ProfilePage() {
   function stopPlayback() {
     deteniendoRef.current = true;
     setTimeout(() => { deteniendoRef.current = false; }, 300);
+    clearTimeout(verifyTimerRef.current);
+    verifyTimerRef.current = null;
+    setPreguntaVersion(null);
     clearTimeout(silTimerRef.current);
     enSilencioRef.current = false;
     try { if (audioRef.current) audioRef.current.muted = false; } catch {}

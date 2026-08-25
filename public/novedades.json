@@ -1,11 +1,10 @@
 {
-  "version": "20 de agosto, 2026 · v17",
-  "titulo": "🎵 Llegó YouTube Music a AURA",
+  "version": "25 de agosto, 2026 · v18",
+  "titulo": "Es esta la cancion?",
   "cambios": [
-    "🔴 Nueva sección YouTube Music en la búsqueda de Explorar: canciones directas de su catálogo (versiones, covers, remixes y música que no está en iTunes/Deezer)",
-    "🎯 Descarga EXACTA: lo que elijas de YouTube Music baja justo esa versión, cero errores de \"me bajó otra\"",
-    "⬇️ Las descargas ahora buscan PRIMERO en YouTube Music (resultados más limpios, puras canciones) y si no encuentran usan YouTube clásico y SoundCloud como siempre",
-    "▶️ Toca cualquier resultado de YouTube Music para escucharlo al instante en el reproductor",
-    "🗂️ Y lo de antes: playlists con aleatorio propio, importar por link, carátulas originales y OFF alineadito"
+    "A los 5 segundos te pregunta si es la version correcta, tambien en canciones que ya tenias",
+    "Si decís que sí, queda guardada en la Mini para todos",
+    "Si no es, se borra y busca otra",
+    "Boton No es esta en Descargadas"
   ]
 }
