@@ -435,15 +435,19 @@ function claveVerif(query) {
 function verificadaDe(query) {
   const k = claveVerif(query);
   if (!k) return null;
-  const row = leerVerificadas()[k];
-  if (!row || !row.videoId) return null;
-  return row;
+  return leerVerificadas()[k] || null;
 }
 function guardarVerificada(query, videoId) {
   const k = claveVerif(query);
-  if (!k || !videoId || !/^[\w-]{11}$/.test(videoId)) return false;
+  if (!k) return false;
+  const vid = String(videoId || "").trim();
   const all = leerVerificadas();
-  all[k] = { videoId, id: idSeguro(videoId), ts: Date.now() };
+  const bueno = /^[\w-]{11}$/.test(vid);
+  all[k] = {
+    videoId: bueno ? vid : ((all[k] && all[k].videoId) || ""),
+    id: bueno ? idSeguro(vid) : idSeguro(k),
+    ts: Date.now(),
+  };
   try { fs.writeFileSync(rutaVerificadas(), JSON.stringify(all)); } catch { return false; }
   return true;
 }
@@ -831,6 +835,15 @@ const servidor = http.createServer(async (req, res) => {
         tipo: MIME[ext] || "audio/mp4",
       });
     };
+
+    const ver = verificadaDe(query);
+    if (ver && ver.videoId) {
+      const pth = buscarExistente(ver.id || idSeguro(ver.videoId)) || buscarExistente(idSeguro(ver.videoId)) || buscarExistente(idSeguro(query));
+      if (pth) {
+        enlazarAlias(pth, query);
+        return responderListo(pth, ver.id || idSeguro(ver.videoId));
+      }
+    }
 
     // Busca por id, por nombre de canción y por ids de YT Music:
     // si Aura Libre ya la bajó, reutilizamos ESA copia (no un nightcore).

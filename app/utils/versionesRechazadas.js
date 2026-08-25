@@ -1,6 +1,15 @@
 const KEY = "ml_rechazadas";
+export function claveCancion(artist, title) {
+  const n = (s) => String(s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return `${n(artist)}|${n(title)}`;
+}
 function claveDe(artist, title) {
-  return `${String(artist || "").toLowerCase().trim()}|${String(title || "").toLowerCase().trim()}`;
+  return claveCancion(artist, title);
 }
 function leerTodo() {
   try { return JSON.parse(localStorage.getItem(KEY) || "{}") || {}; }

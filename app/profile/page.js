@@ -1820,8 +1820,14 @@ export default function ProfilePage() {
       verifyAskedRef.current = snap.key;
       try {
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 2000);
-        const r = await fetch("/api/verificar-cancion?q=" + encodeURIComponent(((snap.artist || "") + " " + (snap.title || "")).trim()), { signal: ctrl.signal });
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        const qs = new URLSearchParams({
+          q: ((snap.artist || "") + " " + (snap.title || "")).trim(),
+          artist: snap.artist || "",
+          title: snap.title || "",
+          v: snap.video_id || "",
+        });
+        const r = await fetch("/api/verificar-cancion?" + qs, { signal: ctrl.signal });
         clearTimeout(t);
         const d = await r.json().catch(() => ({}));
         if (d.verificada) {
@@ -1843,7 +1849,14 @@ export default function ProfilePage() {
     if (!it) return;
     marcarVerificadaLocal(it.artist, it.title, it.video_id);
     try {
-      await fetch("/api/verificar-cancion?ok=1&q=" + encodeURIComponent(((it.artist || "") + " " + (it.title || "")).trim()) + "&v=" + encodeURIComponent(it.video_id || ""));
+      const qs = new URLSearchParams({
+        ok: "1",
+        q: ((it.artist || "") + " " + (it.title || "")).trim(),
+        artist: it.artist || "",
+        title: it.title || "",
+        v: it.video_id || "",
+      });
+      await fetch("/api/verificar-cancion?" + qs);
     } catch {}
     toast.success("Quedo guardada como la version buena", 3000);
   }
