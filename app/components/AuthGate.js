@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useUser } from "./UserContext";
 import LogoAura from "./LogoAura";
+import Navbar from "./Navbar";
 
 // Iconos SVG (mismo estilo de línea que el resto de la app)
 function Ico({ d, size = 16, fill = "none", stroke = "#7c5cfc", sw = 2 }) {
@@ -9,21 +10,11 @@ function Ico({ d, size = 16, fill = "none", stroke = "#7c5cfc", sw = 2 }) {
 }
 
 // Rutas públicas que no requieren login
-const PUBLIC_PATHS = ["/share"];
+const PUBLIC_PATHS = ["/share", "/auth"];
 
 export default function AuthGate({ children }) {
   const { user, loading, checkSession } = useUser();
   const [isPublic, setIsPublic] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const path = window.location.pathname;
-      setIsPublic(PUBLIC_PATHS.some(p => path.startsWith(p)));
-    }
-  }, []);
-
-  // Si es ruta pública, no bloquear
-  if (isPublic) return children;
   const [mode, setMode] = useState(null); // null = landing, "login", "register"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,6 +22,17 @@ export default function AuthGate({ children }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const path = window.location.pathname;
+    setIsPublic(PUBLIC_PATHS.some(p => path.startsWith(p)));
+    const hash = window.location.hash || "";
+    const q = window.location.search || "";
+    if (path !== "/auth/listo" && (hash.includes("access_token") || /[?&](code|token_hash)=/.test(q))) {
+      window.location.replace("/auth/listo" + q + hash);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -44,7 +46,8 @@ export default function AuthGate({ children }) {
     );
   }
 
-  if (user) return children;
+  if (isPublic) return children;
+  if (user) return <Navbar>{children}</Navbar>;
 
   async function handleSubmit(e) {
     e.preventDefault();

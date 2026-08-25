@@ -3,7 +3,6 @@ import { UserProvider } from "./UserContext";
 import { ToastProvider } from "./ToastContext";
 import { DownloadProvider } from "./DownloadManager";
 import AuthGate from "./AuthGate";
-import Navbar from "./Navbar";
 
 /* Wrapper que envuelve todas las providers y componentes que necesitan
    estado React (client-side). Se importa desde layout.js como un solo
@@ -15,9 +14,7 @@ export default function Providers({ children }) {
     <UserProvider>
       <DownloadProvider>
         <ToastProvider>
-          <AuthGate>
-            <Navbar>{children}</Navbar>
-          </AuthGate>
+          <AuthGate>{children}</AuthGate>
         </ToastProvider>
       </DownloadProvider>
     </UserProvider>

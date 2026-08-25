@@ -13,11 +13,13 @@ export async function POST(req) {
       if (!email || !password || !username) {
         return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
       }
+      const origin = req.headers.get("origin") || new URL(req.url).origin;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: { username, full_name: username },
+          emailRedirectTo: `${origin}/auth/callback`,
         },
       });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
