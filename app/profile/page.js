@@ -677,22 +677,78 @@ export default function ProfilePage() {
     toast.success("Sonará a continuación: " + item.title, 2500);
   }
 
-  /* Descargar TODA la playlist para el modo sin internet */
-  function descargarPlaylist() {
-    const tracks = (playlistItems || [])
+  /* Descargar playlist respetando el límite Free */
+  async function descargarPlaylist() {
+    const faltantes = (playlistItems || [])
       .filter(i => i.item_type === "track")
-      .filter(i => !mp3DeItem(i))          // solo las que FALTAN
-      .map(i => ({
+      .filter(i => !mp3DeItem(i));
+
+    if (!faltantes.length) {
+      toast.warning("Esta playlist no tiene canciones pendientes", 3000);
+      return;
+    }
+
+    let ilimitado = false;
+
+    try {
+      const r = await fetch("/api/pagos/acceso", { cache: "no-store" });
+      const acceso = await r.json();
+      ilimitado = Boolean(r.ok && acceso.ilimitado);
+    } catch {}
+
+    let disponibles = Infinity;
+
+    if (!ilimitado) {
+      let offlineUnicas = 0;
+
+      try {
+        const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+        const ids = new Set(
+          Object.values(mp3s)
+            .filter(x => x?.audio_url)
+            .map(x => x.video_id || `${x.artist}|${x.name}`)
+        );
+        offlineUnicas = ids.size;
+      } catch {}
+
+      // Las descargas offline que ya están en cola también reservan espacio.
+      const reservadas = (queue || []).filter(
+        q => q.status !== "done" &&
+             q.status !== "failed" &&
+             !q.online_only &&
+             !q.solo_playlist
+      ).length;
+
+      disponibles = Math.max(0, 50 - offlineUnicas - reservadas);
+    }
+
+    const tracks = faltantes.map((i, indice) => {
+      const vaOffline = ilimitado || disponibles > 0;
+
+      if (!ilimitado && vaOffline) disponibles--;
+
+      return {
         key: String(i.item_id),
         name: i.name,
         artist: i.artist || "",
         cover: i.cover_url || "",
         duration_ms: i.extra_data?.duration_ms || null,
-        solo_playlist: true,     // viven AQUÍ, no en Mi música
-      }));
-    if (!tracks.length) { toast.warning("Esta playlist no tiene canciones", 3000); return; }
+        solo_playlist: true,
+        online_only: !vaOffline
+      };
+    });
+
     enqueueAlbum(selectedPlaylist?.name || "Playlist", tracks);
-    toast.success(`Descargando ${tracks.length} canciones aquí en la playlist`, 4000);
+
+    const offline = tracks.filter(t => !t.online_only).length;
+    const online = tracks.filter(t => t.online_only).length;
+
+    toast.success(
+      online
+        ? `Playlist agregada: ${offline} offline y ${online} en modo YouTube`
+        : `Descargando ${offline} canciones offline`,
+      4500
+    );
   }
 
   /* ── La playlist se REPRODUCE aquí mismo (sin pasar por Mi música) ──
