@@ -19,10 +19,14 @@ function yaEstaInstalada() {
   } catch {}
   return false;
 }
-function esIosSafari() {
+function infoNavegador() {
   const ua = String(navigator.userAgent || "");
   const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  return iOS;
+  const android = /Android/i.test(ua);
+  const instagram = /Instagram|FBAN|FBAV|Line\//i.test(ua);
+  const crios = /CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+  const safari = iOS && !crios && !instagram && /Safari/i.test(ua);
+  return { iOS, android, instagram, crios, safari };
 }
 function instalacionPospuesta() {
   try {
@@ -100,22 +104,36 @@ export default function PWASetup() {
       });
     }
 
-    // Listen for install prompt
+    const nav = infoNavegador();
+    setEsIOS(nav.iOS);
+    setEsAndroid(nav.android);
+    setEnSafari(nav.safari);
+    setEnAppAjena(nav.instagram);
+    if (nav.iOS) setIosPasos(true);
+
     const handler = (e) => {
       e.preventDefault();
+      installPromptRef.current = e;
       setInstallPrompt(e);
-      setTimeout(() => setShowInstall(true), 3000);
+      if (!yaEstaInstalada() && !instalacionPospuesta()) setShowInstall(true);
     };
     window.addEventListener("beforeinstallprompt", handler);
 
     window.addEventListener("appinstalled", () => {
       setIsInstalled(true);
       setShowInstall(false);
+      setIosPasos(false);
       setInstallPrompt(null);
+      installPromptRef.current = null;
     });
 
-    if (window.matchMedia("(display-mode: standalone)").matches) {
+    if (yaEstaInstalada()) {
       setIsInstalled(true);
+    } else if (!instalacionPospuesta()) {
+      setTimeout(() => {
+        if (yaEstaInstalada() || instalacionPospuesta()) return;
+        setShowInstall(true);
+      }, 900);
     }
 
     setIsOffline(!navigator.onLine);
@@ -388,7 +406,7 @@ export default function PWASetup() {
         </div>
       )}
 
-      {/* ── Alerta: agregar AURA al inicio (navegador iOS/Android) ── */}
+      {/* ── Alerta: agregar AURA al inicio (iPhone ≠ Android) ── */}
       {showInstall && !isInstalled && (
         <div style={{ position: "fixed", inset: 0, zIndex: 50000, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0 }}>
           <div style={{ width: "100%", maxWidth: 460, background: "var(--panel, #161622)", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: "22px 20px calc(20px + env(safe-area-inset-bottom))", boxShadow: "0 -16px 50px rgba(0,0,0,0.45)" }}>
@@ -398,42 +416,42 @@ export default function PWASetup() {
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ color: "var(--text)", fontSize: "1.05em", fontWeight: 800 }}>Poné AURA en el inicio</div>
-                <div style={{ color: "var(--text3)", fontSize: "0.78em", marginTop: 2 }}>Se abre como app, sin barra del navegador</div>
+                <div style={{ color: "var(--text3)", fontSize: "0.78em", marginTop: 2 }}>
+                  {esIOS ? "Estás en el navegador del iPhone" : esAndroid ? "Estás en el navegador de Android" : "Abrí desde el celular"}
+                </div>
               </div>
             </div>
 
-            {iosPasos ? (
+            {esIOS ? (
               <div style={{ color: "var(--text2, #ccc)", fontSize: "0.86em", lineHeight: 1.5, marginBottom: 14 }}>
-                {esIOS ? (
+                {enAppAjena || !enSafari ? (
                   <>
-                    Apple no deja ponerlo de un toque. En Safari:
-                    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                      <div><b style={{ color: "#fff" }}>1.</b> Tocá el botón <b style={{ color: "#fff" }}>Compartir</b> (el cuadrado con la flecha ↑ abajo en el centro).</div>
-                      <div><b style={{ color: "#fff" }}>2.</b> Bajá y tocá <b style={{ color: "#fff" }}>Agregar a inicio</b>.</div>
-                      <div><b style={{ color: "#fff" }}>3.</b> Tocá <b style={{ color: "#fff" }}>Agregar</b>.</div>
-                    </div>
+                    En Instagram / Chrome no se puede. Abrí este mismo link en <b style={{ color: "#fff" }}>Safari</b> y después:
                   </>
                 ) : (
-                  <>
-                    En el menú del navegador (⋮ o ⋯) tocá <b style={{ color: "#fff" }}>Instalar app</b> o <b style={{ color: "#fff" }}>Agregar a pantalla de inicio</b>.
-                  </>
+                  <>En Safari, son 3 toques (Apple no deja más):</>
                 )}
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  <div><b style={{ color: "#fff" }}>1.</b> Tocá <b style={{ color: "#fff" }}>Compartir</b> — el cuadrado con la flecha ↑, abajo al centro.</div>
+                  <div><b style={{ color: "#fff" }}>2.</b> Bajá y tocá <b style={{ color: "#fff" }}>Agregar a inicio</b>.</div>
+                  <div><b style={{ color: "#fff" }}>3.</b> Tocá <b style={{ color: "#fff" }}>Agregar</b>.</div>
+                </div>
               </div>
             ) : (
               <div style={{ color: "var(--text3)", fontSize: "0.8em", lineHeight: 1.45, marginBottom: 14 }}>
-                {esIOS
-                  ? "Así la tenés en el inicio como las otras apps. En iPhone son 2 toques del sistema."
-                  : "Al tocar el botón, el teléfono te pide confirmar y la deja en el inicio."}
+                {iosPasos
+                  ? <>En el menú del navegador (⋮) tocá <b style={{ color: "#fff" }}>Instalar app</b> o <b style={{ color: "#fff" }}>Agregar a pantalla de inicio</b>.</>
+                  : "Tocá el botón y el teléfono te pide confirmar. Queda en el inicio como una app."}
               </div>
             )}
 
             <div style={{ display: "flex", gap: 8 }}>
-              {!iosPasos && (
+              {!esIOS && !iosPasos && (
                 <button onClick={handleInstall} style={{ flex: 1, padding: "13px 16px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#22c55e,#16a34a)", color: "#fff", fontWeight: 800, fontSize: "0.95em", cursor: "pointer" }}>
                   Agregar al inicio
                 </button>
               )}
-              <button onClick={posponerInstalar} style={{ flex: iosPasos ? 1 : undefined, padding: "13px 16px", borderRadius: 12, border: "1px solid var(--border, #2a2a3e)", background: "transparent", color: "var(--text3, #888)", fontWeight: 700, fontSize: "0.9em", cursor: "pointer" }}>
+              <button onClick={posponerInstalar} style={{ flex: 1, padding: "13px 16px", borderRadius: 12, border: "1px solid var(--border, #2a2a3e)", background: "transparent", color: "var(--text3, #888)", fontWeight: 700, fontSize: "0.9em", cursor: "pointer" }}>
                 Ahora no
               </button>
             </div>
