@@ -337,7 +337,7 @@ async function processOne(track, currentQueue, setQueue) {
     /* No pisamos datos buenos que ya existieran (carátula, nombre real,
        o un audio_url previo) con datos peores de este intento. */
     const previo = saved[sq] || (track.key ? saved[String(track.key)] : null) || {};
-    const tieneAudio = guardadoOffline || Boolean(previo.audio_url);
+    const tieneAudio = guardadoOffline || (!track.online_only && Boolean(previo.audio_url));
     const entry = {
       video_id: data.video_id || previo.video_id || "",
       audio_url: guardadoOffline ? data.audio_url : (track.online_only ? "" : (previo.audio_url || "")),
