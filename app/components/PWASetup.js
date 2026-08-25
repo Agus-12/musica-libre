@@ -40,6 +40,9 @@ export default function PWASetup() {
   const [showInstall, setShowInstall] = useState(false);
   const [iosPasos, setIosPasos] = useState(false);
   const [esIOS, setEsIOS] = useState(false);
+  const [esAndroid, setEsAndroid] = useState(false);
+  const [enSafari, setEnSafari] = useState(true);
+  const [enAppAjena, setEnAppAjena] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [hayUpdate, setHayUpdate] = useState(false);
