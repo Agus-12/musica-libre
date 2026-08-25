@@ -1,11 +1,11 @@
 // AURA - Service Worker
 // La huella de build cambia en cada deploy: asi el navegador detecta
 // "hay version nueva" y muestra el aviso de novedades.
-const AURA_BUILD = "2026-08-25-ytm";
+const AURA_BUILD = "2026-08-25-inicio";
 // Handles offline caching for PWA
 
-const CACHE_NAME = 'ml-static-v9';
-const STATIC_CACHE = 'ml-static-v9';
+const CACHE_NAME = 'ml-static-v10';
+const STATIC_CACHE = 'ml-static-v10';
 const DATA_CACHE = 'ml-data-v4';
 const IMAGE_CACHE = 'ml-images-v5';
 const SAVED_CACHE = 'ml-saved-v1';

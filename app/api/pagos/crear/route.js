@@ -15,7 +15,6 @@ export async function POST(req) {
   const body = await req.json().catch(() => ({}));
   const plan = PLANES[body.plan] ? body.plan : "mensual";
   const p = PLANES[plan];
-  const payerEmail = process.env.MP_TEST_PAYER_EMAIL || user.email;
   const base = new URL(req.url).origin;
   const external = `aura:${user.id}:${plan}`;
   /* Sandbox (token de prueba "TEST-...") vs producción ("APP_USR-..."):
@@ -24,8 +23,11 @@ export async function POST(req) {
        el cobro (falla reportada con Safari y con cuentas de prueba).
        Con credenciales de prueba, init_point abre igual el checkout de
        sandbox, y el botón "Volver al sitio" regresa sin bucles.
-     - En producción el auto-retorno queda activo como siempre. */
+     - En producción el auto-retorno queda activo como siempre.
+     - El email de tester SOLO se usa en sandbox. Si queda MP_TEST_PAYER_EMAIL
+       en Vercel con claves reales, el cobro iría a la cuenta de prueba. */
   const esSandbox = String(token).startsWith("TEST-");
+  const payerEmail = (esSandbox && process.env.MP_TEST_PAYER_EMAIL) || user.email;
   const payload = {
     items: [{ id: `aura-premium-${plan}`, title: p.titulo, description: "Acceso Premium de AURA", quantity: 1, currency_id: "MXN", unit_price: p.precio }],
     payer: { email: payerEmail },

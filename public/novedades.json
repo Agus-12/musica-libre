@@ -1,10 +1,10 @@
 {
-  "version": "25 de agosto, 2026 · v19",
-  "titulo": "YouTube Music sin pregunta",
+  "version": "25 de agosto, 2026 · v20",
+  "titulo": "Agregar AURA al inicio",
   "cambios": [
-    "Las de YouTube Music ya no preguntan: esa es la version que elegiste",
-    "Las preview de Explorar tampoco",
-    "Solo pregunta en Descargadas OFF o YT (busqueda iTunes/Deezer)",
-    "Si decís que sí, queda para todos. Si no, se borra y busca otra"
+    "Si abrís AURA en el navegador, te invita a ponerla en el inicio",
+    "En Android el botón abre el instalador del teléfono",
+    "En iPhone te muestra los 2 toques de Safari (Apple no deja más)",
+    "YouTube Music sigue sin preguntar versión"
   ]
 }

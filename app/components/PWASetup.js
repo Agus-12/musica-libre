@@ -11,14 +11,37 @@ const IcUpdate = (p) => <Ic {...p}><path d="M21 12a9 9 0 1 1-3.5-7.1" /><polylin
 const IcWifi = (p) => <Ic {...p}><line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.58 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><line x1="2" y1="2" x2="22" y2="22" /></Ic>;
 const IcMusic = (p) => <Ic {...p}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></Ic>;
 
+function yaEstaInstalada() {
+  try {
+    if (window.matchMedia("(display-mode: standalone)").matches) return true;
+    if (window.matchMedia("(display-mode: fullscreen)").matches) return true;
+    if (window.navigator.standalone === true) return true;
+  } catch {}
+  return false;
+}
+function esIosSafari() {
+  const ua = String(navigator.userAgent || "");
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return iOS;
+}
+function instalacionPospuesta() {
+  try {
+    const t = Number(localStorage.getItem("aura_instalar_no") || 0);
+    return t > Date.now();
+  } catch { return false; }
+}
+
 export default function PWASetup() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
+  const [iosPasos, setIosPasos] = useState(false);
+  const [esIOS, setEsIOS] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [hayUpdate, setHayUpdate] = useState(false);
   const [swEstado, setSwEstado] = useState("checking"); // checking | up-to-date | update-available
   const cleanupRef = useRef(null);
+  const installPromptRef = useRef(null);
 
   useEffect(() => {
     /* Registro del service worker + detección de actualizaciones.
@@ -109,13 +132,27 @@ export default function PWASetup() {
   }, []);
 
   async function handleInstall() {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === "accepted") {
-      setShowInstall(false);
-      setInstallPrompt(null);
+    const ev = installPromptRef.current || installPrompt;
+    if (ev && ev.prompt) {
+      try {
+        ev.prompt();
+        const { outcome } = await ev.userChoice;
+        if (outcome === "accepted") {
+          setShowInstall(false);
+          setInstallPrompt(null);
+          installPromptRef.current = null;
+          return;
+        }
+      } catch {}
     }
+    // iOS (y Android sin API): no se puede clavar el ícono por código.
+    // Mostramos los 2 toques que pide el sistema.
+    setIosPasos(true);
+  }
+  function posponerInstalar() {
+    try { localStorage.setItem("aura_instalar_no", String(Date.now() + 7 * 24 * 60 * 60 * 1000)); } catch {}
+    setShowInstall(false);
+    setIosPasos(false);
   }
 
   async function handleUpdate() {
@@ -351,34 +388,56 @@ export default function PWASetup() {
         </div>
       )}
 
-      {/* ── Banner de instalación ── */}
+      {/* ── Alerta: agregar AURA al inicio (navegador iOS/Android) ── */}
       {showInstall && !isInstalled && (
-        <div style={{
-          position: "fixed", bottom: isOffline ? 44 : 0, left: 0, right: 0, zIndex: 199,
-          background: "var(--panel)", borderTop: "2px solid var(--accent)",
-          padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
-          boxShadow: "0 -4px 20px rgba(0,0,0,0.4)",
-        }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: "linear-gradient(135deg, var(--accent), #1ed760)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <IcMusic size={22} stroke="#fff" strokeWidth="2.2" />
+        <div style={{ position: "fixed", inset: 0, zIndex: 50000, background: "rgba(0,0,0,0.62)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0 }}>
+          <div style={{ width: "100%", maxWidth: 460, background: "var(--panel, #161622)", borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: "22px 20px calc(20px + env(safe-area-inset-bottom))", boxShadow: "0 -16px 50px rgba(0,0,0,0.45)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 14, overflow: "hidden", flexShrink: 0, background: "linear-gradient(135deg, var(--accent), #1ed760)" }}>
+                <img src="/icon-192.png" alt="" width={48} height={48} style={{ display: "block", width: 48, height: 48 }} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: "var(--text)", fontSize: "1.05em", fontWeight: 800 }}>Poné AURA en el inicio</div>
+                <div style={{ color: "var(--text3)", fontSize: "0.78em", marginTop: 2 }}>Se abre como app, sin barra del navegador</div>
+              </div>
+            </div>
+
+            {iosPasos ? (
+              <div style={{ color: "var(--text2, #ccc)", fontSize: "0.86em", lineHeight: 1.5, marginBottom: 14 }}>
+                {esIOS ? (
+                  <>
+                    Apple no deja ponerlo de un toque. En Safari:
+                    <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                      <div><b style={{ color: "#fff" }}>1.</b> Tocá el botón <b style={{ color: "#fff" }}>Compartir</b> (el cuadrado con la flecha ↑ abajo en el centro).</div>
+                      <div><b style={{ color: "#fff" }}>2.</b> Bajá y tocá <b style={{ color: "#fff" }}>Agregar a inicio</b>.</div>
+                      <div><b style={{ color: "#fff" }}>3.</b> Tocá <b style={{ color: "#fff" }}>Agregar</b>.</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    En el menú del navegador (⋮ o ⋯) tocá <b style={{ color: "#fff" }}>Instalar app</b> o <b style={{ color: "#fff" }}>Agregar a pantalla de inicio</b>.
+                  </>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: "var(--text3)", fontSize: "0.8em", lineHeight: 1.45, marginBottom: 14 }}>
+                {esIOS
+                  ? "Así la tenés en el inicio como las otras apps. En iPhone son 2 toques del sistema."
+                  : "Al tocar el botón, el teléfono te pide confirmar y la deja en el inicio."}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              {!iosPasos && (
+                <button onClick={handleInstall} style={{ flex: 1, padding: "13px 16px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#22c55e,#16a34a)", color: "#fff", fontWeight: 800, fontSize: "0.95em", cursor: "pointer" }}>
+                  Agregar al inicio
+                </button>
+              )}
+              <button onClick={posponerInstalar} style={{ flex: iosPasos ? 1 : undefined, padding: "13px 16px", borderRadius: 12, border: "1px solid var(--border, #2a2a3e)", background: "transparent", color: "var(--text3, #888)", fontWeight: 700, fontSize: "0.9em", cursor: "pointer" }}>
+                Ahora no
+              </button>
+            </div>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: "var(--text)", fontSize: "0.9em", fontWeight: 600 }}>Instalar AURA</div>
-            <div style={{ color: "var(--text3)", fontSize: "0.75em" }}>Funciona sin internet como una app</div>
-          </div>
-          <button onClick={handleInstall} style={{
-            padding: "8px 16px", borderRadius: 8, border: "none",
-            background: "var(--accent)", color: "#fff", fontSize: "0.85em",
-            cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap",
-          }}>Instalar</button>
-          <button onClick={() => setShowInstall(false)} style={{
-            background: "none", border: "none", color: "var(--text5)",
-            cursor: "pointer", fontSize: "1.4em", padding: 0, lineHeight: 1,
-          }}>×</button>
         </div>
       )}
     </>
