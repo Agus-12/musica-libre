@@ -652,45 +652,56 @@ export default function SpotifyPage() {
       return;
     }
 
+    await toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source, extraData);
+
     try {
       const ar = await fetch("/api/pagos/acceso", { cache: "no-store" });
       const acceso = await ar.json();
 
       if (ar.ok && acceso.ilimitado) {
-        // Premium y Aura Libre: corazón = favorito + descarga offline.
-        await handleSaveOffline(
-          e,
-          itemType,
-          itemId,
-          name,
-          artistName,
-          source,
-          "",
-          coverUrl
-        );
+        if (itemType === "album" && album?.tracks) {
+          enqueueAlbum(name, album.tracks.map((t, i) => ({
+            key: String(t.id || `${itemId}-${i}`),
+            name: t.name,
+            artist: t.artist || artistName,
+            cover: coverUrl,
+            duration_ms: t.duration_ms || null
+          })));
+        } else {
+          enqueueAlbum(name, [{
+            key: String(itemId),
+            name,
+            artist: artistName,
+            cover: coverUrl,
+            duration_ms: extraData?.duration_ms || null
+          }]);
+        }
+
+        toast.success("Guardada y descargando para usar offline", 3500);
       } else {
-        // AURA Free: corazón solamente guarda el favorito.
-        await toggleFavorite(
-          itemType,
-          String(itemId),
-          name,
-          artistName,
-          coverUrl,
-          source,
-          extraData
-        );
-        toast.info("Guardada en favoritos", 2200);
+        if (itemType === "album" && album?.tracks) {
+          enqueueAlbum(name, album.tracks.map((t, i) => ({
+            key: String(t.id || `${itemId}-${i}`),
+            name: t.name,
+            artist: t.artist || artistName,
+            cover: coverUrl,
+            duration_ms: t.duration_ms || null,
+            online_only: true
+          })));
+        } else {
+          enqueueAlbum(name, [{
+            key: String(itemId),
+            name,
+            artist: artistName,
+            cover: coverUrl,
+            duration_ms: extraData?.duration_ms || null,
+            online_only: true
+          }]);
+        }
+
+        toast.info("Guardada en favoritos y en Descargas online", 3000);
       }
     } catch {
-      await toggleFavorite(
-        itemType,
-        String(itemId),
-        name,
-        artistName,
-        coverUrl,
-        source,
-        extraData
-      );
       toast.info("Guardada en favoritos", 2200);
     }
   }
