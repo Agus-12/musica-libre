@@ -33,7 +33,8 @@ export async function GET() {
     premium: premiumActivo,
     aura_libre: auraLibre,
     ilimitado,
-    limite_offline: limite,\n    offline_count: offlineCount || 0,
+    limite_offline: limite,
+    offline_count: offlineCount || 0,
     vence_en: data?.vence_en || null,
   });
 }
