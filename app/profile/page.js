@@ -1825,11 +1825,33 @@ export default function ProfilePage() {
   }
 
 
+  function esPreviewAura(item) {
+    const url = String(item?.audio_url || "");
+    if (/preview|itunes\.apple|audio-ssl\.itunes|mzstatic/i.test(url)) return true;
+    if (item?.duration_ms > 0 && item.duration_ms < 45000 && !item.video_id && /preview|itunes|mzstatic/i.test(url)) return true;
+    return false;
+  }
+  function esDescargaAura(item) {
+    if (!item) return false;
+    if (esPreviewAura(item)) return false;
+    try {
+      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const ks = [...(item.keys || []), item.key].filter(Boolean);
+      for (const k of ks) {
+        const e = s[String(k)];
+        if (!e) continue;
+        if (e.audio_url && !esPreviewAura(e)) return true;
+        if (e.video_id || e.online_only) return true;
+      }
+    } catch {}
+    return false;
+  }
   function programarPreguntaVersion(item) {
     clearTimeout(verifyTimerRef.current);
     verifyTimerRef.current = null;
     setPreguntaVersion(null);
     if (!item || !item.key) return;
+    if (!esDescargaAura(item)) return;
     if (estaVerificadaLocal(item.artist, item.title)) return;
     const snap = {
       key: item.key,
