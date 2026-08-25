@@ -645,9 +645,9 @@ export default function SpotifyPage() {
   async function handleFavorite(e, itemType, itemId, name, artistName, coverUrl, source, extraData) {
     e.stopPropagation();
     const wasFav = isFavorite(itemType, String(itemId));
-    await toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source, extraData);
 
     if (wasFav) {
+      await toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source, extraData);
       toast.info("Quitada de favoritos", 2200);
       return;
     }
@@ -657,29 +657,40 @@ export default function SpotifyPage() {
       const acceso = await ar.json();
 
       if (ar.ok && acceso.ilimitado) {
-        if (itemType === "album" && album?.tracks) {
-          enqueueAlbum(name, album.tracks.map((t, i) => ({
-            key: String(t.id || `${itemId}-${i}`),
-            name: t.name,
-            artist: t.artist || artistName,
-            cover: coverUrl,
-            duration_ms: t.duration_ms || null
-          })));
-        } else {
-          enqueueAlbum(name, [{
-            key: String(itemId),
-            name,
-            artist: artistName,
-            cover: coverUrl,
-            duration_ms: extraData?.duration_ms || null
-          }]);
-        }
-
-        toast.success("Guardada y descargando para usar offline", 3500);
+        // Premium y Aura Libre: corazón = favorito + descarga offline.
+        await handleSaveOffline(
+          e,
+          itemType,
+          itemId,
+          name,
+          artistName,
+          source,
+          "",
+          coverUrl
+        );
       } else {
+        // AURA Free: corazón solamente guarda el favorito.
+        await toggleFavorite(
+          itemType,
+          String(itemId),
+          name,
+          artistName,
+          coverUrl,
+          source,
+          extraData
+        );
         toast.info("Guardada en favoritos", 2200);
       }
     } catch {
+      await toggleFavorite(
+        itemType,
+        String(itemId),
+        name,
+        artistName,
+        coverUrl,
+        source,
+        extraData
+      );
       toast.info("Guardada en favoritos", 2200);
     }
   }
