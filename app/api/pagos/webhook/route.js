@@ -6,7 +6,7 @@ function adminDb() {
   if (!key) return null;
   return createSupabase(process.env.NEXT_PUBLIC_SUPABASE_URL, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
-function userIdFromRef(ref) { const m = String(ref || "").match(/^aura:([^:]+):/); return m?.[1] || null; }
+function datosRef(ref) { const m = String(ref || "").match(/^aura:([^:]+):(mensual|anual)$/); return m ? { uid: m[1], plan: m[2] } : { uid: null, plan: "mensual" }; }
 
 export async function POST(req) {
   const db = adminDb();
@@ -25,10 +25,11 @@ export async function POST(req) {
       const r = await fetch(`https://api.mercadopago.com/v1/payments/${id}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       resource = await r.json();
     } else return NextResponse.json({ ok: true });
-    const uid = userIdFromRef(resource.external_reference);
+    const ref = datosRef(resource.external_reference);
+    const uid = ref.uid;
     if (!uid) return NextResponse.json({ ok: true });
-    const sub = type === "payment" ? { mp_last_payment_id: String(id), estado: resource.status === "approved" ? "active" : resource.status === "pending" ? "pending" : "rejected" } : { mp_preapproval_id: String(id), estado: resource.status === "authorized" ? "active" : resource.status === "paused" ? "paused" : resource.status === "cancelled" ? "cancelled" : "pending", plan: resource.auto_recurring?.frequency === 12 ? "premium" : "premium" };
-    if (sub.estado === "active") { sub.plan = "premium"; sub.vence_en = new Date(Date.now() + (resource.auto_recurring?.frequency === 12 ? 366 : 32) * 86400000).toISOString(); }
+    const sub = type === "payment" ? { mp_last_payment_id: String(id), estado: resource.status === "approved" ? "active" : resource.status === "pending" ? "pending" : "rejected" } : { mp_preapproval_id: String(id), estado: resource.status === "authorized" ? "active" : resource.status === "paused" ? "paused" : resource.status === "cancelled" ? "cancelled" : "pending" };
+    if (sub.estado === "active") { sub.plan = "premium"; sub.vence_en = new Date(Date.now() + (ref.plan === "anual" ? 365 : 30) * 86400000).toISOString(); }
     await db.from("suscripciones").upsert({ user_id: uid, ...sub, proveedor: "mercado_pago", actualizado: new Date().toISOString() });
   } catch {}
   return NextResponse.json({ ok: true });
