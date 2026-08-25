@@ -277,8 +277,24 @@ async function processOne(track, currentQueue, setQueue) {
     await new Promise((r) => setTimeout(r, 10000));
   }
 
+  let puedeGuardarOffline = true;
+  try {
+    const ar = await fetch("/api/pagos/acceso", { cache: "no-store" });
+    const acceso = await ar.json();
+
+    if (ar.ok && !acceso.ilimitado) {
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const unicas = new Set(
+        Object.values(mp3s)
+          .filter(x => x?.audio_url)
+          .map(x => x.video_id || `${x.artist}|${x.name}`)
+      );
+      puedeGuardarOffline = unicas.size < 50;
+    }
+  } catch {}
+
   let guardadoOffline = false;
-  if (data.audio_url && "caches" in window) {
+  if (data.audio_url && puedeGuardarOffline && "caches" in window) {
     try {
       /* CACHE-BUSTING: le agregamos un parámetro único a la URL. Con URL
          nueva, NINGÚN caché viejo (el del service worker anterior o el

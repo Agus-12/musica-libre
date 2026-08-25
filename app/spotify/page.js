@@ -646,7 +646,42 @@ export default function SpotifyPage() {
     e.stopPropagation();
     const wasFav = isFavorite(itemType, String(itemId));
     await toggleFavorite(itemType, String(itemId), name, artistName, coverUrl, source, extraData);
-    toast.info(wasFav ? "Quitada de favoritos" : "Guardada en favoritos", 2200);
+
+    if (wasFav) {
+      toast.info("Quitada de favoritos", 2200);
+      return;
+    }
+
+    try {
+      const ar = await fetch("/api/pagos/acceso", { cache: "no-store" });
+      const acceso = await ar.json();
+
+      if (ar.ok && acceso.ilimitado) {
+        if (itemType === "album" && album?.tracks) {
+          enqueueAlbum(name, album.tracks.map((t, i) => ({
+            key: String(t.id || `${itemId}-${i}`),
+            name: t.name,
+            artist: t.artist || artistName,
+            cover: coverUrl,
+            duration_ms: t.duration_ms || null
+          })));
+        } else {
+          enqueueAlbum(name, [{
+            key: String(itemId),
+            name,
+            artist: artistName,
+            cover: coverUrl,
+            duration_ms: extraData?.duration_ms || null
+          }]);
+        }
+
+        toast.success("Guardada y descargando para usar offline", 3500);
+      } else {
+        toast.info("Guardada en favoritos", 2200);
+      }
+    } catch {
+      toast.info("Guardada en favoritos", 2200);
+    }
   }
 
   function handleAddToPlaylist(e, itemType, itemId, name, artistName, coverUrl, source) {

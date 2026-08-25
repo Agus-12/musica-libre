@@ -307,15 +307,8 @@ export async function GET(req) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Inicia sesión para descargar música" }, { status: 401 });
   const p = req.nextUrl.searchParams;
-  const trackKey = String(p.get("track_key") || p.get("q") || "").slice(0, 300);
-  const { data: sub } = await supabase.from("suscripciones").select("plan,estado,vence_en,acceso_libre,aura_libre").eq("user_id", user.id).maybeSingle();
-  const premium = Boolean(sub?.plan === "premium" && sub?.estado === "active" && (!sub?.vence_en || new Date(sub.vence_en) > new Date()));
-  const ilimitado = premium || Boolean(sub?.acceso_libre || sub?.aura_libre);
-  if (!ilimitado) {
-    const { count } = await supabase.from("descargas_offline").select("track_key", { count: "exact", head: true }).eq("user_id", user.id);
-    const { data: ya } = await supabase.from("descargas_offline").select("track_key").eq("user_id", user.id).eq("track_key", trackKey).maybeSingle();
-    if (!ya && (count || 0) >= 50) return NextResponse.json({ error: "Has alcanzado el límite gratuito de 50 canciones offline. Actualiza a AURA Premium." }, { status: 403 });
-  }
+  // La canción sigue resolviéndose para reproducción online.
+  // El cliente decide si puede guardarse offline según el plan.
   const query = p.get("q") || "";
   const itunesUrl = p.get("itunes_url") || "";
   const spotifyUrl = p.get("spotify_url") || "";
