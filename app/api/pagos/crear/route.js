@@ -52,7 +52,7 @@ export async function POST(req) {
     let d = await r.json().catch(() => ({}));
     // Un plan guardado con credenciales anteriores puede quedar inválido.
     // Si MP responde 404, lo descartamos y lo recreamos una sola vez.
-    if (!r.ok && r.status === 404) {
+    if (!r.ok && (r.status === 404 || /resource not found|not_found/i.test(JSON.stringify(d)))) {
       await db.from("app_config").delete().eq("clave", `mp_plan_${plan}`);
       planId = await obtenerPlanMp(db, token, plan, base);
       r = await fetch("https://api.mercadopago.com/preapproval", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(makePayload()), cache: "no-store" });
