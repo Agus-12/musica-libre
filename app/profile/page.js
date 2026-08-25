@@ -4,6 +4,7 @@ import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 import { useDownloads } from "../components/DownloadManager";
 import Explorar from "../spotify/page";
+import { aliasesDe, gruposAliasLocales, LIMITE_FREE } from "../utils/offlineCupo";
 
 let ytApiLoaded = false;
 let ytApiPromise = null;
@@ -321,7 +322,8 @@ export default function ProfilePage() {
 
   const [sinDatos, setSinDatos] = useState(false);
   const [almacenamientoOffline, setAlmacenamientoOffline] = useState({ cargando: false, canciones: 0, bytes: 0 });
-  const [estadoPremium, setEstadoPremium] = useState({ cargando: true, activo: false, plan: "free", estado: "free", acceso_libre: false });
+  const [estadoPremium, setEstadoPremium] = useState({ cargando: true, activo: false, plan: "free", estado: "free", acceso_libre: false, offline_count: null, limite_offline: LIMITE_FREE });
+  const [syncCupo, setSyncCupo] = useState({ haciendo: false, listo: false });
   const [adminUsuarios, setAdminUsuarios] = useState(null);
   const [adminCargando, setAdminCargando] = useState(false);
   const [pagoPlan, setPagoPlan] = useState("");
@@ -340,9 +342,46 @@ export default function ProfilePage() {
     } catch {}
     toast.info(activar ? "Modo sin datos ACTIVO: la app no tocará internet" : "Modo sin datos apagado", 3500);
   }
+  async function sincronizarCupoOffline(purge = false) {
+    if (syncCupo.haciendo) return null;
+    setSyncCupo({ haciendo: true, listo: false });
+    try {
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const grupos = gruposAliasLocales(mp3s);
+      const r = await fetch("/api/pagos/offline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync", grupos, purge }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setEstadoPremium(v => ({ ...v, offline_count: d.count ?? v.offline_count }));
+        setSyncCupo({ haciendo: false, listo: true });
+        return d;
+      }
+    } catch {}
+    setSyncCupo({ haciendo: false, listo: false });
+    return null;
+  }
   async function cargarEstadoPremium() {
-    try { const r = await fetch("/api/pagos/estado", { cache: "no-store" }); const d = await r.json(); if (r.ok) setEstadoPremium({ ...d, cargando: false }); }
-    catch { setEstadoPremium(v => ({ ...v, cargando: false })); }
+    try {
+      const [re, ra] = await Promise.all([
+        fetch("/api/pagos/estado", { cache: "no-store" }),
+        fetch("/api/pagos/acceso", { cache: "no-store" }),
+      ]);
+      const d = await re.json().catch(() => ({}));
+      const a = await ra.json().catch(() => ({}));
+      if (re.ok || ra.ok) {
+        setEstadoPremium({
+          ...d, ...a,
+          activo: Boolean(d.activo || a.premium || a.ilimitado),
+          acceso_libre: Boolean(d.acceso_libre || a.aura_libre),
+          offline_count: a.offline_count ?? d.offline_count ?? null,
+          limite_offline: a.ilimitado ? 0 : (a.limite_offline || LIMITE_FREE),
+          cargando: false,
+        });
+      } else setEstadoPremium(v => ({ ...v, cargando: false }));
+    } catch { setEstadoPremium(v => ({ ...v, cargando: false })); }
   }
   async function iniciarPago(plan) {
     try {
@@ -371,7 +410,16 @@ export default function ProfilePage() {
       toast.success(activo ? "Aura Libre activado" : "Aura Libre desactivado", 2500);
     } catch { toast.error("Error de red", 3000); }
   }
-  useEffect(() => { if (vista === "cuenta" && user) { cargarEstadoPremium(); fetch("/api/pagos/config").then(r => r.json()).then(d => setMpPublicKey(d.public_key || "")).catch(() => {}); cargarPanelAdmin(); } }, [vista, user]);
+  useEffect(() => {
+    if (vista === "cuenta" && user) {
+      (async () => {
+        await sincronizarCupoOffline();
+        await cargarEstadoPremium();
+      })();
+      fetch("/api/pagos/config").then(r => r.json()).then(d => setMpPublicKey(d.public_key || "")).catch(() => {});
+      cargarPanelAdmin();
+    }
+  }, [vista, user]);
 
   async function leerAlmacenamientoOffline() {
     if (!("caches" in window)) return;
@@ -409,6 +457,8 @@ export default function ProfilePage() {
       localStorage.setItem("ml_mp3", JSON.stringify(s));
       localStorage.removeItem("ml_offline");
       setAlmacenamientoOffline({ cargando: false, canciones: 0, bytes: 0 });
+      try { await fetch("/api/pagos/offline", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ all: true }) }); } catch {}
+      setEstadoPremium(v => ({ ...v, offline_count: 0 }));
       try { refreshDownloads(); } catch {}
       toast.success("Se liberó el almacenamiento offline", 3500);
     } catch { toast.error("No se pudo limpiar el almacenamiento offline", 3500); }
@@ -700,15 +750,21 @@ export default function ProfilePage() {
 
     if (!ilimitado) {
       let offlineUnicas = 0;
+      let servidor = 0;
 
       try {
         const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
         const ids = new Set(
           Object.values(mp3s)
             .filter(x => x?.audio_url)
-            .map(x => x.video_id || `${x.artist}|${x.name}`)
+            .map(x => x.video_id || `${(x.artist || "").toLowerCase()}|${(x.name || "").toLowerCase()}`)
         );
         offlineUnicas = ids.size;
+      } catch {}
+      try {
+        const ra = await fetch("/api/pagos/acceso", { cache: "no-store" });
+        const acc = await ra.json();
+        if (ra.ok) servidor = Number(acc.offline_count) || 0;
       } catch {}
 
       // Las descargas offline que ya están en cola también reservan espacio.
@@ -719,7 +775,7 @@ export default function ProfilePage() {
              !q.solo_playlist
       ).length;
 
-      disponibles = Math.max(0, 50 - offlineUnicas - reservadas);
+      disponibles = Math.max(0, LIMITE_FREE - Math.max(offlineUnicas, servidor) - reservadas);
     }
 
     const tracks = faltantes.map((i, indice) => {
@@ -1574,8 +1630,18 @@ export default function ProfilePage() {
      el video_id, así que la canción seguía sonando por YouTube y el modo
      offline nunca se arreglaba. */
   async function reDownload(item) {
-    if (item.online_only) {
-      toast.info("Esta canción está disponible en modo YouTube y no cuenta como offline", 3500);
+    let ilimitado = false;
+    let usados = 0;
+    try {
+      const r = await fetch("/api/pagos/acceso", { cache: "no-store" });
+      const acceso = await r.json();
+      if (r.ok) {
+        ilimitado = Boolean(acceso.ilimitado);
+        usados = Number(acceso.offline_count) || 0;
+      }
+    } catch {}
+    if (!ilimitado && usados >= LIMITE_FREE) {
+      toast.warning(`Límite Free: ${usados}/${LIMITE_FREE} offline. Borra una o pásate a Premium`, 5000);
       return;
     }
     // Reset del contador de reparaciones: el usuario pidió reintentar
@@ -1596,6 +1662,7 @@ export default function ProfilePage() {
       if (item.duration_ms) params.set("expected_duration", String(Math.round(item.duration_ms/1000)));
       if (item.artist) params.set("expected_artist", item.artist);
       if (item.title) params.set("expected_song", item.title);
+      if (item.video_id) params.set("v", item.video_id);
       let data = {};
       for (let intento = 0; intento < 13; intento++) {
         const res = await fetch("/api/download-mp3?"+params.toString());
@@ -1617,11 +1684,20 @@ export default function ProfilePage() {
       }
       if (guardado) {
         try {
-          await fetch("/api/pagos/offline", {
+          const aliases = aliasesDe(item, item.key).concat(item.keys || []);
+          const rr = await fetch("/api/pagos/offline", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ track_key: String(item.key).slice(0, 300) })
+            body: JSON.stringify({ track_key: String(item.key).slice(0, 300), aliases })
           });
+          if (!rr.ok) {
+            const ed = await rr.json().catch(() => ({}));
+            guardado = false;
+            toast.warning(ed.error || "No hay cupo offline en tu cuenta", 4500);
+          } else {
+            const ed = await rr.json().catch(() => ({}));
+            if (typeof ed.count === "number") setEstadoPremium(v => ({ ...v, offline_count: ed.count }));
+          }
         } catch {}
       }
 
@@ -1680,11 +1756,14 @@ export default function ProfilePage() {
 
       // Liberar el espacio del contador en Supabase.
       try {
-        await fetch("/api/pagos/offline", {
+        const aliases = aliasesDe(item, item.key).concat(claves);
+        const rd = await fetch("/api/pagos/offline", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ track_keys: claves })
+          body: JSON.stringify({ track_keys: aliases })
         });
+        const dd = await rd.json().catch(() => ({}));
+        if (typeof dd.count === "number") setEstadoPremium(v => ({ ...v, offline_count: dd.count }));
       } catch {}
 
       if (item.audio_url && "caches" in window) {
@@ -1772,6 +1851,20 @@ export default function ProfilePage() {
       <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:14,padding:18,marginBottom:22}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><Ico d={<><path d="M12 2l2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 2z"/></>} size={17} stroke="var(--accent)"/><div style={{fontWeight:800,color:"var(--text)"}}>{estadoPremium.acceso_libre ? "AURA Libre" : estadoPremium.activo ? "AURA Premium" : "AURA Free"}</div></div>
         <div style={{fontSize:"0.78em",color:"var(--text3)",marginBottom:10}}>{estadoPremium.cargando ? "Consultando estado…" : estadoPremium.acceso_libre ? "AURA Libre: acceso total" : estadoPremium.activo ? `Premium activo${estadoPremium.vence_en ? ` hasta ${new Date(estadoPremium.vence_en).toLocaleDateString("es-MX")}` : ""}` : "AURA Free: hasta 50 canciones offline"}</div>
+                {!estadoPremium.cargando && !estadoPremium.acceso_libre && !estadoPremium.activo && (
+          <div style={{marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6}}>
+              <span style={{fontSize:"0.78em",fontWeight:800,color:"var(--text2)"}}>
+                {typeof estadoPremium.offline_count === "number" ? estadoPremium.offline_count : "—"} / {LIMITE_FREE} offline
+              </span>
+              <button onClick={async ()=>{ const d = await sincronizarCupoOffline(true); await cargarEstadoPremium(); if (d) toast.success(`Cupo de este teléfono: ${d.count}/${LIMITE_FREE}`, 3500); }} disabled={syncCupo.haciendo} style={{padding:"5px 9px",borderRadius:8,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text3)",fontSize:"0.68em",fontWeight:700,cursor:"pointer"}}>{syncCupo.haciendo ? "Sincronizando…" : "Ajustar a este teléfono"}</button>
+            </div>
+            <div style={{height:6,borderRadius:3,background:"var(--border2)",overflow:"hidden"}}>
+              <div style={{height:"100%",width:Math.min(100, ((estadoPremium.offline_count || 0) / LIMITE_FREE) * 100)+"%",background:(estadoPremium.offline_count||0)>=LIMITE_FREE?"#ef4444":"linear-gradient(90deg,var(--accent),#22c55e)"}}/>
+            </div>
+            <div style={{color:"var(--text4)",fontSize:"0.66em",marginTop:6,lineHeight:1.45}}>Las canciones en modo YT no ocupan cupo. Tocá ⟳ en Descargadas para pasarlas a OFF si te queda lugar.</div>
+          </div>
+        )}
         {!estadoPremium.activo && !estadoPremium.acceso_libre && !pagoPlan && <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button onClick={()=>iniciarPago("mensual")} style={{padding:"9px 13px",borderRadius:10,border:"none",background:"var(--accent)",color:"#fff",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Mensual · $26 MXN</button><button onClick={()=>iniciarPago("anual")} style={{padding:"9px 13px",borderRadius:10,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",fontSize:"0.8em",fontWeight:700,cursor:"pointer"}}>Anual · $260 MXN</button></div>}
       </div>
 

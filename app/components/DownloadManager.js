@@ -292,9 +292,10 @@ async function processOne(track, currentQueue, setQueue) {
       const unicas = new Set(
         Object.values(mp3s)
           .filter(x => x?.audio_url)
-          .map(x => x.video_id || `${x.artist}|${x.name}`)
+          .map(x => x.video_id || `${(x.artist || "").toLowerCase()}|${(x.name || "").toLowerCase()}`)
       );
-      puedeGuardarOffline = unicas.size < 50;
+      const servidor = Number(acceso.offline_count) || 0;
+      puedeGuardarOffline = Math.max(unicas.size, servidor) < 50;
     }
   } catch {}
 
@@ -319,7 +320,19 @@ async function processOne(track, currentQueue, setQueue) {
   // Registrar una sola vez la canción offline para aplicar el límite entre dispositivos.
   if (guardadoOffline) {
     try {
-      const r = await fetch("/api/pagos/offline", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ track_key: String(track.key || sq).slice(0, 300) }) });
+      const aliases = [
+        String(track.key || ""),
+        sq,
+        track.video_id || "",
+        data.video_id || "",
+        `${track.artist || ""} ${track.name || ""}`.trim(),
+        `${(track.artist || "").toLowerCase()}|${(track.name || "").toLowerCase()}`,
+      ].filter(Boolean);
+      const r = await fetch("/api/pagos/offline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ track_key: String(track.key || sq).slice(0, 300), aliases }),
+      });
       if (!r.ok) { guardadoOffline = false; }
     } catch { /* El archivo local sigue disponible; se sincroniza en otro intento. */ }
   }

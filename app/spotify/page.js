@@ -683,8 +683,9 @@ export default function SpotifyPage() {
       const acceso = await ar.json();
       if (ar.ok && !acceso.ilimitado) {
         const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
-        const unicas = new Set(Object.values(mp3s).filter(x => x?.audio_url).map(x => x.video_id || `${x.artist}|${x.name}`));
-        if (!unicas.has(String(itemId)) && unicas.size >= 50) {
+        const unicas = new Set(Object.values(mp3s).filter(x => x?.audio_url).map(x => x.video_id || `${(x.artist || "").toLowerCase()}|${(x.name || "").toLowerCase()}`));
+        const servidor = Number(acceso.offline_count) || 0;
+        if (Math.max(unicas.size, servidor) >= 50) {
           toast.warning("Límite de 50 canciones offline. Actualiza a AURA Premium", 4500);
           return;
         }
