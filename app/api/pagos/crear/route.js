@@ -31,7 +31,13 @@ export async function POST(req) {
   };
   const r = await fetch("https://api.mercadopago.com/preapproval", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload), cache: "no-store" });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) return NextResponse.json({ error: "Mercado Pago rechazó la suscripción", detalle: d.message || d.cause || d }, { status: 400 });
+  if (!r.ok) {
+    const detalle = Array.isArray(d.cause)
+      ? d.cause.map(c => [c.code, c.description, c.message].filter(Boolean).join(" — ")).join(" | ")
+      : (d.cause || d.message || d.error || "respuesta no especificada");
+    console.error("Mercado Pago crear suscripción:", r.status, JSON.stringify(d));
+    return NextResponse.json({ error: "Mercado Pago rechazó la suscripción", detalle: String(detalle).slice(0, 900) }, { status: 400 });
+  }
   await supabase.from("suscripciones").upsert({ user_id: user.id, plan: "free", estado: "pending", proveedor: "mercado_pago", mp_preapproval_id: d.id ? String(d.id) : null, mp_payer_email: payerEmail, actualizado: new Date().toISOString() });
   return NextResponse.json({ ok: true, init_point: d.sandbox_init_point || d.init_point, id: d.id, plan });
 }
