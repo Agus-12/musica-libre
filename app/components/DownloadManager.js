@@ -178,6 +178,7 @@ export function DownloadProvider({ children }) {
           /* Descarga que pertenece a una playlist: NO aparece en
              Mi música → Descargadas (vive dentro de la playlist). */
           solo_playlist: Boolean(t.solo_playlist),
+          online_only: Boolean(t.online_only),
           status: "pending",
           savedAt: Date.now() + i,
         }));
@@ -294,7 +295,7 @@ async function processOne(track, currentQueue, setQueue) {
   } catch {}
 
   let guardadoOffline = false;
-  if (data.audio_url && puedeGuardarOffline && "caches" in window) {
+  if (data.audio_url && puedeGuardarOffline && !track.online_only && "caches" in window) {
     try {
       /* CACHE-BUSTING: le agregamos un parámetro único a la URL. Con URL
          nueva, NINGÚN caché viejo (el del service worker anterior o el
@@ -339,9 +340,10 @@ async function processOne(track, currentQueue, setQueue) {
     const tieneAudio = guardadoOffline || Boolean(previo.audio_url);
     const entry = {
       video_id: data.video_id || previo.video_id || "",
-      audio_url: guardadoOffline ? data.audio_url : (previo.audio_url || ""),
+      audio_url: guardadoOffline ? data.audio_url : (track.online_only ? "" : (previo.audio_url || "")),
       apple_url: data.apple_url || previo.apple_url || "",
       method: tieneAudio ? "audio" : "youtube",
+      online_only: Boolean(track.online_only),
       title: data.title || data.video_title || previo.title || track.name,
       /* Datos REALES de la canción (iTunes): en reparaciones preferimos
          lo que ya estaba guardado; en descargas nuevas, lo que viene
