@@ -1638,6 +1638,15 @@ export default function ProfilePage() {
             saved_at:Date.now()};
           localStorage.setItem("ml_mp3",JSON.stringify(s));
         }catch{}
+        // Si ya se guardó correctamente, retirar cualquier tarea vieja
+        // de la misma canción que siga apareciendo como "esperando".
+        if (guardado) {
+          try {
+            const clavesCola = item.keys && item.keys.length ? item.keys : [item.key];
+            removeByKeys && removeByKeys(clavesCola);
+          } catch {}
+        }
+
         toast.success(guardado?"Guardada sin internet: "+item.title:"Encontrada (suena por YouTube): "+item.title,4000);
         refreshDownloads();
       }
