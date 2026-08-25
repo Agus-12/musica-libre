@@ -32,7 +32,10 @@ process.env.PATH = [process.env.PATH, "/usr/local/bin", "/opt/homebrew/bin", "/o
 
 // ── Configuración ──────────────────────────────────────────────
 const PUERTO = Number(process.env.PORT || 8787);
-const CARPETA = process.env.MUSICA_DIR || path.join(os.homedir(), "musica-libre-audio");
+const CARPETA_PRINCIPAL = process.env.MUSICA_DIR || path.join(os.homedir(), "musica-libre-audio");
+// Respaldo local: permite seguir descargando si el disco USB se desconecta.
+const CARPETA_RESPALDO = process.env.MUSICA_BACKUP_DIR || "";
+const MAX_BACKUP_GB = Number(process.env.MUSICA_BACKUP_MAX_GB || 100);
 // Clave para que nadie más use tu Mac como servidor de descargas.
 const TOKEN = process.env.MUSICA_TOKEN || "";
 // Límite de disco: cuando se pasa, borra lo más viejo.
@@ -59,7 +62,69 @@ async function esperarTurno() {
   ultimaDescarga = Date.now();
 }
 
-if (!fs.existsSync(CARPETA)) fs.mkdirSync(CARPETA, { recursive: true });
+function discoDisponible() {
+  try {
+    return Boolean(CARPETA_PRINCIPAL && fs.existsSync(CARPETA_PRINCIPAL) && fs.statSync(CARPETA_PRINCIPAL).isDirectory());
+  } catch { return false; }
+}
+function carpetasDisponibles() {
+  const out = [];
+  if (discoDisponible()) out.push(CARPETA_PRINCIPAL);
+  if (CARPETA_RESPALDO) {
+    try { if (fs.existsSync(CARPETA_RESPALDO) && fs.statSync(CARPETA_RESPALDO).isDirectory()) out.push(CARPETA_RESPALDO); } catch {}
+  }
+  return out;
+}
+function carpetaActiva() {
+  if (discoDisponible()) return CARPETA_PRINCIPAL;
+  if (CARPETA_RESPALDO) return CARPETA_RESPALDO;
+  return CARPETA_PRINCIPAL;
+}
+function asegurarCarpetaActiva() {
+  const d = carpetaActiva();
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  return d;
+}
+function buscarArchivoPorNombre(nombre) {
+  for (const d of carpetasDisponibles()) {
+    const p = path.join(d, nombre);
+    if (p.startsWith(d + path.sep) && fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+// Al volver a montar el disco, promueve lo que se descargó en el respaldo.
+let sincronizando = false;
+function sincronizarRespaldo() {
+  if (sincronizando || !discoDisponible() || !CARPETA_RESPALDO) return;
+  sincronizando = true;
+  try {
+    const archivos = fs.readdirSync(CARPETA_RESPALDO)
+      .filter(f => /\.(m4a|webm|mp3|opus)$/i.test(f));
+    for (const f of archivos) {
+      const origen = path.join(CARPETA_RESPALDO, f);
+      const destino = path.join(CARPETA_PRINCIPAL, f);
+      try {
+        const so = fs.statSync(origen);
+        if (so.size <= 10000) continue;
+        if (fs.existsSync(destino) && fs.statSync(destino).size > 10000) {
+          fs.unlinkSync(origen); // el principal gana si ya existe
+        } else {
+          const tmp = destino + ".sync.tmp";
+          fs.copyFileSync(origen, tmp);
+          if (fs.statSync(tmp).size === so.size) {
+            fs.renameSync(tmp, destino);
+            fs.unlinkSync(origen);
+            log("sincronizado al disco externo:", f);
+          } else { try { fs.unlinkSync(tmp); } catch {} }
+        }
+      } catch (e) { log("sync pendiente:", f, String(e.message || "").slice(0, 80)); }
+    }
+  } catch (e) { log("respaldo no disponible:", String(e.message || "").slice(0, 100)); }
+  finally { sincronizando = false; }
+}
+setInterval(sincronizarRespaldo, 60000);
+setTimeout(sincronizarRespaldo, 3000);
 
 const log = (...a) => console.log(new Date().toTimeString().slice(0, 8), ...a);
 
@@ -81,15 +146,16 @@ function idSeguro(texto) {
 // Borra lo más viejo si nos pasamos del límite de disco.
 function limpiarSiHaceFalta() {
   try {
-    const archivos = fs.readdirSync(CARPETA)
+    const carpeta = asegurarCarpetaActiva();
+    const archivos = fs.readdirSync(carpeta)
       .filter(f => f.endsWith(".m4a") || f.endsWith(".webm") || f.endsWith(".mp3"))
       .map(f => {
-        const p = path.join(CARPETA, f);
+        const p = path.join(carpeta, f);
         const s = fs.statSync(p);
         return { p, size: s.size, atime: s.atimeMs };
       });
     let total = archivos.reduce((a, b) => a + b.size, 0);
-    const limite = MAX_GB * 1024 * 1024 * 1024;
+    const limite = (carpeta === CARPETA_RESPALDO ? MAX_BACKUP_GB : MAX_GB) * 1024 * 1024 * 1024;
     if (total <= limite) return;
     archivos.sort((a, b) => a.atime - b.atime); // más viejo primero
     for (const a of archivos) {
@@ -101,9 +167,11 @@ function limpiarSiHaceFalta() {
 
 // Busca un archivo ya bajado para ese id (cualquier extensión).
 function buscarExistente(id) {
-  for (const ext of [".m4a", ".webm", ".mp3", ".opus"]) {
-    const p = path.join(CARPETA, id + ext);
-    if (fs.existsSync(p) && fs.statSync(p).size > 10000) return p;
+  for (const d of carpetasDisponibles()) {
+    for (const ext of [".m4a", ".webm", ".mp3", ".opus"]) {
+      const p = path.join(d, id + ext);
+      if (fs.existsSync(p) && fs.statSync(p).size > 10000) return p;
+    }
   }
   return null;
 }
@@ -324,7 +392,7 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
   if (enProceso.has(id)) return enProceso.get(id);
 
   const tarea = enColaGlobal(async () => {
-    const destino = path.join(CARPETA, id + ".%(ext)s");
+    const destino = path.join(asegurarCarpetaActiva(), id + ".%(ext)s");
 
     /* Candidatos a descargar.
        Si nos dieron un videoId, ese y nada más. Si es una búsqueda,
@@ -589,15 +657,21 @@ const servidor = http.createServer(async (req, res) => {
     }
     const ytdlp = ytdlpCache.ok, version = ytdlpCache.version;
     let guardadas = 0, mb = 0;
-    try {
-      for (const f of fs.readdirSync(CARPETA)) {
-        if (/\.(m4a|webm|mp3|opus)$/.test(f)) {
-          guardadas++; mb += fs.statSync(path.join(CARPETA, f)).size;
+    const vistos = new Set();
+    for (const d of carpetasDisponibles()) {
+      try {
+        for (const f of fs.readdirSync(d)) {
+          if (/\.(m4a|webm|mp3|opus)$/.test(f) && !vistos.has(f)) {
+            vistos.add(f); guardadas++; mb += fs.statSync(path.join(d, f)).size;
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
     return json(res, 200, {
-      ok: true, ytdlp, version, servidor: "2026-08-23b", carpeta: CARPETA,
+      ok: true, ytdlp, version, servidor: "2026-08-24a", carpeta: carpetaActiva(),
+      carpeta_principal: CARPETA_PRINCIPAL,
+      carpeta_respaldo: CARPETA_RESPALDO || null,
+      modo: discoDisponible() ? "externo" : "respaldo",
       protegido: Boolean(TOKEN),
       cookies: Boolean(COOKIES),
       canciones_guardadas: guardadas,
@@ -688,10 +762,8 @@ const servidor = http.createServer(async (req, res) => {
   // ── /audio/<id>.<ext>: el archivo, con Range ──
   if (ruta.startsWith("/audio/")) {
     const nombre = path.basename(ruta); // evita ../../
-    const archivo = path.join(CARPETA, nombre);
-    if (!archivo.startsWith(CARPETA) || !fs.existsSync(archivo)) {
-      return json(res, 404, { error: "no encontrado" });
-    }
+    const archivo = buscarArchivoPorNombre(nombre);
+    if (!archivo) return json(res, 404, { error: "no encontrado" });
     try { return servirArchivo(req, res, archivo); }
     catch (e) { return json(res, 500, { error: e.message }); }
   }
@@ -706,8 +778,8 @@ const servidor = http.createServer(async (req, res) => {
     if (!videoId && !query) return json(res, 400, { error: "falta v o q" });
     const id = idSeguro(videoId || query);
     const borrados = [];
-    for (const ext of [".m4a", ".webm", ".mp3", ".opus"]) {
-      const p = path.join(CARPETA, id + ext);
+    for (const d of carpetasDisponibles()) for (const ext of [".m4a", ".webm", ".mp3", ".opus"]) {
+      const p = path.join(d, id + ext);
       if (fs.existsSync(p)) {
         try {
           fs.unlinkSync(p);
@@ -729,7 +801,8 @@ servidor.listen(PUERTO, "0.0.0.0", () => {
   console.log("  AURA · servidor de audio andando");
   console.log("  ─────────────────────────────────────");
   console.log("  Puerto  : " + PUERTO);
-  console.log("  Guardando en: " + CARPETA);
+  console.log("  Guardando en: " + carpetaActiva());
+  console.log("  Respaldo: " + (CARPETA_RESPALDO || "no configurado"));
   console.log("  Protegido con token: " + (TOKEN ? "sí" : "NO (poné MUSICA_TOKEN)"));
   console.log("  Probá: http://localhost:" + PUERTO + "/salud");
   console.log("");
