@@ -28,13 +28,6 @@ function infoNavegador() {
   const safari = iOS && !crios && !instagram && /Safari/i.test(ua);
   return { iOS, android, instagram, crios, safari };
 }
-function instalacionPospuesta() {
-  try {
-    const t = Number(localStorage.getItem("aura_instalar_no") || 0);
-    return t > Date.now();
-  } catch { return false; }
-}
-
 export default function PWASetup() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
@@ -118,7 +111,7 @@ export default function PWASetup() {
       e.preventDefault();
       installPromptRef.current = e;
       setInstallPrompt(e);
-      if (!yaEstaInstalada() && !instalacionPospuesta()) setShowInstall(true);
+      if (!yaEstaInstalada()) setShowInstall(true);
     };
     window.addEventListener("beforeinstallprompt", handler);
 
@@ -130,14 +123,21 @@ export default function PWASetup() {
       installPromptRef.current = null;
     });
 
+    try { localStorage.removeItem("aura_instalar_no"); sessionStorage.removeItem("aura_instalar_no"); } catch {}
     if (yaEstaInstalada()) {
       setIsInstalled(true);
-    } else if (!instalacionPospuesta()) {
+    } else {
       setTimeout(() => {
-        if (yaEstaInstalada() || instalacionPospuesta()) return;
+        if (yaEstaInstalada()) return;
         setShowInstall(true);
-      }, 900);
+      }, 700);
     }
+
+    const mostrar = () => {
+      setIsInstalled(false);
+      setShowInstall(true);
+    };
+    window.addEventListener("aura-mostrar-instalar", mostrar);
 
     setIsOffline(!navigator.onLine);
     const onOffline = () => setIsOffline(true);
@@ -147,6 +147,7 @@ export default function PWASetup() {
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("aura-mostrar-instalar", mostrar);
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("online", onOnline);
     };
@@ -171,7 +172,6 @@ export default function PWASetup() {
     setIosPasos(true);
   }
   function posponerInstalar() {
-    try { localStorage.setItem("aura_instalar_no", String(Date.now() + 7 * 24 * 60 * 60 * 1000)); } catch {}
     setShowInstall(false);
     setIosPasos(false);
   }
