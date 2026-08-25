@@ -1559,6 +1559,16 @@ export default function ProfilePage() {
           if (r.ok && r.status === 200) { await c.put(data.audio_url, r.clone()); guardado = true; }
         } catch {}
       }
+      if (guardado) {
+        try {
+          await fetch("/api/pagos/offline", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ track_key: String(item.key).slice(0, 300) })
+          });
+        } catch {}
+      }
+
       if (guardado || data.video_id) {
         try{
           const s=JSON.parse(localStorage.getItem("ml_mp3")||"{}");
@@ -1566,7 +1576,7 @@ export default function ProfilePage() {
           for(const k of ks) s[k]={...s[k],
             video_id:data.video_id||s[k]?.video_id||"",
             audio_url:guardado?data.audio_url:(s[k]?.audio_url||""),
-            method:guardado?"audio":(s[k]?.method||"youtube"),
+            method:guardado?"audio":(s[k]?.method||"youtube"), online_only: guardado ? false : Boolean(s[k]?.online_only),
             name:s[k]?.name||item.title||"", artist:s[k]?.artist||item.artist||"",
             cover:s[k]?.cover||item.cover_url||"",
             saved_at:Date.now()};
@@ -2258,7 +2268,7 @@ export default function ProfilePage() {
                         pueden completar offline y sólo confunden. */}
                     {iconBtn(e=>{e.stopPropagation();encolarSiguiente(item);}, <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={14}/>, "#555", "none", "Reproducir a continuación")}
                     {enLinea && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
-                    {enLinea && !item.audio_url && !item.online_only && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", "Buscar de nuevo")}
+                    {enLinea && !item.audio_url && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", item.online_only ? "Guardar offline" : "Buscar de nuevo")}
                     {enLinea && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
                   </div>
                 );
