@@ -1,10 +1,10 @@
 {
-  "version": "25 de agosto, 2026 · v18",
-  "titulo": "Es esta la cancion?",
+  "version": "25 de agosto, 2026 · v19",
+  "titulo": "YouTube Music sin pregunta",
   "cambios": [
-    "A los 5 segundos te pregunta si es la version correcta, tambien en canciones que ya tenias",
-    "Si decís que sí, queda guardada en la Mini para todos",
-    "Si no es, se borra y busca otra",
-    "Boton No es esta en Descargadas"
+    "Las de YouTube Music ya no preguntan: esa es la version que elegiste",
+    "Las preview de Explorar tampoco",
+    "Solo pregunta en Descargadas OFF o YT (busqueda iTunes/Deezer)",
+    "Si decís que sí, queda para todos. Si no, se borra y busca otra"
   ]
 }

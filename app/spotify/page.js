@@ -795,7 +795,7 @@ export default function SpotifyPage() {
     enqueueAlbum(c.title, [{
       key: String(c.videoId), name: c.title, artist: c.artist || "",
       cover: c.cover || "", duration_ms: (c.dur || 0) * 1000 || null,
-      video_id: String(c.videoId),
+      video_id: String(c.videoId), source: "ytmusic", ytmusic: true,
     }]);
     toast.success("Descargando: " + c.title, 3000);
   }
@@ -824,6 +824,7 @@ export default function SpotifyPage() {
       key: String(c.videoId), title: c.title || "", artist: c.artist || "",
       cover_url: c.cover || "", audio_url: audio, video_id: String(c.videoId),
       duration_ms: (c.dur || 0) * 1000 || null,
+      source: "ytmusic", ytmusic: true,
     }}));
   }
   const src = results?.source || "";

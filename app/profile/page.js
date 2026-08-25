@@ -303,6 +303,8 @@ export default function ProfilePage() {
         video_id: d.video_id || "",
         duration_ms: d.duration_ms || null,
         keys: [String(d.key)],
+        source: d.source || "",
+        ytmusic: Boolean(d.ytmusic || d.source === "ytmusic"),
       }); } catch {}
     };
     window.addEventListener("aura-reproducir", alReproducir);
@@ -1003,7 +1005,7 @@ export default function ProfilePage() {
           const fm = favorites.find(f => [String(f.item_id), (f.artist+" "+f.name).trim(), (f.name+" "+f.artist).trim(), f.name.trim()].includes(key));
           if (fm) { coverUrl = fm.cover_url || ""; artistName = fm.artist || ""; trackName = fm.name || trackName; }
         }
-        items.push({ key, title: trackName, artist: artistName, cover_url: coverUrl, video_id: entry.video_id || "", audio_url: entry.audio_url || "", apple_url: entry.apple_url || "", method: entry.method || (entry.video_id ? "youtube" : "apple"), online_only: Boolean(entry.online_only), duration_ms: entry.duration_ms || null, saved_at: entry.saved_at || 0 });
+        items.push({ key, title: trackName, artist: artistName, cover_url: coverUrl, video_id: entry.video_id || "", audio_url: entry.audio_url || "", apple_url: entry.apple_url || "", method: entry.method || (entry.video_id ? "youtube" : "apple"), online_only: Boolean(entry.online_only), duration_ms: entry.duration_ms || null, saved_at: entry.saved_at || 0, source: entry.source || "", ytmusic: Boolean(entry.ytmusic || entry.source === "ytmusic") });
       }
 
       /* Cada canción se guarda con DOS claves ("artista titulo" y el id de la
@@ -1831,9 +1833,27 @@ export default function ProfilePage() {
     if (item?.duration_ms > 0 && item.duration_ms < 45000 && !item.video_id && /preview|itunes|mzstatic/i.test(url)) return true;
     return false;
   }
+  function esYoutubeMusic(item) {
+    if (!item) return false;
+    if (item.source === "ytmusic" || item.ytmusic) return true;
+    const vid = String(item.video_id || "");
+    const keys = [...(item.keys || []), item.key].filter(Boolean).map(String);
+    if (vid && /^[\w-]{11}$/.test(vid) && keys.includes(vid)) return true;
+    try {
+      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      for (const k of keys) {
+        const e = s[k];
+        if (!e) continue;
+        if (e.source === "ytmusic" || e.ytmusic) return true;
+        if (e.video_id && String(k) === String(e.video_id) && /^[\w-]{11}$/.test(String(k))) return true;
+      }
+    } catch {}
+    return false;
+  }
   function esDescargaAura(item) {
     if (!item) return false;
     if (esPreviewAura(item)) return false;
+    if (esYoutubeMusic(item)) return false;
     try {
       const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       const ks = [...(item.keys || []), item.key].filter(Boolean);
@@ -2638,7 +2658,7 @@ export default function ProfilePage() {
                     {iconBtn(e=>{e.stopPropagation();encolarSiguiente(item);}, <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={14}/>, "#555", "none", "Reproducir a continuación")}
                     {enLinea && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
                     {enLinea && !item.audio_url && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", item.online_only ? "Guardar offline" : "Buscar de nuevo")}
-                    {enLinea && !estaVerificadaLocal(item.artist, item.title) && <button onClick={e=>{e.stopPropagation();versionIncorrecta(item);}} title="No es esta cancion" style={{flexShrink:0,padding:"3px 6px",borderRadius:6,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text4)",fontSize:"0.58em",fontWeight:800,cursor:"pointer"}}>No es esta</button>}
+                    {enLinea && !esYoutubeMusic(item) && !estaVerificadaLocal(item.artist, item.title) && <button onClick={e=>{e.stopPropagation();versionIncorrecta(item);}} title="No es esta cancion" style={{flexShrink:0,padding:"3px 6px",borderRadius:6,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text4)",fontSize:"0.58em",fontWeight:800,cursor:"pointer"}}>No es esta</button>}
                     {enLinea && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
                   </div>
                 );

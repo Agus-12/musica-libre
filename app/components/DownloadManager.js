@@ -175,6 +175,8 @@ export function DownloadProvider({ children }) {
           /* Video EXACTO (resultados de YT Music): la Mac baja ese id
              sin volver a buscar → cero errores de "bajó otra versión". */
           video_id: t.video_id || "",
+          source: t.source || "",
+          ytmusic: Boolean(t.ytmusic || t.source === "ytmusic"),
           /* Descarga que pertenece a una playlist: NO aparece en
              Mi música → Descargadas (vive dentro de la playlist). */
           solo_playlist: Boolean(t.solo_playlist),
@@ -369,6 +371,8 @@ async function processOne(track, currentQueue, setQueue) {
       artist: (track.repair ? (previo.artist || track.artist) : (track.artist || previo.artist)) || "",
       cover: (track.repair ? (previo.cover || track.cover) : (track.cover || previo.cover)) || "",
       duration_ms: track.duration_ms || previo.duration_ms || null,
+      source: track.source || previo.source || "",
+      ytmusic: Boolean(track.ytmusic || previo.ytmusic || track.source === "ytmusic" || previo.source === "ytmusic"),
       /* ¿Vive solo dentro de una playlist? Reglas:
          - Si la canción YA era una descarga normal (visible en Mi música),
            se queda visible: no la escondemos.
