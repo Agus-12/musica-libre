@@ -32,6 +32,7 @@ export async function GET(req) {
   const qs = new URLSearchParams();
   if (videoId) qs.set("v", videoId);
   if (query) qs.set("q", query);
+  if (p.get("rechazar") === "1") qs.set("rechazar", "1");
   if (token) qs.set("token", token);
 
   try {

@@ -336,7 +336,9 @@ async function buscarYTMusicCrudo(query) {
 async function buscarYTMusic(query, durEsperada = 0) {
   try {
     const canciones = await buscarYTMusicCrudo(query);
+    const falso = /nightcore|night core|sped ?up|speed ?up|chipmunk|slowed|reverb|8d|tiktok|kids? version|niña|niño/i;
     return canciones
+      .filter((c) => !falso.test(c.title || ""))
       .filter((c) => c.dur === 0 || (c.dur >= 60 && c.dur <= 900))
       .filter((c) => !durEsperada || c.dur === 0 || Math.abs(c.dur - durEsperada) <= durEsperada * 0.35)
       .slice(0, 5)
@@ -382,12 +384,126 @@ const fallosRecientes = new Map();
 let ytdlpCache = { ts: 0, ok: false, version: null };
 let ytdlpUltimaBuena = null;   // última versión que SÍ respondió
 
-async function obtenerAudio({ videoId, query, dur = 0 }) {
+function enlazarAlias(archivo, alias) {
+  if (!archivo || !alias) return;
+  const id = idSeguro(alias);
+  const dest = path.join(path.dirname(archivo), id + path.extname(archivo));
+  try {
+    if (path.resolve(dest) === path.resolve(archivo)) return;
+    if (fs.existsSync(dest) && fs.statSync(dest).size > 10000) return;
+    fs.copyFileSync(archivo, dest);
+    log("alias:", String(alias).slice(0, 60), "->", path.basename(dest));
+  } catch {}
+}
+
+function parseExcluir(s) {
+  return new Set(String(s || "").split(",").map(x => x.trim()).filter(x => /^[\w-]{11}$/.test(x)));
+}
+
+function rutaRechazos() {
+  return path.join(asegurarCarpetaActiva(), "_rechazados.json");
+}
+function leerRechazos() {
+  try { return JSON.parse(fs.readFileSync(rutaRechazos(), "utf8")) || {}; }
+  catch { return {}; }
+}
+function guardarRechazo(query, videoId) {
+  if (!videoId || !/^[\w-]{11}$/.test(videoId)) return;
+  const all = leerRechazos();
+  const k = String(query || "").toLowerCase().replace(/\s+/g, " ").trim() || "_";
+  const set = new Set(all[k] || []);
+  set.add(videoId);
+  all[k] = [...set];
+  try { fs.writeFileSync(rutaRechazos(), JSON.stringify(all)); } catch {}
+}
+function rechazosDe(query) {
+  const all = leerRechazos();
+  const k = String(query || "").toLowerCase().replace(/\s+/g, " ").trim();
+  return new Set([...(all[k] || []), ...(all["_"] || [])]);
+}
+
+function rutaVerificadas() {
+  return path.join(asegurarCarpetaActiva(), "_verificadas.json");
+}
+function leerVerificadas() {
+  try { return JSON.parse(fs.readFileSync(rutaVerificadas(), "utf8")) || {}; }
+  catch { return {}; }
+}
+function claveVerif(query) {
+  return String(query || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function verificadaDe(query) {
+  const k = claveVerif(query);
+  if (!k) return null;
+  const row = leerVerificadas()[k];
+  if (!row || !row.videoId) return null;
+  return row;
+}
+function guardarVerificada(query, videoId) {
+  const k = claveVerif(query);
+  if (!k || !videoId || !/^[\w-]{11}$/.test(videoId)) return false;
+  const all = leerVerificadas();
+  all[k] = { videoId, id: idSeguro(videoId), ts: Date.now() };
+  try { fs.writeFileSync(rutaVerificadas(), JSON.stringify(all)); } catch { return false; }
+  return true;
+}
+
+function borrarPorClave(clave) {
+  const id = idSeguro(clave);
+  const borrados = [];
+  for (const d of carpetasDisponibles()) for (const ext of [".m4a", ".webm", ".mp3", ".opus"]) {
+    const p = path.join(d, id + ext);
+    if (fs.existsSync(p)) {
+      try { fs.unlinkSync(p); borrados.push(path.basename(p)); log("borrado:", path.basename(p)); } catch {}
+    }
+  }
+  return borrados;
+}
+
+async function buscarEnDisco(videoId, query, dur = 0, ban = new Set()) {
+  if (query) {
+    try {
+      const ytm = await buscarYTMusic(query, dur);
+      for (const vid of ytm) {
+        if (ban.has(vid)) continue;
+        const id = idSeguro(vid);
+        const pth = await sanearArchivo(buscarExistente(id));
+        if (pth) return { archivo: pth, id };
+      }
+    } catch {}
+    if (!ban.size) {
+      for (const c of [query, query.toLowerCase().replace(/\s+/g, " ").trim()]) {
+        const id = idSeguro(c);
+        const pth = await sanearArchivo(buscarExistente(id));
+        if (pth) return { archivo: pth, id };
+      }
+    }
+  }
+  if (videoId && !ban.has(videoId)) {
+    const id = idSeguro(videoId);
+    const pth = await sanearArchivo(buscarExistente(id));
+    if (pth) return { archivo: pth, id };
+  }
+  return null;
+}
+
+async function obtenerAudio({ videoId, query, dur = 0, excluir = [] }) {
+  const ban = new Set([...(excluir || []), ...rechazosDe(query)]);
+  if (videoId && ban.has(videoId)) videoId = "";
   const clave = videoId || query;
   const id = idSeguro(clave);
+  const ver = verificadaDe(query);
+  if (ver && ver.videoId) {
+    const pth = buscarExistente(ver.id || idSeguro(ver.videoId)) || buscarExistente(idSeguro(ver.videoId));
+    if (pth) { log("cache HIT verificada:", query); return { archivo: pth, id: ver.id || idSeguro(ver.videoId) }; }
+  }
 
-  const ya = await sanearArchivo(buscarExistente(id));
-  if (ya) { log("cache HIT:", clave); return { archivo: ya, id }; }
+  const yaDisco = await buscarEnDisco(videoId, query, dur, ban);
+  if (yaDisco) {
+    enlazarAlias(yaDisco.archivo, query);
+    log("cache HIT:", query || videoId);
+    return yaDisco;
+  }
 
   if (enProceso.has(id)) return enProceso.get(id);
 
@@ -399,26 +515,17 @@ async function obtenerAudio({ videoId, query, dur = 0 }) {
        pedimos varios: el primer resultado suele ser el video oficial,
        que casi siempre está protegido con DRM (los "Art Track" de
        YouTube Music). Los lyric videos y los audios sí se bajan. */
-    let candidatos;
-    if (videoId) {
-      /* Empezamos por el id que nos pidieron. Si además vino el
-         nombre de la canción, guardamos alternativas por si ese
-         video tiene DRM (pasa mucho con los oficiales). */
-      candidatos = [videoId];
-      if (query) {
-        /* YT Music primero (canciones limpias), YouTube clásico después */
-        const ytm = await buscarYTMusic(query, dur);
-        const extra = await buscarCandidatos(query, 5, dur);
-        for (const c of [...ytm, ...extra]) if (!candidatos.includes(c)) candidatos.push(c);
-      }
-    } else {
-      /* Búsqueda PRINCIPAL: YT Music. Plan B: la búsqueda clásica. */
+    /* YT Music PRIMERO (la versión de álbum). El video_id que manda
+       el teléfono puede ser un nightcore/sped-up: va al final. */
+    let candidatos = [];
+    if (query) {
       const ytm = await buscarYTMusic(query, dur);
-      const clasica = await buscarCandidatos(query, 5, dur);
-      candidatos = [...ytm];
-      for (const c of clasica) if (!candidatos.includes(c)) candidatos.push(c);
-      if (!candidatos.length) throw new Error("la búsqueda no devolvió resultados");
+      const extra = await buscarCandidatos(query, 5, dur);
+      for (const c of [...ytm, ...extra]) if (!candidatos.includes(c)) candidatos.push(c);
     }
+    if (videoId && !candidatos.includes(videoId) && !ban.has(videoId)) candidatos.push(videoId);
+    candidatos = candidatos.filter(c => !ban.has(c));
+    if (!candidatos.length) throw new Error("la búsqueda no devolvió resultados");
 
     /* Estrategias de descarga, de menos a más invasiva.
        YouTube a veces rechaza un cliente pero acepta otro, así que
@@ -696,6 +803,7 @@ const servidor = http.createServer(async (req, res) => {
   if (ruta === "/resolver") {
     const videoId = url.searchParams.get("v") || "";
     const query = url.searchParams.get("q") || "";
+    const excluir = [...parseExcluir(url.searchParams.get("excluir")), ...rechazosDe(query)];
     // Duración real de la canción (iTunes), para filtrar versiones dobles.
     const dur = Math.max(0, Number(url.searchParams.get("dur")) || 0);
     if (!videoId && !query) return json(res, 400, { error: "falta v o q" });
@@ -713,21 +821,24 @@ const servidor = http.createServer(async (req, res) => {
     const clave = videoId || query;
     const id = idSeguro(clave);
 
-    const responderListo = (archivo) => {
+    const responderListo = (archivo, idArchivo) => {
       const ext = path.extname(archivo);
       const qs = TOKEN ? `?token=${encodeURIComponent(TOKEN)}` : "";
       return json(res, 200, {
         ok: true,
-        audio_path: `/audio/${id}${ext}${qs}`,
+        audio_path: `/audio/${idArchivo}${ext}${qs}`,
         bytes: fs.statSync(archivo).size,
         tipo: MIME[ext] || "audio/mp4",
       });
     };
 
-    // Ya la teníamos bajada: respuesta instantánea (revisando que el
-    // archivo esté sano; si estaba fragmentado se repara o se rebaja).
-    const ya = await sanearArchivo(buscarExistente(id));
-    if (ya) return responderListo(ya);
+    // Busca por id, por nombre de canción y por ids de YT Music:
+    // si Aura Libre ya la bajó, reutilizamos ESA copia (no un nightcore).
+    const ya = await buscarEnDisco(videoId, query, dur, new Set(excluir));
+    if (ya) {
+      enlazarAlias(ya.archivo, query);
+      return responderListo(ya.archivo, ya.id);
+    }
 
     // ¿Falló hace poco? Devolvemos el motivo sin reintentar.
     // 3 minutos: suficiente para no martillar a YouTube, pero corto
@@ -739,7 +850,7 @@ const servidor = http.createServer(async (req, res) => {
     fallosRecientes.delete(id);
 
     // Lanzamos la descarga (o nos sumamos a la que ya está en curso).
-    const tarea = obtenerAudio({ videoId, query, dur });
+    const tarea = obtenerAudio({ videoId, query, dur, excluir });
     tarea.catch((e) => {
       fallosRecientes.set(id, { ts: Date.now(), detalle: String(e.message || e).slice(0, 300) });
     });
@@ -749,7 +860,7 @@ const servidor = http.createServer(async (req, res) => {
       dormir(espera).then(() => null),
     ]);
 
-    if (resultado && resultado.r) return responderListo(resultado.r.archivo);
+    if (resultado && resultado.r) return responderListo(resultado.r.archivo, resultado.r.id || id);
     if (resultado && resultado.e) {
       log("ERROR resolviendo", clave, "→", resultado.e.message);
       return json(res, 502, { error: "no se pudo bajar", detalle: String(resultado.e.message || "").slice(0, 300) });
@@ -772,24 +883,29 @@ const servidor = http.createServer(async (req, res) => {
   // La app lo llama cuando el usuario saca la canción de sus descargas:
   // así la Mac no guarda copias que ya nadie quiere (ahorra espacio).
   // Es inofensivo si el archivo no existe: responde ok con lista vacía.
+  if (ruta === "/verificar") {
+    const query = url.searchParams.get("q") || "";
+    const videoId = url.searchParams.get("v") || "";
+    if (url.searchParams.get("ok") === "1") {
+      const ok = guardarVerificada(query, videoId);
+      if (ok && videoId) {
+        const f = buscarExistente(idSeguro(videoId)) || buscarExistente(idSeguro(query));
+        if (f) enlazarAlias(f, query);
+      }
+      return json(res, ok ? 200 : 400, { ok, verificada: ok, videoId });
+    }
+    const row = verificadaDe(query);
+    return json(res, 200, { ok: true, verificada: Boolean(row), videoId: row ? row.videoId : "" });
+  }
+
   if (ruta === "/borrar") {
     const videoId = url.searchParams.get("v") || "";
     const query = url.searchParams.get("q") || "";
     if (!videoId && !query) return json(res, 400, { error: "falta v o q" });
-    const id = idSeguro(videoId || query);
+    if (url.searchParams.get("rechazar") === "1" && videoId) guardarRechazo(query, videoId);
+    const claves = [videoId, query, String(query || "").toLowerCase().replace(/\s+/g, " ").trim()].filter(Boolean);
     const borrados = [];
-    for (const d of carpetasDisponibles()) for (const ext of [".m4a", ".webm", ".mp3", ".opus"]) {
-      const p = path.join(d, id + ext);
-      if (fs.existsSync(p)) {
-        try {
-          fs.unlinkSync(p);
-          borrados.push(path.basename(p));
-          log("borrado:", path.basename(p));
-        } catch (e) {
-          return json(res, 500, { error: e.message });
-        }
-      }
-    }
+    for (const c of claves) for (const n of borrarPorClave(c)) if (!borrados.includes(n)) borrados.push(n);
     return json(res, 200, { ok: true, borrados });
   }
 

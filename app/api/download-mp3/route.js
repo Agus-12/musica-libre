@@ -119,7 +119,7 @@ async function servidorCaseroVivo(base) {
   }
 }
 
-async function pedirAlServidorCasero({ videoId, query, dur }) {
+async function pedirAlServidorCasero({ videoId, query, dur, excluir }) {
   /* URL dinámica: si el túnel se reinició, la Mac ya publicó la nueva */
   const base = await baseMac();
   if (!base) { ultimoMotivoCasa = "MUSICA_SERVER vacía"; return null; }
@@ -137,6 +137,7 @@ async function pedirAlServidorCasero({ videoId, query, dur }) {
      videos del doble de largo (canción repetida, mixes) que dejaban
      minutos de silencio al final. */
   if (dur && dur > 0) p.set("dur", String(Math.round(dur)));
+  if (excluir && excluir.length) p.set("excluir", excluir.filter(Boolean).join(","));
   if (!videoId && !query) return null;
   if (token) p.set("token", token);
   // La Mac espera como mucho 20 s con el request abierto; si la descarga
@@ -193,7 +194,7 @@ async function fetchJSON(url) {
   return await resp.json();
 }
 
-async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist, expectedSong) {
+async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist, expectedSong, excluir = []) {
   const ytSearch = await import("yt-search");
   let results = await ytSearch.default(searchQuery + " official audio");
   if (!results.videos || results.videos.length === 0) {
@@ -213,11 +214,13 @@ async function buscarEnYouTube(searchQuery, expectedDuration, expectedArtist, ex
   const tituloParece = (v, re) => new RegExp(re, "i").test((v.title || "").replace(/\uFFFD/g, ""));
   const esMashup = (v) =>
     tituloParece(v, "live|remix|mashup|cover|reaction|chapter|preview|trailer|shorts") ||
-    tituloParece(v, "1 ?h|hour|8 horas|extended|intro|trailer|preview|feat|ft\.|featuring");
+    tituloParece(v, "1 ?h|hour|8 horas|extended|intro|trailer|preview|feat|ft\.|featuring") ||
+    tituloParece(v, "nightcore|night core|sped ?up|speed ?up|chipmunk|slowed|reverb|8d|super slow|tiktok|1\.5x|2x|kids? version|baby song|cartoon|niña|niño");
   const esTema = (v) => tituloParece(v, "oficial|official|audio|lyric|letra");
 
+  const ban = new Set(excluir || []);
   const META = 8000;
-  const scored = (results.videos || []).slice(0, 12).map((v) => {
+  const scored = (results.videos || []).slice(0, 12).filter(v => !ban.has(v.videoId)).map((v) => {
     const dur = toSec(v.duration);
     const mashup = esMashup(v);
     const tema = esTema(v);
@@ -312,6 +315,7 @@ export async function GET(req) {
   const query = p.get("q") || "";
   const itunesUrl = p.get("itunes_url") || "";
   const spotifyUrl = p.get("spotify_url") || "";
+  const excluir = String(p.get("excluir") || "").split(",").map(s => s.trim()).filter(s => /^[\w-]{11}$/.test(s));
 
   if (!query && !itunesUrl && !spotifyUrl) {
     return NextResponse.json({ error: "Falta búsqueda (q)" }, { status: 400 });
@@ -376,12 +380,13 @@ export async function GET(req) {
       } catch {}
     }
 
-    const video = p.get("v") && /^[\w-]{11}$/.test(p.get("v"))
+    const vPedido = p.get("v") && /^[\w-]{11}$/.test(p.get("v")) ? p.get("v") : "";
+    const video = vPedido && !excluir.includes(vPedido)
       ? /* Reintento de polling: el cliente ya sabe qué video es, no hace
            falta volver a buscar en YouTube (ahorra ~10 s por reintento). */
         {
-          videoId: p.get("v"),
-          url: "https://youtube.com/watch?v=" + p.get("v"),
+          videoId: vPedido,
+          url: "https://youtube.com/watch?v=" + vPedido,
           title: searchQuery,
           duration: null,
         }
@@ -389,7 +394,8 @@ export async function GET(req) {
           searchQuery,
           p.get("expected_duration") ? Number(p.get("expected_duration")) : null,
           p.get("expected_artist") || null,
-          p.get("expected_song") || null
+          p.get("expected_song") || null,
+          excluir
         ).catch(() => null);
         /* ↑ Si yt-search truena (YouTube bloquea las IPs de Vercel cada
            tanto), NO tiramos error: seguimos con video=null y la Mac
@@ -449,6 +455,7 @@ export async function GET(req) {
       videoId: video.videoId,
       query: searchQuery,
       dur: p.get("expected_duration") ? Number(p.get("expected_duration")) : 0,
+      excluir,
     });
     const pendiente = Boolean(casero && casero.pendiente);
     if (casero && casero.url) { audioUrl = casero.url; fuente = "casa"; }

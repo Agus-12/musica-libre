@@ -5,6 +5,7 @@ import { useToast } from "../components/ToastContext";
 import { useDownloads } from "../components/DownloadManager";
 import Explorar from "../spotify/page";
 import { aliasesDe, gruposAliasLocales, LIMITE_FREE, unicasOfflineLocales } from "../utils/offlineCupo";
+import { marcarRechazada, rechazadasDe, estaVerificadaLocal, marcarVerificadaLocal } from "../utils/versionesRechazadas";
 
 let ytApiLoaded = false;
 let ytApiPromise = null;
@@ -70,6 +71,10 @@ export default function ProfilePage() {
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [playlistItems, setPlaylistItems] = useState([]);
   const [downloadingItems, setDownloadingItems] = useState({});
+  const [preguntaVersion, setPreguntaVersion] = useState(null);
+  const playingMetaRef = useRef({});
+  const verifyTimerRef = useRef(null);
+  const verifyAskedRef = useRef("");
   const toast = useToast();
   const { queue, removeByKeys, enqueueAlbum, cancelById } = useDownloads();
 
@@ -1326,7 +1331,10 @@ export default function ProfilePage() {
     finRealRef.current = item.duration_ms ? item.duration_ms / 1000 : 0;
     setPlayingKey(item.key); setPlayingTitle(item.title);
     setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
+    playingMetaRef.current = { key: item.key, title: item.title || "", artist: item.artist || "", video_id: item.video_id || "", audio_url: item.audio_url || "", keys: item.keys || [item.key] };
+    setPreguntaVersion(null);
     setProgress(0); setCurrentTime(0); setDuration(0);
+    programarPreguntaVersion(item);
 
     try {
       a.src = item.audio_url;
@@ -1374,12 +1382,17 @@ export default function ProfilePage() {
       pendingRef.current = item;
       setPlayingKey(item.key); setPlayingTitle(item.title);
       setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
+      playingMetaRef.current = { key: item.key, title: item.title || "", artist: item.artist || "", video_id: item.video_id || "", audio_url: item.audio_url || "", keys: item.keys || [item.key] };
+      programarPreguntaVersion(item);
       ensurePlayer();
       return;
     }
     setPlayingKey(item.key); setPlayingTitle(item.title);
     setPlayingArtist(item.artist); setPlayingCover(item.cover_url);
+    playingMetaRef.current = { key: item.key, title: item.title || "", artist: item.artist || "", video_id: item.video_id || "", audio_url: item.audio_url || "", keys: item.keys || [item.key] };
+    setPreguntaVersion(null);
     setProgress(0); setCurrentTime(0); setDuration(0);
+    programarPreguntaVersion(item);
     try {
       p.loadVideoById(item.video_id);   // loadVideoById ya arranca solo
       try { p.playVideo(); } catch {}   // y por las dudas lo empujamos
@@ -1697,7 +1710,8 @@ export default function ProfilePage() {
       if (item.duration_ms) params.set("expected_duration", String(Math.round(item.duration_ms/1000)));
       if (item.artist) params.set("expected_artist", item.artist);
       if (item.title) params.set("expected_song", item.title);
-      if (item.video_id) params.set("v", item.video_id);
+      const excl = rechazadasDe(item.artist, item.title);
+      if (excl.length) params.set("excluir", excl.join(","));
       let data = {};
       for (let intento = 0; intento < 13; intento++) {
         const res = await fetch("/api/download-mp3?"+params.toString());
@@ -1780,6 +1794,81 @@ export default function ProfilePage() {
       else toast.warning("No se encontro",4000);
     } catch { toast.error("Error buscando",3000); }
     setDownloadingItems(p=>({...p,[item.key]:false}));
+  }
+
+
+  function programarPreguntaVersion(item) {
+    clearTimeout(verifyTimerRef.current);
+    verifyTimerRef.current = null;
+    setPreguntaVersion(null);
+    if (!item || !item.key) return;
+    if (estaVerificadaLocal(item.artist, item.title)) return;
+    const snap = {
+      key: item.key,
+      title: item.title || "",
+      artist: item.artist || "",
+      video_id: item.video_id || "",
+      audio_url: item.audio_url || "",
+      keys: item.keys || [item.key],
+    };
+    verifyAskedRef.current = "";
+    verifyTimerRef.current = setTimeout(async () => {
+      const ahora = playingMetaRef.current || {};
+      if (ahora.key && ahora.key !== snap.key) return;
+      if (estaVerificadaLocal(ahora.artist || snap.artist, ahora.title || snap.title)) return;
+      if (verifyAskedRef.current === snap.key) return;
+      verifyAskedRef.current = snap.key;
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 2000);
+        const r = await fetch("/api/verificar-cancion?q=" + encodeURIComponent(((snap.artist || "") + " " + (snap.title || "")).trim()), { signal: ctrl.signal });
+        clearTimeout(t);
+        const d = await r.json().catch(() => ({}));
+        if (d.verificada) {
+          marcarVerificadaLocal(snap.artist, snap.title, d.videoId);
+          return;
+        }
+      } catch {}
+      const sigue = playingMetaRef.current || {};
+      if (sigue.key && sigue.key !== snap.key) return;
+      if (estaVerificadaLocal(snap.artist, snap.title)) return;
+      setPreguntaVersion({ ...snap, ...sigue, key: snap.key });
+      try { toast.info("¿Es esta la canción? " + (snap.title || ""), 6000); } catch {}
+    }, 4000);
+  }
+
+  async function confirmarVersionSi() {
+    const it = preguntaVersion;
+    setPreguntaVersion(null);
+    if (!it) return;
+    marcarVerificadaLocal(it.artist, it.title, it.video_id);
+    try {
+      await fetch("/api/verificar-cancion?ok=1&q=" + encodeURIComponent(((it.artist || "") + " " + (it.title || "")).trim()) + "&v=" + encodeURIComponent(it.video_id || ""));
+    } catch {}
+    toast.success("Quedo guardada como la version buena", 3000);
+  }
+
+  async function versionIncorrecta(item, yaPregunto) {
+    if (!yaPregunto && !window.confirm("¿No es la canción correcta? Vamos a borrar esta versión y buscar otra distinta.")) return;
+    const vid = item.video_id || "";
+    marcarRechazada(item.artist, item.title, vid);
+    const q = ((item.artist || "") + " " + (item.title || "")).trim();
+    try {
+      const s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const ks = item.keys && item.keys.length ? item.keys : [item.key];
+      for (const k of ks) if (s[k]) s[k] = { ...s[k], audio_url: "", video_id: "", method: "youtube" };
+      localStorage.setItem("ml_mp3", JSON.stringify(s));
+    } catch {}
+    if (item.audio_url && "caches" in window) {
+      try { const c = await caches.open("ml-saved-v1"); await c.delete(item.audio_url); } catch {}
+    }
+    try {
+      await fetch("/api/borrar-cancion?v=" + encodeURIComponent(vid) + "&q=" + encodeURIComponent(q) + "&rechazar=1");
+    } catch {}
+    if ((item.keys || [item.key]).includes(playingKey)) stopPlayback();
+    refreshDownloads();
+    toast.info("Buscando otra versión: " + item.title, 3000);
+    await reDownload({ ...item, video_id: "", audio_url: "" });
   }
 
   async function deleteDownload(item) {
@@ -2486,6 +2575,7 @@ export default function ProfilePage() {
                     {iconBtn(e=>{e.stopPropagation();encolarSiguiente(item);}, <Ico d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><polygon points="17 15 22 18 17 21 17 15"/></>} size={14}/>, "#555", "none", "Reproducir a continuación")}
                     {enLinea && iconBtn(e=>{e.stopPropagation();setCompartirItem(item);}, <Ico d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} size={14}/>, "#555", "none", "Enviar a un amigo")}
                     {enLinea && !item.audio_url && iconBtn(e=>{e.stopPropagation();reDownload(item);}, dl ? <span style={{fontSize:"0.8em"}}>...</span> : <Ico d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></>} size={14}/>, "var(--text5)", "none", item.online_only ? "Guardar offline" : "Buscar de nuevo")}
+                    {enLinea && !estaVerificadaLocal(item.artist, item.title) && <button onClick={e=>{e.stopPropagation();versionIncorrecta(item);}} title="No es esta cancion" style={{flexShrink:0,padding:"3px 6px",borderRadius:6,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text4)",fontSize:"0.58em",fontWeight:800,cursor:"pointer"}}>No es esta</button>}
                     {enLinea && iconBtn(e=>{e.stopPropagation();deleteDownload(item);}, <Ico d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>} size={14}/>, "var(--text5)", "none", "Eliminar")}
                   </div>
                 );
@@ -2654,6 +2744,17 @@ export default function ProfilePage() {
       {/* ═══ REPRODUCTOR ═══
           Mini-barra abajo. Al tocarla (o deslizar hacia arriba) se despliega
           a pantalla completa estilo iTunes/Apple Music del celular. */}
+      {preguntaVersion && (
+        <div style={{position:"fixed",left:10,right:10,top:"max(12px, env(safe-area-inset-top))",zIndex:50000,background:"#16161f",border:"2px solid #22c55e",borderRadius:16,padding:"14px 14px 12px",boxShadow:"0 12px 40px rgba(0,0,0,.6)"}}>
+          <div style={{color:"#fff",fontWeight:800,fontSize:"1em",marginBottom:4}}>¿Es esta la canción?</div>
+          <div style={{color:"#b8b8c8",fontSize:"0.8em",marginBottom:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{preguntaVersion.title} — {preguntaVersion.artist}</div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={confirmarVersionSi} style={{flex:1,padding:"12px 10px",borderRadius:12,border:"none",background:"#22c55e",color:"#fff",fontWeight:800,fontSize:"0.9em",cursor:"pointer"}}>Sí, esta es</button>
+            <button onClick={()=>{ const it=preguntaVersion; setPreguntaVersion(null); versionIncorrecta(it, true); }} style={{flex:1,padding:"12px 10px",borderRadius:12,border:"1px solid #444",background:"#2a2a36",color:"#eee",fontWeight:800,fontSize:"0.9em",cursor:"pointer"}}>No, otra</button>
+          </div>
+        </div>
+      )}
+
       {hp && (
         <>
           {/* ── Mini-barra ── */}
