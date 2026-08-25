@@ -70,7 +70,7 @@ export default function ProfilePage() {
   const [playlistItems, setPlaylistItems] = useState([]);
   const [downloadingItems, setDownloadingItems] = useState({});
   const toast = useToast();
-  const { queue, removeByKeys, enqueueAlbum } = useDownloads();
+  const { queue, removeByKeys, enqueueAlbum, cancelById } = useDownloads();
 
   const [playingKey, setPlayingKey] = useState(null);
   const [playingTitle, setPlayingTitle] = useState("");
@@ -2220,6 +2220,11 @@ export default function ProfilePage() {
                     : t.status==="downloading"
                       ? <span style={{color:"#eab308",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>bajando…</span>
                       : <span style={{color:"var(--text4)",fontSize:"0.68em",fontWeight:700,flexShrink:0}}>en cola</span>}
+                  <button
+                    onClick={() => cancelById && cancelById(t.id)}
+                    title="Cancelar descarga"
+                    style={{background:"rgba(239,68,68,.12)",border:"1px solid rgba(239,68,68,.35)",color:"#ef4444",borderRadius:"50%",width:25,height:25,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.9em",fontWeight:800,flexShrink:0}}
+                  >×</button>
                 </div>
               ))}
             </div>

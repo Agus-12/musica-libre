@@ -200,8 +200,12 @@ export function DownloadProvider({ children }) {
     setQueue(prev => prev.filter(t => !set.has(String(t.key))));
   }, []);
 
+  const cancelById = useCallback((id) => {
+    setQueue(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   return (
-    <DownloadContext.Provider value={{ queue, enqueueAlbum, clearDone, removeByKeys, running }}>
+    <DownloadContext.Provider value={{ queue, enqueueAlbum, clearDone, removeByKeys, cancelById, running }}>
       {children}
     </DownloadContext.Provider>
   );
