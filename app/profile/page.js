@@ -4,7 +4,7 @@ import { useUser } from "../components/UserContext";
 import { useToast } from "../components/ToastContext";
 import { useDownloads } from "../components/DownloadManager";
 import Explorar from "../spotify/page";
-import { aliasesDe, gruposAliasLocales, LIMITE_FREE } from "../utils/offlineCupo";
+import { aliasesDe, gruposAliasLocales, LIMITE_FREE, unicasOfflineLocales } from "../utils/offlineCupo";
 
 let ytApiLoaded = false;
 let ytApiPromise = null;
@@ -324,6 +324,7 @@ export default function ProfilePage() {
   const [almacenamientoOffline, setAlmacenamientoOffline] = useState({ cargando: false, canciones: 0, bytes: 0 });
   const [estadoPremium, setEstadoPremium] = useState({ cargando: true, activo: false, plan: "free", estado: "free", acceso_libre: false, offline_count: null, limite_offline: LIMITE_FREE });
   const [syncCupo, setSyncCupo] = useState({ haciendo: false, listo: false });
+  const syncCupoRef = useRef(false);
   const [adminUsuarios, setAdminUsuarios] = useState(null);
   const [adminCargando, setAdminCargando] = useState(false);
   const [pagoPlan, setPagoPlan] = useState("");
@@ -343,7 +344,8 @@ export default function ProfilePage() {
     toast.info(activar ? "Modo sin datos ACTIVO: la app no tocará internet" : "Modo sin datos apagado", 3500);
   }
   async function sincronizarCupoOffline(purge = false) {
-    if (syncCupo.haciendo) return null;
+    if (syncCupoRef.current) return null;
+    syncCupoRef.current = true;
     setSyncCupo({ haciendo: true, listo: false });
     try {
       const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
@@ -360,6 +362,7 @@ export default function ProfilePage() {
         return d;
       }
     } catch {}
+    finally { syncCupoRef.current = false; }
     setSyncCupo({ haciendo: false, listo: false });
     return null;
   }
@@ -1640,8 +1643,26 @@ export default function ProfilePage() {
         usados = Number(acceso.offline_count) || 0;
       }
     } catch {}
+    let locales = 0;
+    try {
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      locales = unicasOfflineLocales(mp3s).length;
+    } catch {}
     if (!ilimitado && usados >= LIMITE_FREE) {
-      toast.warning(`Límite Free: ${usados}/${LIMITE_FREE} offline. Borra una o pásate a Premium`, 5000);
+      toast.info("El contador de la cuenta está lleno: ajustando a este teléfono…", 2800);
+      for (let i = 0; i < 20 && syncCupoRef.current; i++) await new Promise(r => setTimeout(r, 200));
+      const d = await sincronizarCupoOffline(true);
+      if (typeof d?.count === "number") usados = d.count;
+      else {
+        try {
+          const ra = await fetch("/api/pagos/acceso", { cache: "no-store" });
+          const acc = await ra.json();
+          if (ra.ok) usados = Number(acc.offline_count) || usados;
+        } catch {}
+      }
+    }
+    if (!ilimitado && Math.max(usados, locales) >= LIMITE_FREE) {
+      toast.warning(`Límite Free: teléfono ${locales}/${LIMITE_FREE}, cuenta ${usados}/${LIMITE_FREE}. Borra una OFF o pásate a Premium`, 6000);
       return;
     }
     // Reset del contador de reparaciones: el usuario pidió reintentar
@@ -1691,9 +1712,22 @@ export default function ProfilePage() {
             body: JSON.stringify({ track_key: String(item.key).slice(0, 300), aliases })
           });
           if (!rr.ok) {
-            const ed = await rr.json().catch(() => ({}));
-            guardado = false;
-            toast.warning(ed.error || "No hay cupo offline en tu cuenta", 4500);
+            for (let i = 0; i < 20 && syncCupoRef.current; i++) await new Promise(r => setTimeout(r, 200));
+            const dSync = await sincronizarCupoOffline(true);
+            const rr2 = await fetch("/api/pagos/offline", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ track_key: String(item.key).slice(0, 300), aliases })
+            });
+            if (!rr2.ok) {
+              const ed = await rr2.json().catch(() => ({}));
+              guardado = false;
+              const n = typeof dSync?.count === "number" ? dSync.count : (ed.count ?? usados);
+              toast.warning(ed.error || `No hay cupo offline (${n}/${LIMITE_FREE})`, 4500);
+            } else {
+              const ed = await rr2.json().catch(() => ({}));
+              if (typeof ed.count === "number") setEstadoPremium(v => ({ ...v, offline_count: ed.count }));
+            }
           } else {
             const ed = await rr.json().catch(() => ({}));
             if (typeof ed.count === "number") setEstadoPremium(v => ({ ...v, offline_count: ed.count }));
