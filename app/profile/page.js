@@ -344,7 +344,7 @@ export default function ProfilePage() {
     try {
       const r = await fetch("/api/pagos/crear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan }) });
       const d = await r.json();
-      if (!r.ok || !d.init_point) { toast.error(d.error || "No se pudo iniciar el pago", 4000); return; }
+      if (!r.ok || !d.init_point) { const detalle = typeof d.detalle === "string" ? d.detalle : (d.detalle ? JSON.stringify(d.detalle) : ""); toast.error([d.error || "No se pudo iniciar el pago", detalle].filter(Boolean).join(": "), 8000); return; }
       window.location.href = d.init_point;
     } catch { toast.error("No se pudo conectar con Mercado Pago", 4000); }
   }
