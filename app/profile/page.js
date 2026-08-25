@@ -1610,6 +1610,15 @@ export default function ProfilePage() {
         localStorage.setItem("ml_offline", JSON.stringify(off));
       } catch {}
 
+      // Liberar el espacio del contador en Supabase.
+      try {
+        await fetch("/api/pagos/offline", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ track_keys: claves })
+        });
+      } catch {}
+
       if (item.audio_url && "caches" in window) {
         try { const c = await caches.open("ml-saved-v1"); await c.delete(item.audio_url); } catch {}
       }

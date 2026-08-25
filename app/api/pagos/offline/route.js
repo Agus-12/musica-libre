@@ -20,3 +20,34 @@ export async function POST(req) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
+
+export async function DELETE(req) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const keys = Array.isArray(body.track_keys)
+    ? body.track_keys.map(k => String(k).slice(0, 300)).filter(Boolean)
+    : [String(body.track_key || "").slice(0, 300)].filter(Boolean);
+
+  if (!keys.length) {
+    return NextResponse.json({ error: "Falta track_key" }, { status: 400 });
+  }
+
+  const { error } = await supabase
+    .from("descargas_offline")
+    .delete()
+    .eq("user_id", user.id)
+    .in("track_key", keys);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}
