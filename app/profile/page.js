@@ -1014,6 +1014,10 @@ export default function ProfilePage() {
       const offline = JSON.parse(localStorage.getItem("ml_offline") || "{}");
       const items = [];
       for (const [key, entry] of Object.entries(mp3s)) {
+        // "Descargadas" significa audio completo guardado en este dispositivo.
+        // Las entradas que solo tienen video_id son intentos o reproducción
+        // por YouTube y no deben contarse como descargas offline.
+        if (!entry.audio_url) continue;
         // Antes descartabamos entradas vacias, pero si Vercel rechazaba
         // todos los candidatos (ej: Karol G sin video oficial en YouTube),
         // la cancion nunca aparecia en Descargadas. La mostramos aunque
