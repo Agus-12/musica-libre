@@ -467,6 +467,12 @@ export default function ProfilePage() {
     setAlmacenamientoOffline(v => ({ ...v, cargando: true }));
     try {
       const c = await caches.open("ml-saved-v1");
+      const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
+      const validas = new Set();
+      for (const entry of Object.values(mp3s)) {
+        if (!entry?.audio_url) continue;
+        try { const u = new URL(entry.audio_url, window.location.href); validas.add(u.origin + u.pathname); } catch {}
+      }
       const requests = await c.keys();
       // Las reparaciones antiguas usan ?r=timestamp y pueden dejar varias
       // copias del mismo /audio/id.ext. Conservamos la más reciente y
@@ -475,6 +481,10 @@ export default function ProfilePage() {
       for (const req of requests) {
         let base = req.url;
         try { const u = new URL(req.url); base = u.origin + u.pathname; } catch {}
+        // Si el caché conserva un audio que ya no está registrado en la
+        // biblioteca local, es una copia huérfana: se puede eliminar sin
+        // afectar favoritos ni playlists.
+        if (validas.size && !validas.has(base)) { try { await c.delete(req); } catch {} continue; }
         const anterior = ultimas.get(base);
         if (anterior) { try { await c.delete(anterior); } catch {} }
         ultimas.set(base, req);
