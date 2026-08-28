@@ -1008,16 +1008,31 @@ export default function ProfilePage() {
   // y si no, verían valores viejos).
   const liveRef = useRef({ list: [], playingKey: null, shuffle: false, repeat: "off" });
 
-  function refreshDownloads() {
+  async function refreshDownloads() {
     try {
       const mp3s = JSON.parse(localStorage.getItem("ml_mp3") || "{}");
       const offline = JSON.parse(localStorage.getItem("ml_offline") || "{}");
+      // El registro local puede conservar audio_url viejos aunque iOS ya
+      // haya expulsado el audio. La fuente de verdad para "Descargadas" es
+      // Cache Storage: solo contamos un audio que realmente exista ahí.
+      let cacheUrls = null;
+      try {
+        if ("caches" in window) {
+          const c = await caches.open("ml-saved-v1");
+          cacheUrls = new Set((await c.keys()).map(r => r.url));
+        }
+      } catch {}
       const items = [];
       for (const [key, entry] of Object.entries(mp3s)) {
         // "Descargadas" significa audio completo guardado en este dispositivo.
         // Las entradas que solo tienen video_id son intentos o reproducción
         // por YouTube y no deben contarse como descargas offline.
         if (!entry.audio_url) continue;
+        if (cacheUrls) {
+          let u = entry.audio_url;
+          try { u = new URL(u, window.location.href).href; } catch {}
+          if (!cacheUrls.has(u)) continue;
+        }
         // Antes descartabamos entradas vacias, pero si Vercel rechazaba
         // todos los candidatos (ej: Karol G sin video oficial en YouTube),
         // la cancion nunca aparecia en Descargadas. La mostramos aunque
