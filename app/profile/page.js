@@ -468,8 +468,20 @@ export default function ProfilePage() {
     try {
       const c = await caches.open("ml-saved-v1");
       const requests = await c.keys();
-      let bytes = 0;
+      // Las reparaciones antiguas usan ?r=timestamp y pueden dejar varias
+      // copias del mismo /audio/id.ext. Conservamos la más reciente y
+      // eliminamos las copias anteriores para liberar espacio real.
+      const ultimas = new Map();
       for (const req of requests) {
+        let base = req.url;
+        try { const u = new URL(req.url); base = u.origin + u.pathname; } catch {}
+        const anterior = ultimas.get(base);
+        if (anterior) { try { await c.delete(anterior); } catch {} }
+        ultimas.set(base, req);
+      }
+      const limpias = Array.from(ultimas.values());
+      let bytes = 0;
+      for (const req of limpias) {
         try {
           const r = await c.match(req);
           if (!r) continue;
@@ -477,7 +489,7 @@ export default function ProfilePage() {
           bytes += Number.isFinite(n) && n > 0 ? n : (await r.clone().blob()).size;
         } catch {}
       }
-      setAlmacenamientoOffline({ cargando: false, canciones: requests.length, bytes });
+      setAlmacenamientoOffline({ cargando: false, canciones: limpias.length, bytes });
     } catch { setAlmacenamientoOffline(v => ({ ...v, cargando: false })); }
   }
   function formatoBytes(n) {
@@ -1069,7 +1081,9 @@ export default function ProfilePage() {
          juntas. */
       const grupos = new Map();
       for (const it of items) {
-        const id = it.video_id || it.audio_url || it.apple_url
+        let audioClave = it.audio_url || "";
+        try { if (audioClave) { const u = new URL(audioClave, window.location.href); audioClave = u.origin + u.pathname; } } catch {}
+        const id = it.video_id || audioClave || it.apple_url
           || (it.artist + "|" + it.title).toLowerCase().trim();
         const prev = grupos.get(id);
         if (!prev) {
