@@ -13,7 +13,7 @@
    cuando la Mac prende y revive si se cae.
    ═══════════════════════════════════════════════════════════════ */
 
-const { spawn } = require("child_process");
+const { spawn, execFile } = require("child_process");
 
 /* launchd trae un PATH pelón: ahí no está cloudflared */
 process.env.PATH = [process.env.PATH, "/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin"]
@@ -32,13 +32,17 @@ async function avisar() {
   if (!urlActual) return;
   clearTimeout(reintentoTimer);
   try {
-    const r = await fetch(`${APP}/api/tunel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: urlActual, token: TOKEN }),
-      signal: AbortSignal.timeout(15000),
+    // En Monterey, el fetch de Node puede fallar por la cadena de
+    // certificados aunque curl funcione. Usamos curl del sistema para
+    // avisar a Vercel de forma más compatible.
+    const payload = JSON.stringify({ url: urlActual, token: TOKEN });
+    const salida = await new Promise((resolve, reject) => {
+      execFile("/usr/bin/curl", ["-fsS", "-m", "20", "-X", "POST", "-H", "Content-Type: application/json", "--data", payload, `${APP}/api/tunel`], { maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) return reject(new Error((stderr || err.message || "curl falló").slice(0, 160)));
+        resolve(String(stdout));
+      });
     });
-    const d = await r.json();
+    const d = JSON.parse(salida);
     if (d.ok) { log("Vercel enterado:", urlActual); return; }
     /* Rechazado (p. ej. el DNS del túnel recién nacido aún no propaga
        y la verificación de /salud falló): reintentar en 45s, no en 10 min */
