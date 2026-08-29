@@ -101,6 +101,7 @@ export default function ProfilePage() {
   const finRealRef = useRef(0);           // duración real (iTunes): corta colas de ruido
   const enSilencioRef = useRef(false);    // el elemento está tocando el silencio guardián
   const posPausaRef = useRef(0);          // dónde quedó la canción real
+  const resumeSaveRef = useRef(0);
   const silTimerRef = useRef(null);
   const deteniendoRef = useRef(false);    // true mientras el usuario DETIENE del todo
   /* iOS congela la PWA ~30 s después de pausar y el play de la pantalla
@@ -109,6 +110,14 @@ export default function ProfilePage() {
      muere, la app sigue despierta y el play responde siempre. Un
      segundo elemento no sirve: iOS bloquea audios nuevos en segundo
      plano; el mismo elemento ya está "bendecido" por tu toque. */
+  function guardarReanudacion() {
+    const a = audioRef.current;
+    const item = playingMetaRef.current || {};
+    if (!a || !item.audio_url || !isFinite(a.currentTime)) return;
+    try {
+      localStorage.setItem("aura_reanudar_audio", JSON.stringify({ key: item.key, audio_url: item.audio_url, time: a.currentTime, title: item.title || "", artist: item.artist || "", saved_at: Date.now() }));
+    } catch {}
+  }
   function pausarConGuardian() {
     // Pausa simple y honesta. (iOS congela las PWA pausadas ~30 s
     // después: es un límite de Apple que ningún truco web vence bien.)
@@ -1212,6 +1221,13 @@ export default function ProfilePage() {
     return () => { window.removeEventListener("online", set); window.removeEventListener("offline", set); };
   }, []);
 
+  useEffect(() => {
+    const guardar = () => { try { if (usingAudioRef.current) guardarReanudacion(); } catch {} };
+    window.addEventListener("pagehide", guardar);
+    document.addEventListener("visibilitychange", guardar);
+    return () => { window.removeEventListener("pagehide", guardar); document.removeEventListener("visibilitychange", guardar); };
+  }, []);
+
   /* Que la música NO se corte al salir de la app.
      Cuando el celular manda el navegador a segundo plano, suele pausar el
      iframe. Al volver, si estábamos reproduciendo, lo reanudamos. Además
@@ -1406,6 +1422,7 @@ export default function ProfilePage() {
           }
         }
         setCurrentTime(a.currentTime || 0);
+        if (Date.now() - resumeSaveRef.current > 1500) { resumeSaveRef.current = Date.now(); guardarReanudacion(); }
         setDuration(d);
         setProgress(d > 0 ? (a.currentTime / d) * 100 : 0);
       });
@@ -1420,6 +1437,7 @@ export default function ProfilePage() {
       });
       a.addEventListener("pause", () => {
         if (!a.ended) posPausaRef.current = a.currentTime || 0;
+        if (!a.ended) guardarReanudacion();
         setIsPlaying(false);
         try { if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused"; } catch {}
       });
@@ -1444,7 +1462,15 @@ export default function ProfilePage() {
     programarPreguntaVersion(item);
 
     try {
+      let reanudar = 0;
+      try {
+        const r = JSON.parse(localStorage.getItem("aura_reanudar_audio") || "null");
+        if (r && r.audio_url === item.audio_url && Number(r.time) > 2) reanudar = Number(r.time);
+      } catch {}
       a.src = item.audio_url;
+      a.addEventListener("loadedmetadata", () => {
+        if (reanudar > 0 && a.duration > reanudar) { try { a.currentTime = reanudar; } catch {} }
+      }, { once: true });
       a.load();
       const pr = a.play();
       if (pr && pr.catch) pr.catch(() => {});
@@ -1757,6 +1783,7 @@ export default function ProfilePage() {
     if (playerRef.current && playerReadyRef.current) { try { playerRef.current.stopVideo(); } catch {} }
     if (audioRef.current) { try { audioRef.current.pause(); audioRef.current.currentTime = 0; } catch {} }
     usingAudioRef.current = false;
+    try { localStorage.removeItem("aura_reanudar_audio"); } catch {}
     setPlayingKey(null);setIsPlaying(false);setPlayingTitle("");setPlayingArtist("");setPlayingCover("");
     setProgress(0);setCurrentTime(0);setDuration(0);
     if("mediaSession" in navigator){navigator.mediaSession.playbackState="none";navigator.mediaSession.metadata=null;}
