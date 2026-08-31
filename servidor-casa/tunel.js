@@ -72,7 +72,7 @@ async function avisar() {
 
 function arrancarTunel() {
   log("arrancando cloudflared...");
-  const p = spawn("cloudflared", ["tunnel", "--url", LOCAL, "--no-autoupdate"], { env: process.env });
+  const p = spawn("cloudflared", ["tunnel", "--url", LOCAL, "--no-autoupdate", "--protocol", "http2", "--edge-ip-version", "4"], { env: process.env });
   procesoTunel = p;
   fallosAviso = 0;
 
