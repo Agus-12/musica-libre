@@ -25,6 +25,8 @@ const LOCAL = process.env.AURA_LOCAL || "http://localhost:8787";
 
 let urlActual = "";
 let reintentoTimer = null;
+let procesoTunel = null;
+let fallosAviso = 0;
 
 function log(...a) { console.log(new Date().toISOString().slice(11, 19), ...a); }
 
@@ -43,13 +45,27 @@ async function avisar() {
       });
     });
     const d = JSON.parse(salida);
-    if (d.ok) { log("Vercel enterado:", urlActual); return; }
+    if (d.ok) { fallosAviso = 0; log("Vercel enterado:", urlActual); return; }
     /* Rechazado (p. ej. el DNS del túnel recién nacido aún no propaga
        y la verificación de /salud falló): reintentar en 45s, no en 10 min */
+    fallosAviso++;
     log("Vercel no aceptó (reintento en 45s):", JSON.stringify(d));
+    if (fallosAviso >= 3 && procesoTunel) {
+      log("el túnel no responde tras 3 intentos; lo reinicio para obtener otra URL");
+      fallosAviso = 0;
+      try { procesoTunel.kill(); } catch {}
+      return;
+    }
     reintentoTimer = setTimeout(avisar, 45 * 1000);
   } catch (e) {
+    fallosAviso++;
     log("no pude avisar a Vercel (reintento en 1 min):", String(e.message || "").slice(0, 60));
+    if (fallosAviso >= 3 && procesoTunel) {
+      log("el túnel no responde tras 3 intentos; lo reinicio para obtener otra URL");
+      fallosAviso = 0;
+      try { procesoTunel.kill(); } catch {}
+      return;
+    }
     reintentoTimer = setTimeout(avisar, 60 * 1000);
   }
 }
@@ -57,6 +73,8 @@ async function avisar() {
 function arrancarTunel() {
   log("arrancando cloudflared...");
   const p = spawn("cloudflared", ["tunnel", "--url", LOCAL, "--no-autoupdate"], { env: process.env });
+  procesoTunel = p;
+  fallosAviso = 0;
 
   const leer = (buf) => {
     const m = String(buf).match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
@@ -72,6 +90,7 @@ function arrancarTunel() {
   p.stderr.on("data", leer);   // cloudflared imprime la URL por stderr
 
   p.on("exit", (code) => {
+    if (procesoTunel === p) procesoTunel = null;
     log("cloudflared se murió (código", code + "), lo revivo en 5s");
     urlActual = "";
     setTimeout(arrancarTunel, 5000);
