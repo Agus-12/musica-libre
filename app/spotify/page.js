@@ -1122,7 +1122,7 @@ export default function SpotifyPage() {
                         {s.cover ? <img src={s.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ color: sonando ? "#22c55e" : "var(--text)", fontSize: "0.88em", fontWeight: sonando ? 700 : 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
-                          <div onClick={(e)=>{e.stopPropagation();abrirArtistaNombre(s.artist)}} title="Ver artista" style={{ color: "#22c55e", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{s.artist}{s.album ? " · " + s.album : ""}</div>
+                          <div style={{ color: "var(--text4)", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}{s.album ? " · " + s.album : ""}</div>
                         </div>
                         {s.preview_url && (
                           <button onClick={(e) => { e.stopPropagation(); playPreview(s.preview_url, s.id, s.name, s.artist, s.cover, s.duration_ms); }} style={{ background: sonando ? "#22c55e" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

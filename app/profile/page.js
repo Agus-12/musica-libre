@@ -2978,7 +2978,7 @@ export default function ProfilePage() {
                   </div>}
               <div style={{flex:1,minWidth:0}}>
                 <div style={{color:"#f0f0f0",fontSize:"0.88em",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
-                <div onClick={()=>{if(playingArtist) window.location.href="/spotify?buscar="+encodeURIComponent(playingArtist)}} title="Ver artista" style={{color:"#22c55e",fontSize:"0.74em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:playingArtist?"pointer":"default"}}>{playingArtist}</div>
+                <div style={{color:"#8a8a9a",fontSize:"0.74em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingArtist}</div>
               </div>
               <button
                 onClick={e=>{e.stopPropagation();togglePlay();}}
@@ -3039,7 +3039,7 @@ export default function ProfilePage() {
               {/* Título + artista */}
               <div style={{marginBottom:10,flexShrink:0,textAlign:"center"}}>
                 <div style={{color:"var(--text-strong)",fontSize:"1.3em",fontWeight:700,lineHeight:1.25,marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{playingTitle}</div>
-                <div onClick={()=>{if(playingArtist) window.location.href="/spotify?buscar="+encodeURIComponent(playingArtist)}} title="Ver artista" style={{color:"#22c55e",fontSize:"0.98em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:playingArtist?"pointer":"default"}}>{playingArtist}</div>
+                <div onClick={()=>{if(playingArtist) irAExplorar({buscar: playingArtist})}} title="Ver artista" style={{color:"#22c55e",fontSize:"0.98em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:playingArtist?"pointer":"default"}}>{playingArtist}</div>
               </div>
 
               {/* Barra de progreso grande y arrastrable */}
@@ -3164,7 +3164,7 @@ export default function ProfilePage() {
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",flexShrink:0}}>
                   <div style={{minWidth:0}}>
                     <div style={{color:"#fff",fontWeight:800,fontSize:"1em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{playingTitle}</div>
-                    <div onClick={()=>{if(playingArtist) window.location.href="/spotify?buscar="+encodeURIComponent(playingArtist)}} title="Ver artista" style={{color:"#22c55e",fontSize:"0.78em",cursor:playingArtist?"pointer":"default"}}>{playingArtist}</div>
+                    <div onClick={()=>{if(playingArtist) irAExplorar({buscar: playingArtist})}} title="Ver artista" style={{color:"#22c55e",fontSize:"0.78em",cursor:playingArtist?"pointer":"default"}}>{playingArtist}</div>
                   </div>
                   <button onClick={()=>setShowLetra(false)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",color:"#fff",fontSize:"1em",flexShrink:0}}>✕</button>
                 </div>
