@@ -315,7 +315,7 @@ export default function ProfilePage() {
         title: d.title || "",
         artist: d.artist || "",
         cover_url: d.cover_url || "",
-        audio_url: d.audio_url || "",
+        audio_url: d.audio_url || d.preview_url || "",
         video_id: d.video_id || "",
         duration_ms: d.duration_ms || null,
         keys: [String(d.key)],
