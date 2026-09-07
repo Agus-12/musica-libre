@@ -186,7 +186,7 @@ export default function SpotifyPage() {
     const h = (e) => {
       const d = e.detail || {};
       if (d.album) loadAlbum(d.album, d.source || "itunes", d.track || null);
-      else if (d.buscar) { setTab("search"); search(d.buscar); }
+      else if (d.buscar) { abrirArtistaNombre(d.buscar); }
     };
     window.addEventListener("aura-explorar-destino", h);
     return () => window.removeEventListener("aura-explorar-destino", h);
@@ -1223,7 +1223,7 @@ export default function SpotifyPage() {
             <div style={{ flex: 1, minWidth: 180 }}>
               <h2 style={{ fontSize: "1.4em", marginBottom: 4 }}>{album.name}</h2>
               {album.artist_id && album.source === "itunes" ? (
-                <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { setAlbum(null); loadArtist(album.artist_id); }}>{album.artist}</p>
+                <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { setAlbum(null); album.artist_id ? loadArtist(album.artist_id) : abrirArtistaNombre(album.artist); }}>{album.artist}</p>
               ) : <p style={{ color: "#1ed760", marginBottom: 4 }}>{album.artist}</p>}
               <p style={{ color: "var(--text3)", marginBottom: 2, fontSize: "0.9em" }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""} {album.track_count ? `— ${album.track_count} canciones` : ""}</p>
               {album.label && <p style={{ color: "var(--text5)", fontSize: "0.8em" }}>Sello: {album.label}</p>}
