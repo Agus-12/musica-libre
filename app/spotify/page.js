@@ -54,6 +54,7 @@ export default function SpotifyPage() {
   const [album, setAlbum] = useState(null);
   const [artist, setArtist] = useState(null);
   const [artistOpening, setArtistOpening] = useState(false);
+  const [albumOpening, setAlbumOpening] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [oembedUrl, setOembedUrl] = useState("");
@@ -592,7 +593,7 @@ export default function SpotifyPage() {
 
   async function loadAlbum(albumId, source = "itunes", resaltar = null) {
     setResaltada(resaltar ? String(resaltar).toLowerCase().trim() : null);
-    setLoading(true); setError(""); setAlbum(null); setArtist(null);
+    setLoading(true); setAlbumOpening(true); setError(""); setAlbum(null); setArtist(null);
     /* Arrancar el álbum desde ARRIBA: si venías scrolleado hasta abajo
        (p. ej. desde Mi música o el feed), iOS se quedaba con el scroll
        hundido y el álbum largo "no dejaba bajar" (rebotaba). */
@@ -606,7 +607,7 @@ export default function SpotifyPage() {
       if (data.error) setError(data.error);
       else setAlbum(data);
     } catch (e) { setError(e.message); }
-    setLoading(false);
+    setLoading(false); setAlbumOpening(false);
   }
 
   async function loadArtist(artistId) {
@@ -1046,7 +1047,7 @@ export default function SpotifyPage() {
       )}
 
       {/* ── TAB: Search ── */}
-      {tab === "search" && !album && !artist && !artistOpening && (
+      {tab === "search" && !album && !artist && !artistOpening && !albumOpening && (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
@@ -1278,6 +1279,7 @@ export default function SpotifyPage() {
       )}
 
       {artistOpening && !artist && <div style={{minHeight:220,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--accent)",fontWeight:700}}>Cargando artista…</div>}
+      {albumOpening && !album && <div style={{minHeight:220,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--accent)",fontWeight:700}}>Cargando álbum…</div>}
 
       {/* ── Artist Detail ── */}
       {artist && !loading && (
