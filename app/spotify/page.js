@@ -1223,7 +1223,7 @@ export default function SpotifyPage() {
             <div style={{ flex: 1, minWidth: 180 }}>
               <h2 style={{ fontSize: "1.4em", marginBottom: 4 }}>{album.name}</h2>
               {album.artist_id && album.source === "itunes" ? (
-                <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { setAlbum(null); album.artist_id ? loadArtist(album.artist_id) : abrirArtistaNombre(album.artist); }}>{album.artist}</p>
+                <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { setAlbum(null); abrirArtistaNombre(album.artist); }}>{album.artist}</p>
               ) : <p style={{ color: "#1ed760", marginBottom: 4 }}>{album.artist}</p>}
               <p style={{ color: "var(--text3)", marginBottom: 2, fontSize: "0.9em" }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""} {album.track_count ? `— ${album.track_count} canciones` : ""}</p>
               {album.label && <p style={{ color: "var(--text5)", fontSize: "0.8em" }}>Sello: {album.label}</p>}
@@ -1252,7 +1252,7 @@ export default function SpotifyPage() {
                       <span style={{ color: "var(--text5)", width: 22, textAlign: "right", fontSize: "0.82em" }}>{track.number || i + 1}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ color: isPlaying ? "#22c55e" : "var(--text)", fontSize: "0.9em", fontWeight: isPlaying ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{track.name}</div>
-                        {track.artist && track.artist !== album.artist && <div style={{ color: "var(--text4)", fontSize: "0.75em" }}>{track.artist}</div>}
+                        {track.artist && track.artist !== album.artist && <div onClick={(e)=>{e.stopPropagation();abrirArtistaNombre(track.artist)}} title="Ver artista" style={{ color: "#22c55e", fontSize: "0.75em", cursor:"pointer" }}>{track.artist}</div>}
                       </div>
                       {track.duration && <span style={{ color: "var(--text5)", fontSize: "0.82em", flexShrink: 0 }}>{track.duration}</span>}
                       <ActionBtn active={isFavorite("track", trackKey)} onClick={e => handleFavorite(e, "track", trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, album.source, { preview_url: track.preview_url || "", album_id: album.id || "", duration_ms: track.duration_ms || 0 })} type="fav" size="sm" />

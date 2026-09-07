@@ -295,8 +295,12 @@ export default function ProfilePage() {
   function irAExplorar(destino) {
     try { localStorage.setItem("aura_explorar_destino", JSON.stringify(destino || {})); } catch {}
     try { localStorage.setItem("aura_vista", "explorar"); } catch {}
+    // Si el reproductor está expandido, baja suavemente antes de cambiar
+    // la vista: así el usuario ve claramente que entró al perfil del artista.
+    setShowLetra(false);
+    setExpanded(false);
     setVista("explorar");
-    setTimeout(() => { try { window.dispatchEvent(new CustomEvent("aura-explorar-destino", { detail: destino || {} })); } catch {} }, 60);
+    setTimeout(() => { try { window.dispatchEvent(new CustomEvent("aura-explorar-destino", { detail: destino || {} })); } catch {} }, 360);
   }
   useEffect(() => {
     window.__auraPlayerGlobal = true;
