@@ -53,6 +53,7 @@ export default function SpotifyPage() {
   }
   const [album, setAlbum] = useState(null);
   const [artist, setArtist] = useState(null);
+  const [artistOpening, setArtistOpening] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [oembedUrl, setOembedUrl] = useState("");
@@ -609,7 +610,7 @@ export default function SpotifyPage() {
   }
 
   async function loadArtist(artistId) {
-    setLoading(true); setError(""); setAlbum(null); setArtist(null);
+    setLoading(true); setArtistOpening(true); setError(""); setAlbum(null); setArtist(null);
     try { window.scrollTo(0, 0); } catch {}
     try {
       const res = await fetch("/api/music?action=artist&id=" + encodeURIComponent(artistId) + "&source=itunes");
@@ -617,7 +618,7 @@ export default function SpotifyPage() {
       if (data.error) setError(data.error);
       else setArtist(data);
     } catch (e) { setError(e.message); }
-    setLoading(false);
+    setLoading(false); setArtistOpening(false);
   }
   async function abrirArtistaNombre(nombre) {
     const n = String(nombre || "").trim();
@@ -1045,7 +1046,7 @@ export default function SpotifyPage() {
       )}
 
       {/* ── TAB: Search ── */}
-      {tab === "search" && !album && !artist && (
+      {tab === "search" && !album && !artist && !artistOpening && (
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
@@ -1275,6 +1276,8 @@ export default function SpotifyPage() {
           )}
         </div>
       )}
+
+      {artistOpening && !artist && <div style={{minHeight:220,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--accent)",fontWeight:700}}>Cargando artista…</div>}
 
       {/* ── Artist Detail ── */}
       {artist && !loading && (
