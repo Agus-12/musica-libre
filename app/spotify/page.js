@@ -911,7 +911,7 @@ export default function SpotifyPage() {
           {/* Quick search */}
           <div style={{ display: "flex", gap: 8, marginBottom: 25, flexWrap: "wrap" }}>
             {/* Tocar la barra te lleva DIRECTO a Buscar */}
-            <input value={query} onFocus={() => setTab("search")} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Buscar álbumes, artistas..." style={{ ...IS, flex: 1, minWidth: 200 }} />
+            <input value={query} onFocus={() => setTab("search")} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.currentTarget.blur(); search(); } }} placeholder="Buscar álbumes, artistas..." style={{ ...IS, flex: 1, minWidth: 200 }} />
             <button onClick={() => { setTab("search"); search(); }} disabled={loading} style={BS}>{loading ? "..." : "Buscar"}</button>
           </div>
 
@@ -1051,7 +1051,7 @@ export default function SpotifyPage() {
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
-              <input autoFocus value={query} onChange={e => alTeclear(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { setShowSugs(false); search(); } }} onBlur={() => setTimeout(() => setShowSugs(false), 250)} placeholder="Buscar álbumes, artistas... (ej: Bad Bunny, Rosalía)" style={{ ...IS, paddingRight: 38 }} />
+              <input autoFocus value={query} onChange={e => alTeclear(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.currentTarget.blur(); setShowSugs(false); search(); } }} onBlur={() => setTimeout(() => setShowSugs(false), 250)} placeholder="Buscar álbumes, artistas... (ej: Bad Bunny, Rosalía)" style={{ ...IS, paddingRight: 38 }} />
               {/* Dropdown de sugerencias en vivo */}
               {showSugs && sugs.length > 0 && (
                 <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", zIndex: 50, boxShadow: "0 14px 40px rgba(0,0,0,0.45)" }}>
