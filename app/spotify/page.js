@@ -1222,9 +1222,7 @@ export default function SpotifyPage() {
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
               <h2 style={{ fontSize: "1.4em", marginBottom: 4 }}>{album.name}</h2>
-              {album.artist_id && album.source === "itunes" ? (
-                <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { setAlbum(null); abrirArtistaNombre(album.artist); }}>{album.artist}</p>
-              ) : <p style={{ color: "#1ed760", marginBottom: 4 }}>{album.artist}</p>}
+              <p style={{ color: "#1ed760", marginBottom: 4, cursor: "pointer" }} onClick={() => { abrirArtistaNombre(album.artist); }}>{album.artist}</p>
               <p style={{ color: "var(--text3)", marginBottom: 2, fontSize: "0.9em" }}>{album.release_date || album.year} {album.total_tracks ? `— ${album.total_tracks} canciones` : ""} {album.track_count ? `— ${album.track_count} canciones` : ""}</p>
               {album.label && <p style={{ color: "var(--text5)", fontSize: "0.8em" }}>Sello: {album.label}</p>}
               {album.genre && <p style={{ color: "var(--text5)", fontSize: "0.8em" }}>Género: {album.genre}</p>}
@@ -1240,7 +1238,7 @@ export default function SpotifyPage() {
                   const isPlaying = i === idxAlbumSonando;
                   const nombreBajo = (track.name || "").toLowerCase().trim();
                   const esResaltada = Boolean(resaltada && (nombreBajo === resaltada || nombreBajo.includes(resaltada) || resaltada.includes(nombreBajo)));
-                  const tocar = () => { if (track.preview_url) playPreview(track.preview_url, trackKey, track.name, track.artist || album.artist, album.cover_xl || album.cover_big || album.cover_medium, track.duration_ms || 0); };
+                  const tocar = () => { if (track.preview_url) window.dispatchEvent(new CustomEvent("aura-reproducir", { detail: { key: trackKey, title: track.name, artist: track.artist || album.artist, cover_url: album.cover_xl || album.cover_big || album.cover_medium, preview_url: track.preview_url, duration_ms: track.duration_ms || 0, source: "preview" } })); };
                   return (
                     <div key={i} ref={esResaltada ? (el) => { resaltadaRef.current = el; } : undefined}
                       onClick={tocar}
