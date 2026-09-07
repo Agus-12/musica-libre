@@ -492,6 +492,28 @@ async function manejarGET(req) {
         });
       }
 
+      if (action === "artist") {
+        if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
+        const [albumsData, songsData] = await Promise.all([
+          fetchJSON(ITUNES_BASE + "/lookup?id=" + encodeURIComponent(id) + "&entity=album&limit=200"),
+          fetchJSON(ITUNES_BASE + "/lookup?id=" + encodeURIComponent(id) + "&entity=song&limit=100").catch(() => ({ results: [] })),
+        ]);
+        const collections = (albumsData.results || []).filter(r => r.collectionType || (r.wrapperType === "collection" && r.collectionId));
+        const songs = (songsData.results || []).filter(r => r.wrapperType === "track" && r.trackId);
+        const first = collections[0] || songs[0] || {};
+        const artistName = first.artistName || first.artist || "Artista";
+        let picture = "";
+        try {
+          const dz = await fetchJSON(DEEZER_BASE + "/search/artist?q=" + encodeURIComponent('"' + artistName + '"') + "&limit=1");
+          const hit = (dz.data || [])[0];
+          if (hit && hit.name) picture = hit.picture_xl || hit.picture_big || hit.picture_medium || "";
+        } catch {}
+        const seen = new Set();
+        const albums = collections.map(normalizeITunesAlbum).filter(a => { const k = claveDedupe(a.artist, a.name); if (seen.has(k)) return false; seen.add(k); return true; });
+        const tracks = songs.map(s => ({ id: String(s.trackId), name: s.trackName || "", artist: s.artistName || artistName, album: s.collectionName || "", album_id: String(s.collectionId || ""), cover: (s.artworkUrl100 || "").replace("100x100", "300x300"), duration_ms: s.trackTimeMillis || 0, preview_url: s.previewUrl || "", source: "itunes" })).filter(t => t.id);
+        return NextResponse.json({ id: String(id), name: artistName, picture_xl: picture, albums, tracks, nb_album: albums.length, source: "itunes", type: "artist" });
+      }
+
       if (action === "lookup") {
         if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
         let data = await fetchJSON(ITUNES_BASE + "/lookup?id=" + id + "&entity=album,song");

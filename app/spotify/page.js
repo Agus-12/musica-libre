@@ -612,10 +612,23 @@ export default function SpotifyPage() {
     setLoading(true); setError(""); setAlbum(null); setArtist(null);
     try { window.scrollTo(0, 0); } catch {}
     try {
-      const res = await fetch("/api/music?action=lookup&id=" + artistId + "&source=itunes");
+      const res = await fetch("/api/music?action=artist&id=" + encodeURIComponent(artistId) + "&source=itunes");
       const data = await res.json();
       if (data.error) setError(data.error);
       else setArtist(data);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }
+  async function abrirArtistaNombre(nombre) {
+    const n = String(nombre || "").trim();
+    if (!n) return;
+    setLoading(true); setError(""); setAlbum(null); setArtist(null); setTab("search");
+    try {
+      const r = await fetch("/api/music?action=search&entity=musicArtist&q=" + encodeURIComponent(n) + "&source=itunes&limit=5");
+      const d = await r.json();
+      const a = (d.artists || [])[0];
+      if (a?.id) await loadArtist(a.id);
+      else setError("No encontré el perfil del artista");
     } catch (e) { setError(e.message); }
     setLoading(false);
   }
@@ -1109,7 +1122,7 @@ export default function SpotifyPage() {
                         {s.cover ? <img src={s.cover} style={{ width: 42, height: 42, borderRadius: 7, objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 7, background: "var(--border)", flexShrink: 0 }} />}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ color: sonando ? "#22c55e" : "var(--text)", fontSize: "0.88em", fontWeight: sonando ? 700 : 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
-                          <div style={{ color: "var(--text4)", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.artist}{s.album ? " · " + s.album : ""}</div>
+                          <div onClick={(e)=>{e.stopPropagation();abrirArtistaNombre(s.artist)}} title="Ver artista" style={{ color: "#22c55e", fontSize: "0.73em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{s.artist}{s.album ? " · " + s.album : ""}</div>
                         </div>
                         {s.preview_url && (
                           <button onClick={(e) => { e.stopPropagation(); playPreview(s.preview_url, s.id, s.name, s.artist, s.cover, s.duration_ms); }} style={{ background: sonando ? "#22c55e" : "rgba(124,92,252,0.15)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -1282,6 +1295,18 @@ export default function SpotifyPage() {
               {/* Ítem 8: botones de portada en artista quitados */}
             </div>
           </div>
+          {artist.tracks?.length > 0 && (
+            <div style={{marginBottom:24}}>
+              <SectionHeader icon="" title="Canciones" subtitle="Temas y colaboraciones" />
+              <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:12,overflow:"hidden"}}>
+                {artist.tracks.slice(0,80).map(t => <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid var(--border2)"}}>
+                  {t.cover ? <img src={t.cover} style={{width:42,height:42,borderRadius:7,objectFit:"cover"}}/> : <div style={{width:42,height:42,borderRadius:7,background:"var(--border)"}}/>}
+                  <div style={{flex:1,minWidth:0}}><div style={{color:"var(--text)",fontWeight:700,fontSize:".88em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div><div style={{color:"var(--text4)",fontSize:".72em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.artist}{t.album?" · "+t.album:""}</div></div>
+                  {t.preview_url && <button onClick={()=>playPreview(t.preview_url,t.id,t.name,t.artist,t.cover,t.duration_ms)} style={{background:"rgba(124,92,252,.15)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico d={<polygon points="5 3 19 12 5 21 5 3"/>} size={13} stroke="#fff" fill="#fff"/></button>}
+                </div>)}
+              </div>
+            </div>
+          )}
           {artist.albums?.length > 0 && (
             <div>
               <SectionHeader icon="" title={`Álbumes (${artist.nb_album || artist.albums.length})`} subtitle="" />
