@@ -378,6 +378,9 @@ export default function ProfilePage() {
   const syncCupoRef = useRef(false);
   const [adminUsuarios, setAdminUsuarios] = useState(null);
   const [adminCargando, setAdminCargando] = useState(false);
+  const [editandoUsername, setEditandoUsername] = useState(false);
+  const [nuevoUsername, setNuevoUsername] = useState("");
+  const [guardandoUsername, setGuardandoUsername] = useState(false);
   const [pagoPlan, setPagoPlan] = useState("");
   const [mpPublicKey, setMpPublicKey] = useState("");
   // "En línea" DE VERDAD: con el Modo sin datos activo, la app se
@@ -463,6 +466,20 @@ export default function ProfilePage() {
       setAdminUsuarios(prev => (prev || []).map(u => u.user_id === userId ? { ...u, aura_libre: activo, acceso_libre: activo, limite_offline: activo ? 0 : 50 } : u));
       toast.success(activo ? "Aura Libre activado" : "Aura Libre desactivado", 2500);
     } catch { toast.error("Error de red", 3000); }
+  }
+  async function guardarUsername() {
+    const nombre = nuevoUsername.trim().replace(/^@/, "").toLowerCase();
+    if (!nombre) return toast.warning("Escribí un nombre de usuario", 2500);
+    setGuardandoUsername(true);
+    try {
+      const r = await fetch("/api/perfil/username", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: nombre }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { toast.error(d.error || "No se pudo cambiar", 4000); return; }
+      await checkSession();
+      setEditandoUsername(false);
+      toast.success("Nombre de usuario actualizado", 3000);
+    } catch { toast.error("Error de red", 3000); }
+    finally { setGuardandoUsername(false); }
   }
   useEffect(() => {
     if (vista === "cuenta" && user) {
@@ -2166,7 +2183,16 @@ export default function ProfilePage() {
             </button>
             );})()}
           </div>
-          <p style={{color:"var(--text3)",fontSize:"0.82em"}}>@{profile?.username||"user"}</p>
+          <div style={{display:"flex",alignItems:"center",gap:7,color:"var(--text3)",fontSize:"0.82em"}}>
+            <span>@{profile?.username||"user"}</span>
+            <button onClick={()=>{setNuevoUsername(profile?.username||"");setEditandoUsername(v=>!v);}} title="Cambiar nombre de usuario" style={{background:"none",border:"none",padding:2,color:"var(--accent)",cursor:"pointer",display:"flex"}}><Ico d={<><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L8 18l-4 1 1-4Z"/></>} size={13}/></button>
+          </div>
+          {editandoUsername && <div style={{display:"flex",gap:7,alignItems:"center",marginTop:8,flexWrap:"wrap"}}>
+            <input value={nuevoUsername} onChange={e=>setNuevoUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,""))} maxLength={24} placeholder="nuevo_usuario" style={{width:170,padding:"8px 10px",borderRadius:9,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text)",fontSize:".78em"}}/>
+            <button onClick={guardarUsername} disabled={guardandoUsername} style={{padding:"8px 10px",border:0,borderRadius:9,background:"var(--accent)",color:"#fff",fontSize:".75em",fontWeight:700,cursor:"pointer"}}>{guardandoUsername?"Guardando…":"Guardar"}</button>
+            <button onClick={()=>setEditandoUsername(false)} style={{padding:"8px 10px",borderRadius:9,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text3)",fontSize:".75em",cursor:"pointer"}}>Cancelar</button>
+            <div style={{width:"100%",color:"var(--text5)",fontSize:".65em"}}>3–24 caracteres: letras, números y guion bajo.</div>
+          </div>}
           <div style={{display:"flex",gap:12,color:"var(--text5)",fontSize:"0.78em",marginTop:4}}>
             <span>{favorites.length} favoritos</span>
             <span>{downloadedMusic.length} descargadas</span>
@@ -2198,15 +2224,15 @@ export default function ProfilePage() {
 
       {/* Panel privado: solo la API lo revela a ADMIN_USER_ID */}
       {adminUsuarios && (
-        <div style={{background:"var(--panel)",border:"1px solid rgba(124,92,252,.35)",borderRadius:14,padding:18,marginBottom:22}}>
+        <div style={{background:"var(--panel)",border:"1px solid rgba(124,92,252,.35)",borderRadius:14,padding:18,marginBottom:22,overflow:"hidden",boxSizing:"border-box"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
             <div><div style={{fontWeight:800,color:"var(--text)"}}>Administrar AURA Libre</div><div style={{fontSize:"0.72em",color:"var(--text4)",marginTop:3}}>Solo visible para la cuenta propietaria</div></div>
             <button onClick={cargarPanelAdmin} disabled={adminCargando} style={{padding:"7px 10px",borderRadius:8,border:"1px solid var(--border)",background:"var(--panel2)",color:"var(--text2)",cursor:"pointer",fontSize:"0.75em"}}>{adminCargando ? "..." : "Actualizar"}</button>
           </div>
           <div style={{display:"grid",gap:8}}>
-            {adminUsuarios.map(u => <div key={u.user_id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 10px",borderRadius:9,background:"var(--panel2)",border:"1px solid var(--border)"}}>
-              <div style={{flex:1,minWidth:0}}><div style={{color:"var(--text)",fontSize:"0.8em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email || u.user_id}</div><div style={{color:"var(--text4)",fontSize:"0.68em"}}>{u.plan === "premium" && u.estado === "active" ? "Premium activo" : u.aura_libre ? "Aura Libre" : "Gratis"}</div></div>
-              <button onClick={() => cambiarAuraLibre(u.user_id, !u.aura_libre)} style={{padding:"7px 9px",borderRadius:8,border:"none",background:u.aura_libre?"#ef4444":"#22c55e",color:"#fff",cursor:"pointer",fontSize:"0.7em",fontWeight:700,flexShrink:0}}>{u.aura_libre ? "Desactivar" : "Activar"}</button>
+            {adminUsuarios.map(u => <div key={u.user_id} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:10,padding:"9px 10px",borderRadius:9,background:"var(--panel2)",border:"1px solid var(--border)",boxSizing:"border-box",width:"100%"}}>
+              <div style={{minWidth:0,overflow:"hidden"}}><div style={{color:"var(--text)",fontSize:"0.8em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.email || u.user_id}</div><div style={{color:"var(--text4)",fontSize:"0.68em"}}>{u.plan === "premium" && u.estado === "active" ? "Premium activo" : u.aura_libre ? "Aura Libre" : "Gratis"}</div></div>
+              <button onClick={() => cambiarAuraLibre(u.user_id, !u.aura_libre)} style={{width:88,boxSizing:"border-box",padding:"7px 6px",borderRadius:8,border:"none",background:u.aura_libre?"#ef4444":"#22c55e",color:"#fff",cursor:"pointer",fontSize:"0.7em",fontWeight:700,whiteSpace:"nowrap"}}>{u.aura_libre ? "Desactivar" : "Activar"}</button>
             </div>)}
             {!adminUsuarios.length && <div style={{color:"var(--text4)",fontSize:"0.8em"}}>No hay usuarios registrados todavía.</div>}
           </div>
