@@ -98,13 +98,8 @@ La limpieza debe conservar audios referenciados por `ml_mp3`, incluyendo cancion
 
 ## Pendientes actuales conocidos
 
-1. Ajustar la tarjeta de administración AURA Libre: los botones Activar/Desactivar deben quedar dentro de cada tarjeta, alineados y sin salirse del contenedor en iPhone.
-2. Agregar cambio de nombre de usuario:
-   - solo para el dueño de la cuenta;
-   - validar formato y longitud;
-   - unicidad case-insensitive en servidor/Supabase;
-   - nunca confiar solo en validación del cliente;
-   - resolver qué pasa con URLs/perfiles compartidos al cambiarlo.
+1. Probar en iPhone la alineación del panel AURA Libre y el cambio de username.
+2. Ejecutar `supabase-username.sql` en Supabase para activar la unicidad case-insensitive del username.
 3. Revisar/confirmar restauración legítima de UDC. Los workers antiguos contenían automatización de registros sensibles; no reactivar sin flujo autorizado y sin secretos en el código.
 4. Agregar/restaurar `cookies.txt` de YouTube solo desde una cuenta propia; nunca subirlo al repo.
 5. Rotar cualquier PAT de GitHub o credencial que haya sido pegada en el chat.
