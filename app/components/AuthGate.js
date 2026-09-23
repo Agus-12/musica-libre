@@ -53,8 +53,15 @@ export default function AuthGate({ children }) {
     e.preventDefault();
     setSubmitting(true); setError(""); setSuccess("");
     try {
+      // Recuperar contraseña necesita internet: si el usuario dejó activo
+      // Modo sin datos, lo apagamos antes de contactar Supabase.
+      if (mode === "forgot") {
+        try { localStorage.removeItem("aura_sin_datos"); const c = await caches.open("ml-config"); await c.delete("modo-sin-datos"); } catch {}
+      }
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
       const res = await fetch("/api/auth", {
-        method: "POST",
+        method: "POST", signal: ctrl.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           mode === "login"
@@ -64,6 +71,7 @@ export default function AuthGate({ children }) {
               : { action: "register", email, password, username }
         ),
       });
+      clearTimeout(timer);
       const data = await res.json();
       if (data.error) {
         setError(data.error);
