@@ -15,7 +15,7 @@ const PUBLIC_PATHS = ["/share", "/auth"];
 export default function AuthGate({ children }) {
   const { user, loading, checkSession } = useUser();
   const [isPublic, setIsPublic] = useState(false);
-  const [mode, setMode] = useState(null); // null = landing, "login", "register"
+  const [mode, setMode] = useState(null); // null = landing, "login", "register", "forgot"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -29,7 +29,7 @@ export default function AuthGate({ children }) {
     setIsPublic(PUBLIC_PATHS.some(p => path.startsWith(p)));
     const hash = window.location.hash || "";
     const q = window.location.search || "";
-    if (path !== "/auth/listo" && (hash.includes("access_token") || /[?&](code|token_hash)=/.test(q))) {
+    if (path !== "/auth/listo" && path !== "/auth/restablecer" && (hash.includes("access_token") || /[?&](code|token_hash)=/.test(q))) {
       window.location.replace("/auth/listo" + q + hash);
     }
   }, []);
@@ -59,7 +59,9 @@ export default function AuthGate({ children }) {
         body: JSON.stringify(
           mode === "login"
             ? { action: "login", email, password }
-            : { action: "register", email, password, username }
+            : mode === "forgot"
+              ? { action: "forgot", email }
+              : { action: "register", email, password, username }
         ),
       });
       const data = await res.json();
@@ -67,6 +69,8 @@ export default function AuthGate({ children }) {
         setError(data.error);
       } else if (mode === "register" && !data.session) {
         setSuccess("¡Registrado! Revisá tu email para confirmar tu cuenta y después iniciá sesión.");
+      } else if (mode === "forgot") {
+        setSuccess("Te enviamos un enlace para restablecer la contraseña. Revisá tu correo.");
       } else {
         await checkSession();
       }
@@ -161,10 +165,10 @@ export default function AuthGate({ children }) {
             <label style={{ color: "#888", fontSize: "0.8em", marginBottom: 4, display: "block" }}>Email</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@email.com" style={IN} required />
           </div>
-          <div>
+          {mode !== "forgot" && <div>
             <label style={{ color: "#888", fontSize: "0.8em", marginBottom: 4, display: "block" }}>Contraseña</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" style={IN} required minLength={6} />
-          </div>
+          </div>}
 
           {error && (
             <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", fontSize: "0.85em" }}>
@@ -178,12 +182,15 @@ export default function AuthGate({ children }) {
           )}
 
           <button type="submit" disabled={submitting} style={{ ...BTN, marginTop: 5, opacity: submitting ? 0.7 : 1 }}>
-            {submitting ? "⏳ Esperá..." : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+            {submitting ? "⏳ Esperá..." : mode === "login" ? "Iniciar sesión" : mode === "forgot" ? "Enviar enlace" : "Crear cuenta"}
           </button>
         </form>
 
         <div style={{ textAlign: "center", marginTop: 20, color: "#888", fontSize: "0.85em" }}>
-          {mode === "login" ? (
+          {mode === "login" && <button onClick={() => { setMode("forgot"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", fontWeight: 600, display:"block", margin:"0 auto 12px" }}>¿Olvidaste tu contraseña?</button>}
+          {mode === "forgot" ? (
+            <>¿Recordaste tu contraseña? <button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", fontWeight: 600 }}>Volver al login</button></>
+          ) : mode === "login" ? (
             <>¿No tenés cuenta? <button onClick={() => { setMode("register"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", fontWeight: 600 }}>Registrate</button></>
           ) : (
             <>¿Ya tenés cuenta? <button onClick={() => { setMode("login"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: "#7c5cfc", cursor: "pointer", fontWeight: 600 }}>Iniciá sesión</button></>

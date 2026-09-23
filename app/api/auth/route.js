@@ -36,6 +36,25 @@ export async function POST(req) {
       return NextResponse.json({ user: data.user, session: data.session });
     }
 
+    if (action === "forgot") {
+      const { email } = body;
+      if (!email) return NextResponse.json({ error: "Falta el email" }, { status: 400 });
+      const origin = req.headers.get("origin") || new URL(req.url).origin;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/restablecer` });
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "change-password") {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+      const password = String(body.password || "");
+      if (password.length < 6) return NextResponse.json({ error: "La contraseña debe tener al menos 6 caracteres" }, { status: 400 });
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === "logout") {
       const { error } = await supabase.auth.signOut();
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
