@@ -2182,6 +2182,7 @@ export default function ProfilePage() {
               {totalNoti > 0 && <span style={{position:"absolute",top:-2,right:-2,minWidth:15,height:15,borderRadius:8,background:"#ef4444",color:"#fff",fontSize:"0.55em",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px",border:"2px solid var(--panel)"}}>{totalNoti}</span>}
             </button>
             );})()}
+            {adminUsuarios && <button onClick={()=>{window.location.href="/admin";}} title="Panel de administración" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:30,height:30,borderRadius:"50%",border:"1px solid rgba(124,92,252,.45)",background:"rgba(124,92,252,.12)",color:"var(--accent)",cursor:"pointer"}}><Ico d={<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>} size={14} stroke="var(--accent)"/></button>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:7,color:"var(--text3)",fontSize:"0.82em"}}>
             <span>@{profile?.username||"user"}</span>

@@ -6,8 +6,10 @@ CREATE TABLE IF NOT EXISTS public.presencia_usuarios (
   ruta TEXT
 );
 ALTER TABLE public.presencia_usuarios ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "presencia_propia_select" ON public.presencia_usuarios;
+CREATE POLICY "presencia_propia_select" ON public.presencia_usuarios FOR SELECT USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "presencia_propia_upsert" ON public.presencia_usuarios;
 CREATE POLICY "presencia_propia_upsert" ON public.presencia_usuarios FOR INSERT WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "presencia_propia_update" ON public.presencia_usuarios;
-CREATE POLICY "presencia_propia_update" ON public.presencia_usuarios FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "presencia_propia_update" ON public.presencia_usuarios FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 NOTIFY pgrst, 'reload schema';
