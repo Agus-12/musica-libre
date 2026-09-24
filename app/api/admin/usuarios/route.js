@@ -20,7 +20,10 @@ export async function GET() {
   if (users.error) return NextResponse.json({ error: users.error.message }, { status: 500 });
   const { data: subs, error } = await db.from("suscripciones").select("user_id,plan,estado,vence_en,acceso_libre,aura_libre,limite_offline,actualizado");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data: presencias } = await db.from("presencia_usuarios").select("user_id,ultima_actividad,dispositivo,ruta");
   const byId = new Map((subs || []).map(s => [s.user_id, s]));
-  const usuarios = (users.data?.users || []).map(u => ({ user_id: u.id, email: u.email || "", creado_en: u.created_at, ...(byId.get(u.id) || { plan: "free", estado: "free", vence_en: null, acceso_libre: false, aura_libre: false, limite_offline: 50, actualizado: null }) }));
+  const now = Date.now();
+  const presencia = new Map((presencias || []).map(p => [p.user_id, { ...p, en_linea: now - new Date(p.ultima_actividad).getTime() < 2 * 60 * 1000 }]));
+  const usuarios = (users.data?.users || []).map(u => ({ user_id: u.id, email: u.email || "", creado_en: u.created_at, ...(byId.get(u.id) || { plan: "free", estado: "free", vence_en: null, acceso_libre: false, aura_libre: false, limite_offline: 50, actualizado: null }), presencia: presencia.get(u.id) || { en_linea: false, ultima_actividad: null, dispositivo: "", ruta: "" } }));
   return NextResponse.json({ usuarios });
 }

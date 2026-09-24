@@ -36,6 +36,22 @@ export function UserProvider({ children }) {
     checkSession().finally(() => clearTimeout(tope));
   }, []);
 
+  // Presencia aproximada: el panel marca en línea a quien reportó
+  // actividad recientemente. No guarda ubicación ni contenido musical.
+  useEffect(() => {
+    if (!user) return;
+    let activo = true;
+    const latido = () => {
+      if (!activo || !navigator.onLine) return;
+      fetch("/api/presencia", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ruta: window.location.pathname, dispositivo: /Mobi|iPhone|Android/i.test(navigator.userAgent) ? "móvil" : "web" }) }).catch(() => {});
+    };
+    latido();
+    const timer = setInterval(latido, 30000);
+    const alVolver = () => { if (document.visibilityState === "visible") latido(); };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => { activo = false; clearInterval(timer); document.removeEventListener("visibilitychange", alVolver); };
+  }, [user]);
+
   // Keep offline cache in sync
   useEffect(() => { saveOffline("favorites", favorites); }, [favorites]);
   useEffect(() => { saveOffline("playlists", playlists); }, [playlists]);
